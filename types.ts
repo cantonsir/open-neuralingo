@@ -1,0 +1,51 @@
+export interface Subtitle {
+  id: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary';
+
+export interface Marker {
+  id: string;
+  start: number;
+  end: number;
+  createdAt: number;
+  subtitleText?: string;
+  tags: TagType[];
+  note?: string;
+  pressCount?: number;
+}
+
+export interface PlayerState {
+  currentTime: number;
+  duration: number;
+  isPlaying: boolean;
+  playbackRate: number;
+}
+
+// Google Developers YouTube API Demo Video (Extremely stable for testing)
+export const DEMO_VIDEO_ID = "M7lc1UVf-VE";
+
+export const DEMO_SUBTITLES = `
+WEBVTT
+
+00:00:00.000 --> 00:00:03.000
+This is a test of the YouTube Embedded Player.
+
+00:00:03.500 --> 00:00:08.000
+The video you are watching is used to verify API functionality.
+
+00:00:08.500 --> 00:00:12.000
+If you can see this video and read these captions...
+
+00:00:12.500 --> 00:00:15.000
+...then the EchoLoop application is working correctly!
+
+00:00:16.000 --> 00:00:20.000
+Try pressing SPACE now to create a marker.
+
+00:00:21.000 --> 00:00:25.000
+You can loop this section to practice your listening skills.
+`;
