@@ -66,42 +66,7 @@ function App() {
   const [isFetchingSubs, setIsFetchingSubs] = useState(false);
 
   const fetchSubtitles = async (id: string) => {
-    setIsFetchingSubs(true);
-    try {
-      const response = await fetch(`/api/transcript?videoId=${id}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch subtitles from server');
-      }
-
-      const transcript = await response.json();
-
-      if (!transcript || transcript.length === 0) {
-        throw new Error("Fetched transcript was empty.");
-      }
-
-      // Transform the youtube-transcript format to our Subtitle format if needed
-      // youtube-transcript returns { text: string, duration: number, offset: number }
-      // Our Subtitle type (inferred) likely expects { start, end, text }
-      // Based on App.tsx usage: s.start, s.end, s.text.
-
-      const parsedSubs = transcript.map((item: any) => ({
-        // library returns ms, we need seconds
-        start: item.offset / 1000,
-        end: (item.offset + item.duration) / 1000,
-        text: item.text
-      }));
-
-      // Update state
-      // We might want to setInputSubs to a string representation for the textarea
-      setInputSubs(parsedSubs.map((s: any) => `${formatTime(s.start)} --> ${formatTime(s.end)}\n${s.text}`).join('\n\n'));
-      setSubtitles(parsedSubs);
-      alert(`Successfully loaded ${parsedSubs.length} subtitles!`);
-    } catch (err: any) {
-      console.error(err);
-      alert(`Error: ${err.message}`);
-    } finally {
-      setIsFetchingSubs(false);
-    }
+    alert("Auto-fetch is currently disabled as the backend has been removed.");
   };
 
   // --- Subtitle Logic ---
