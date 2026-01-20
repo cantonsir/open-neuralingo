@@ -13,6 +13,7 @@ interface MarkerListProps {
   onAddTag: (id: string, tag: TagType) => void;
   onRemoveTag: (id: string, tag: TagType) => void;
   onToggleWord: (id: string, index: number) => void;
+  onPlayOnce: (start: number, end: number) => void;
 }
 
 const TAG_CONFIG: Record<TagType, { label: string; color: string }> = {
@@ -31,19 +32,30 @@ const MarkerList: React.FC<MarkerListProps> = ({
   onDelete,
   onAddTag,
   onRemoveTag,
-  onToggleWord
+  onToggleWord,
+  onPlayOnce
 }) => {
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when a new marker is added
+  React.useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [markers.length]);
 
   const toggleReveal = (id: string, e: React.MouseEvent) => {
+    // ... same toggleReveal logic ...
     e.stopPropagation();
     const newRevealed = new Set(revealedIds);
     if (newRevealed.has(id)) newRevealed.delete(id);
     else newRevealed.add(id);
     setRevealedIds(newRevealed);
   };
-  // ... existing check for empty markers ...
+
   if (markers.length === 0) {
+    // ... same empty check ...
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-500 border-2 border-dashed border-gray-800 rounded-xl mt-4">
         <p className="text-lg font-medium">No confusion points yet</p>
@@ -52,11 +64,15 @@ const MarkerList: React.FC<MarkerListProps> = ({
     );
   }
 
-  // Reverse to show newest first
-  const sortedMarkers = [...markers].sort((a, b) => b.createdAt - a.createdAt);
+  // OLD: const sortedMarkers = [...markers].sort((a, b) => b.createdAt - a.createdAt);
+  // NEW: Sort from oldest to newest (ascending)
+  const sortedMarkers = [...markers].sort((a, b) => a.createdAt - b.createdAt);
 
   return (
-    <div className="flex flex-col gap-3 mt-4 overflow-y-auto h-full pb-24">
+    <div
+      ref={scrollRef}
+      className="flex flex-col gap-3 mt-4 overflow-y-auto h-full pb-24 scroll-smooth"
+    >
       {sortedMarkers.map((marker) => {
         const isLooping = currentLoopId === marker.id;
         const isRevealed = revealedIds.has(marker.id);
@@ -68,8 +84,8 @@ const MarkerList: React.FC<MarkerListProps> = ({
             className={`
               relative p-4 rounded-xl border transition-all duration-200 group
               ${isLooping
-                ? 'bg-gray-800 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.15)] transform scale-[1.01]'
-                : 'bg-gray-900/50 border-gray-800 hover:border-gray-700 hover:bg-gray-800/50'}
+                ? 'bg-yellow-50 dark:bg-gray-800 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.15)] transform scale-[1.01]'
+                : 'bg-white dark:bg-gray-900/50 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 shadow-sm'}
             `}
           >
             {/* Header: Time & Controls */}
@@ -110,8 +126,8 @@ const MarkerList: React.FC<MarkerListProps> = ({
               className={`
                  mb-3 p-3 rounded-lg text-sm leading-relaxed transition-colors relative overflow-hidden
                  ${hasSubtitle
-                  ? (isRevealed ? 'bg-gray-800/50 text-gray-200 cursor-default' : 'bg-gray-800/20 hover:bg-gray-800/40 text-transparent select-none cursor-pointer')
-                  : 'text-gray-500 italic cursor-default'
+                  ? (isRevealed ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-900 dark:text-gray-200 cursor-default' : 'bg-gray-100/50 dark:bg-gray-800/20 hover:bg-gray-100 dark:hover:bg-gray-800/40 text-transparent select-none cursor-pointer')
+                  : 'text-gray-400 dark:text-gray-500 italic cursor-default'
                 }
                `}
             >
@@ -125,10 +141,10 @@ const MarkerList: React.FC<MarkerListProps> = ({
                     />
                   ) : (
                     <>
-                      <span className="blur-sm select-none">
+                      <span className="blur-sm select-none text-gray-900 dark:text-gray-100">
                         {marker.subtitleText}
                       </span>
-                      <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-medium text-xs uppercase tracking-wider">
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 font-medium text-xs uppercase tracking-wider">
                         Click to Reveal
                       </div>
                     </>
@@ -175,24 +191,30 @@ const MarkerList: React.FC<MarkerListProps> = ({
               </div>
             </div>
 
-            {/* Play/Loop Button - Main Action */}
-            <button
-              onClick={() => isLooping ? onStopLoop() : onPlayLoop(marker)}
-              className={`
-                w-full py-2 flex items-center justify-center gap-2 rounded-lg font-medium text-sm transition-all
-                ${isLooping
-                  ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/50'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700'}
-              `}
-            >
-              {isLooping ? (
-                <>Stop Loop</>
-              ) : (
-                <>
-                  <Play size={14} fill="currentColor" /> Loop Segment
-                </>
-              )}
-            </button>
+            {/* Play/Loop Controls */}
+            <div className="flex gap-2">
+              {/* Main Action: Play Once */}
+              <button
+                onClick={() => onPlayOnce(marker.start, marker.end)}
+                className="flex-1 py-2 flex items-center justify-center gap-2 rounded-lg font-medium text-sm transition-all bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 shadow-sm"
+              >
+                <Play size={14} fill="currentColor" /> Replay
+              </button>
+
+              {/* Secondary Action: Loop */}
+              <button
+                onClick={() => isLooping ? onStopLoop() : onPlayLoop(marker)}
+                className={`
+                  px-3 flex items-center justify-center rounded-lg transition-all border shadow-sm
+                  ${isLooping
+                    ? 'bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-200 dark:border-yellow-500/50'
+                    : 'bg-white dark:bg-gray-800 text-gray-400 hover:text-yellow-500 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}
+                `}
+                title={isLooping ? "Stop Looping" : "Loop Segment"}
+              >
+                <Repeat size={16} className={isLooping ? "animate-spin-slow" : ""} />
+              </button>
+            </div>
           </div>
         );
       })}

@@ -11,9 +11,8 @@ const VocabularyBreakdown: React.FC<VocabularyBreakdownProps> = ({
     markedIndices,
     onToggleWord
 }) => {
-    // Split by space but preserve punctuation logic could be added later.
-    // For now, simple space split to get clickable "blocks".
-    const words = text.split(/\s+/);
+    // Split by space and filter empty strings to avoid blank blocks
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
 
     return (
         <div className="space-y-2">
@@ -44,7 +43,7 @@ const VocabularyBreakdown: React.FC<VocabularyBreakdownProps> = ({
                 })}
             </div>
             <div className="text-[10px] text-gray-600 italic mt-1">
-                Click words you misunderstood to analyze them.
+                Click words you misunderstood.
             </div>
         </div>
     );

@@ -17,6 +17,12 @@ export interface Marker {
   note?: string;
   pressCount?: number;
   misunderstoodIndices?: number[];
+  vocabData?: Record<number, VocabData>;
+}
+
+export interface VocabData {
+  definition: string;
+  notes: string;
 }
 
 export interface PlayerState {

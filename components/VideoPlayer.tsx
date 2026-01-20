@@ -133,12 +133,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       )}
 
 
-      {/* Visual hint for subtitle interaction */}
-      {currentSubtitle && !(forceShowSubtitle || isHoveringSubs) && !isError && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-xs z-10 pointer-events-none">
-          Hover or press 'S' to reveal
-        </div>
-      )}
+
     </div>
   );
 };
