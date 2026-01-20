@@ -66,7 +66,29 @@ function App() {
   const [isFetchingSubs, setIsFetchingSubs] = useState(false);
 
   const fetchSubtitles = async (id: string) => {
-    alert("Auto-fetch is currently disabled as the backend has been removed.");
+    setIsFetchingSubs(true);
+    try {
+      const response = await fetch(`/api/transcript?videoId=${id}`);
+      if (!response.ok) {
+        throw new Error(`Error: ${response.statusText}`);
+      }
+      const data = await response.json();
+
+      const parsed: Subtitle[] = data.map((item: any) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        start: item.start,
+        end: item.start + item.duration,
+        text: item.text
+      }));
+
+      setSubtitles(parsed);
+      setIsSetupMode(false); // Auto-start if successful
+    } catch (error) {
+      console.error(error);
+      alert('Failed to fetch subtitles. Make sure the backend server is running (python backend/server.py)!');
+    } finally {
+      setIsFetchingSubs(false);
+    }
   };
 
   // --- Subtitle Logic ---
