@@ -2,6 +2,7 @@ import React from 'react';
 import { Marker, TagType } from '../types';
 import { Play, Repeat, Trash2, Tag as TagIcon, MoreHorizontal } from 'lucide-react';
 import { formatTime } from '../utils';
+import VocabularyBreakdown from './VocabularyBreakdown';
 
 interface MarkerListProps {
   markers: Marker[];
@@ -11,6 +12,7 @@ interface MarkerListProps {
   onDelete: (id: string) => void;
   onAddTag: (id: string, tag: TagType) => void;
   onRemoveTag: (id: string, tag: TagType) => void;
+  onToggleWord: (id: string, index: number) => void;
 }
 
 const TAG_CONFIG: Record<TagType, { label: string; color: string }> = {
@@ -28,7 +30,8 @@ const MarkerList: React.FC<MarkerListProps> = ({
   onStopLoop,
   onDelete,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  onToggleWord
 }) => {
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
 
@@ -39,7 +42,7 @@ const MarkerList: React.FC<MarkerListProps> = ({
     else newRevealed.add(id);
     setRevealedIds(newRevealed);
   };
-
+  // ... existing check for empty markers ...
   if (markers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-500 border-2 border-dashed border-gray-800 rounded-xl mt-4">
@@ -101,26 +104,34 @@ const MarkerList: React.FC<MarkerListProps> = ({
               </div>
             </div>
 
-            {/* Subtitle Text (Flashcard Mode) */}
+            {/* Subtitle Text (Flashcard Mode OR Vocabulary Breakdown) */}
             <div
-              onClick={(e) => hasSubtitle && toggleReveal(marker.id, e)}
+              onClick={(e) => hasSubtitle && !isRevealed && toggleReveal(marker.id, e)}
               className={`
-                 mb-3 p-3 rounded-lg text-sm leading-relaxed cursor-pointer transition-colors relative overflow-hidden
+                 mb-3 p-3 rounded-lg text-sm leading-relaxed transition-colors relative overflow-hidden
                  ${hasSubtitle
-                  ? (isRevealed ? 'bg-gray-800/50 text-gray-200' : 'bg-gray-800/20 hover:bg-gray-800/40 text-transparent select-none')
+                  ? (isRevealed ? 'bg-gray-800/50 text-gray-200 cursor-default' : 'bg-gray-800/20 hover:bg-gray-800/40 text-transparent select-none cursor-pointer')
                   : 'text-gray-500 italic cursor-default'
                 }
                `}
             >
               {hasSubtitle ? (
                 <>
-                  <span className={isRevealed ? '' : 'blur-sm'}>
-                    {marker.subtitleText}
-                  </span>
-                  {!isRevealed && (
-                    <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-medium text-xs uppercase tracking-wider">
-                      Click to Reveal
-                    </div>
+                  {isRevealed ? (
+                    <VocabularyBreakdown
+                      text={marker.subtitleText!}
+                      markedIndices={marker.misunderstoodIndices || []}
+                      onToggleWord={(idx) => onToggleWord(marker.id, idx)}
+                    />
+                  ) : (
+                    <>
+                      <span className="blur-sm select-none">
+                        {marker.subtitleText}
+                      </span>
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-medium text-xs uppercase tracking-wider">
+                        Click to Reveal
+                      </div>
+                    </>
                   )}
                 </>
               ) : (

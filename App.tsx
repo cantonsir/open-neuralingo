@@ -274,6 +274,18 @@ function App() {
     }));
   };
 
+  const handleToggleWord = (id: string, wordIndex: number) => {
+    setMarkers(prev => prev.map(m => {
+      if (m.id === id) {
+        const indices = new Set(m.misunderstoodIndices || []);
+        if (indices.has(wordIndex)) indices.delete(wordIndex);
+        else indices.add(wordIndex);
+        return { ...m, misunderstoodIndices: Array.from(indices) };
+      }
+      return m;
+    }));
+  };
+
   const changePlaybackRate = (rate: number) => {
     if (player) {
       player.setPlaybackRate(rate);
@@ -486,6 +498,7 @@ function App() {
           onDelete={handleDeleteMarker}
           onAddTag={handleAddTag}
           onRemoveTag={handleRemoveTag}
+          onToggleWord={handleToggleWord}
         />
       </div>
     </div>

@@ -16,6 +16,7 @@ export interface Marker {
   tags: TagType[];
   note?: string;
   pressCount?: number;
+  misunderstoodIndices?: number[];
 }
 
 export interface PlayerState {
