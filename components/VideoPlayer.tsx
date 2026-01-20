@@ -122,7 +122,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <div
             className={`
               bg-black/60 text-white text-xl md:text-2xl px-6 py-3 rounded-lg text-center max-w-4xl transition-all duration-300 pointer-events-auto cursor-pointer
-              ${(forceShowSubtitle || isHoveringSubs) ? 'blur-0 opacity-100' : 'blur-sm opacity-60 hover:blur-0 hover:opacity-100'}
+              ${(forceShowSubtitle || isHoveringSubs) ? 'blur-0 opacity-100' : 'blur-lg opacity-40 hover:blur-0 hover:opacity-100'}
             `}
             onMouseEnter={() => setIsHoveringSubs(true)}
             onMouseLeave={() => setIsHoveringSubs(false)}

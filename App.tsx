@@ -82,6 +82,7 @@ function App() {
       }));
 
       setSubtitles(parsed);
+      setVideoId(id);
       setIsSetupMode(false); // Auto-start if successful
     } catch (error) {
       console.error(error);
