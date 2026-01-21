@@ -6,21 +6,23 @@ import VideoPlayer from './components/VideoPlayer';
 import MarkerList from './components/MarkerList';
 import ShortcutsPage from './components/ShortcutsPage';
 import Timeline from './components/Timeline';
-import { Marker, Subtitle, PlayerState, TagType, DEMO_VIDEO_ID, DEMO_SUBTITLES } from './types';
+import { Marker, Subtitle, PlayerState, TagType } from './types';
 
 import { parseSubtitles, parseYouTubeXml, parseTime, formatTime } from './utils';
 import VocabularyManager from './components/VocabularyManager';
+import FlashcardPractice from './components/FlashcardPractice';
 
-type View = 'loop' | 'vocab' | 'shortcuts';
+type View = 'loop' | 'vocab' | 'shortcuts' | 'flashcards';
 type Theme = 'dark' | 'light';
 
 function App() {
   // --- State ---
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>('light');
   const [videoId, setVideoId] = useState<string>('');
   const [inputUrl, setInputUrl] = useState<string>('');
   const [inputSubs, setInputSubs] = useState<string>('');
   const [isSetupMode, setIsSetupMode] = useState<boolean>(true);
+  const [showManualSetup, setShowManualSetup] = useState<boolean>(false);
 
   // --- Theme Logic ---
   useEffect(() => {
@@ -54,6 +56,32 @@ function App() {
 
   const [tempSegment, setTempSegment] = useState<{ start: number, end: number } | null>(null);
 
+  const [savedCards, setSavedCards] = useState<Marker[]>([]);
+
+  // Load saved cards on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('saved_flashcards');
+    if (saved) {
+      try {
+        setSavedCards(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved cards", e);
+      }
+    }
+  }, []);
+
+  // Save cards handler
+  const handleSaveToDeck = (marker: Marker) => {
+    setSavedCards(prev => {
+      // Avoid duplicates
+      if (prev.some(c => c.id === marker.id)) return prev;
+      const newCards = [...prev, marker];
+      localStorage.setItem('saved_flashcards', JSON.stringify(newCards));
+      // alert("Saved to Deck!"); // REMOVED: Handled by Toast in VocabularyManager
+      return newCards;
+    });
+  };
+
   // Ref for the loop interval
   const loopIntervalRef = useRef<number | null>(null);
 
@@ -81,11 +109,7 @@ function App() {
     }
   };
 
-  const loadDemo = () => {
-    setVideoId(DEMO_VIDEO_ID);
-    setSubtitles(parseSubtitles(DEMO_SUBTITLES));
-    setIsSetupMode(false);
-  };
+
 
   const [isFetchingSubs, setIsFetchingSubs] = useState(false);
 
@@ -465,7 +489,15 @@ function App() {
                   autoFocus
                 />
               </div>
-              <div className="mt-2 flex justify-end">
+              <div className="mt-2 flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowManualSetup(!showManualSetup)}
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300 underline"
+                >
+                  {showManualSetup ? 'Hide Manual Options' : 'Enter Subtitles Manually'}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -489,35 +521,31 @@ function App() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-gray-600 dark:text-gray-400 text-sm font-bold mb-2">Subtitles (VTT/SRT) - Optional</label>
-              <textarea
-                value={inputSubs}
-                onChange={(e) => setInputSubs(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-lg p-3 text-sm font-mono text-gray-900 dark:text-gray-300 h-32 focus:outline-none focus:border-yellow-500 transition-colors resize-none"
-                placeholder="Paste WebVTT or SRT content here..."
-              />
-            </div>
+            {showManualSetup && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="mb-6">
+                  <label className="block text-gray-600 dark:text-gray-400 text-sm font-bold mb-2">Subtitles (VTT/SRT) - Optional</label>
+                  <textarea
+                    value={inputSubs}
+                    onChange={(e) => setInputSubs(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-lg p-3 text-sm font-mono text-gray-900 dark:text-gray-300 h-32 focus:outline-none focus:border-yellow-500 transition-colors resize-none"
+                    placeholder="Paste WebVTT or SRT content here..."
+                  />
+                </div>
 
-            <button
-              type="submit"
-              className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              Start Practice <Play size={18} fill="currentColor" />
-            </button>
+                <div className="flex gap-4">
+                  <button
+                    type="submit"
+                    className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    Start Practice <Play size={18} fill="currentColor" />
+                  </button>
+                </div>
+              </div>
+            )}
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800 text-center">
-            <button
-              onClick={loadDemo}
-              className="text-sm text-gray-500 hover:text-yellow-600 dark:hover:text-yellow-500 underline transition-colors"
-            >
-              No video? Try the Demo (TED Talk)
-            </button>
-            <p className="text-[10px] text-gray-500 dark:text-gray-600 mt-2">
-              Note: Demo subtitles are only available for the first 25 seconds.
-            </p>
-          </div>
+
         </div>
       </div>
     );
@@ -578,8 +606,15 @@ function App() {
           </button>
 
           <button
-            onClick={() => setView(view === 'shortcuts' ? 'loop' : 'shortcuts')}
-            className={`p-2 rounded-lg transition-colors ${view === 'shortcuts' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
+            onClick={() => setView('flashcards')}
+            className={`p-2 rounded-lg transition-colors ${view === 'flashcards' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
+            title="Flashcards (Practice)"
+          >
+            <Zap size={20} />
+          </button>
+          <button
+            onClick={() => setView('shortcuts')}
+            className={`p-2 rounded-lg transition-colors ${view === 'shortcuts' ? 'bg-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'}`}
             title="Keyboard Shortcuts"
           >
             <Keyboard size={20} />
@@ -590,10 +625,20 @@ function App() {
 
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Shortcuts Page Overlay */}
+        {/* Modal / Overlay Views */}
         {view === 'shortcuts' && (
-          <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950 flex flex-col">
+          <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950">
             <ShortcutsPage onBack={() => setView('loop')} />
+          </div>
+        )}
+
+        {view === 'flashcards' && (
+          <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950">
+            <FlashcardPractice
+              savedCards={savedCards}
+              onExit={() => setView('loop')}
+              onPlayAudio={handlePlaySegment}
+            />
           </div>
         )}
 
@@ -605,6 +650,7 @@ function App() {
               onRemoveWord={handleRemoveWord}
               onUpdateVocabData={handleUpdateVocabData}
               onPlaySegment={handlePlaySegment}
+              onSaveToDeck={handleSaveToDeck}
             />
           </div>
         )}

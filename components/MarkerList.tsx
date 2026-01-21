@@ -59,9 +59,9 @@ const MarkerList: React.FC<MarkerListProps> = ({
   if (markers.length === 0) {
     // ... same empty check ...
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-500 border-2 border-dashed border-gray-800 rounded-xl mt-4">
+      <div className="flex flex-col items-center justify-center h-64 text-gray-500 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl mt-4">
         <p className="text-lg font-medium">No confusion points yet</p>
-        <p className="text-sm mt-2">Press <kbd className="px-2 py-1 bg-gray-800 rounded text-gray-300 font-mono">Space</kbd> while listening</p>
+        <p className="text-sm mt-2">Press <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-600 dark:text-gray-300 font-mono text-xs font-bold shadow-sm">Space</kbd> while listening</p>
       </div>
     );
   }
