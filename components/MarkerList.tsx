@@ -13,6 +13,7 @@ interface MarkerListProps {
   onAddTag: (id: string, tag: TagType) => void;
   onRemoveTag: (id: string, tag: TagType) => void;
   onToggleWord: (id: string, index: number) => void;
+  onToggleRange: (id: string, start: number, end: number) => void;
   onPlayOnce: (start: number, end: number) => void;
 }
 
@@ -33,6 +34,7 @@ const MarkerList: React.FC<MarkerListProps> = ({
   onAddTag,
   onRemoveTag,
   onToggleWord,
+  onToggleRange,
   onPlayOnce
 }) => {
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
@@ -138,6 +140,7 @@ const MarkerList: React.FC<MarkerListProps> = ({
                       text={marker.subtitleText!}
                       markedIndices={marker.misunderstoodIndices || []}
                       onToggleWord={(idx) => onToggleWord(marker.id, idx)}
+                      onToggleRange={(start, end) => onToggleRange(marker.id, start, end)}
                     />
                   ) : (
                     <>

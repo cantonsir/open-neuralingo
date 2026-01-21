@@ -113,13 +113,17 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                         <div className="flex flex-wrap gap-2 text-2xl leading-relaxed text-gray-800 dark:text-gray-300 font-medium justify-center text-center">
                             {words.map((word, i) => {
                                 const isMarked = markedIndices.includes(i);
+                                const isPhrasePart = isMarked && (markedIndices.includes(i - 1) || markedIndices.includes(i + 1));
+
                                 return (
                                     <span
                                         key={i}
                                         className={`
                                         px-2 py-0.5 rounded transition-all cursor-default relative group
                                         ${isMarked
-                                                ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-100 border border-red-200 dark:border-red-500/30'
+                                                ? (isPhrasePart
+                                                    ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-100 border border-green-200 dark:border-green-500/30'
+                                                    : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-100 border border-red-200 dark:border-red-500/30')
                                                 : 'hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
                                             }
                                     `}
@@ -127,8 +131,8 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                         {word}
                                         {isMarked && (
                                             <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPhrasePart ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                                                <span className={`relative inline-flex rounded-full h-2 w-2 ${isPhrasePart ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                             </span>
                                         )}
                                     </span>
@@ -147,63 +151,88 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
                     {/* Cards Area */}
                     <div className="space-y-6">
-                        {markedIndices.map(index => {
-                            const word = words[index];
-                            const data = selectedMarker.vocabData?.[index] || { definition: '', notes: '' };
+                        {(() => {
+                            // Helper to group consecutive indices
+                            const groupedItems: { indices: number[], text: string, mainIndex: number }[] = [];
+                            if (markedIndices.length > 0) {
+                                const sortedIndices = [...markedIndices].sort((a, b) => a - b);
+                                let currentGroup: number[] = [sortedIndices[0]];
 
-                            if (!word) return null;
+                                for (let i = 1; i < sortedIndices.length; i++) {
+                                    if (sortedIndices[i] === sortedIndices[i - 1] + 1) {
+                                        currentGroup.push(sortedIndices[i]);
+                                    } else {
+                                        groupedItems.push({
+                                            indices: currentGroup,
+                                            text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                            mainIndex: currentGroup[0]
+                                        });
+                                        currentGroup = [sortedIndices[i]];
+                                    }
+                                }
+                                groupedItems.push({
+                                    indices: currentGroup,
+                                    text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                    mainIndex: currentGroup[0]
+                                });
+                            }
 
-                            return (
-                                <div key={`${selectedMarker.id}-${index}`} className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden group hover:border-gray-300 dark:hover:border-gray-700 transition-all shadow-sm">
-                                    {/* Card Header */}
-                                    <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]" />
-                                            <span className="font-bold text-gray-900 dark:text-red-100 text-lg">{word}</span>
-                                            <span className="text-[10px] bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 px-1.5 py-0.5 rounded">MISUNDERSTANDING</span>
+                            return groupedItems.map(item => {
+                                const { text, mainIndex } = item;
+                                const data = selectedMarker.vocabData?.[mainIndex] || { definition: '', notes: '' };
+                                const isPhrase = item.indices.length > 1;
+
+                                return (
+                                    <div key={`${selectedMarker.id}-${mainIndex}`} className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden group hover:border-gray-300 dark:hover:border-gray-700 transition-all shadow-sm">
+                                        {/* Card Header */}
+                                        <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`h-2 w-2 rounded-full ${isPhrase ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`} />
+                                                <span className={`font-bold text-lg ${isPhrase ? 'text-gray-900 dark:text-green-100' : 'text-gray-900 dark:text-red-100'}`}>{text}</span>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${isPhrase ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300'}`}>
+                                                    {isPhrase ? 'PHRASE' : 'WORD'}
+                                                </span>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Card Body */}
-                                    <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        {/* Left: Fields */}
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Expression / Front</label>
-                                                <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 text-gray-800 dark:text-gray-200 font-medium transition-colors">
-                                                    {word}
+                                        {/* Card Body */}
+                                        <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                            {/* Left: Fields */}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Expression / Front</label>
+                                                    <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 text-gray-800 dark:text-gray-200 font-medium transition-colors">
+                                                        {text}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Meaning / Back</label>
+                                                    <textarea
+                                                        className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-24 resize-none"
+                                                        placeholder="Enter definition..."
+                                                        value={data.definition}
+                                                        onChange={(e) => onUpdateVocabData(selectedMarker.id, mainIndex, 'definition', e.target.value)}
+                                                    />
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Meaning / Back</label>
-                                                <textarea
-                                                    className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-24 resize-none"
-                                                    placeholder="Enter definition..."
-                                                    value={data.definition}
-                                                    onChange={(e) => onUpdateVocabData(selectedMarker.id, index, 'definition', e.target.value)}
-                                                />
+
+                                            {/* Right: Context & Audio */}
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Context / Notes</label>
+                                                    <textarea
+                                                        className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-24 resize-none"
+                                                        placeholder="E.g. Speaker clipped the vowel..."
+                                                        value={data.notes}
+                                                        onChange={(e) => onUpdateVocabData(selectedMarker.id, mainIndex, 'notes', e.target.value)}
+                                                    />
+                                                </div>
                                             </div>
-                                        </div>
-
-                                        {/* Right: Context & Audio */}
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Context / Notes</label>
-                                                <textarea
-                                                    className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-24 resize-none"
-                                                    placeholder="E.g. Speaker clipped the vowel..."
-                                                    value={data.notes}
-                                                    onChange={(e) => onUpdateVocabData(selectedMarker.id, index, 'notes', e.target.value)}
-                                                />
-                                            </div>
-
-                                            {/* Audio Sample Strip */}
-
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            });
+                        })()}
                     </div>
                 </div>
 

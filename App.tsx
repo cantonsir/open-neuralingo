@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { Play, Pause, RotateCcw, Volume2, Settings, Download, Search, Zap, Eye, EyeOff, Sun, Moon } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, Settings, Download, Search, Zap, Eye, EyeOff, Sun, Moon, ChevronLeft, ChevronRight, Keyboard } from 'lucide-react';
 
 import VideoPlayer from './components/VideoPlayer';
 import MarkerList from './components/MarkerList';
+import ShortcutsPage from './components/ShortcutsPage';
 import Timeline from './components/Timeline';
 import { Marker, Subtitle, PlayerState, TagType, DEMO_VIDEO_ID, DEMO_SUBTITLES } from './types';
 
 import { parseSubtitles, parseYouTubeXml, parseTime, formatTime } from './utils';
 import VocabularyManager from './components/VocabularyManager';
 
-type View = 'loop' | 'vocab';
+type View = 'loop' | 'vocab' | 'shortcuts';
 type Theme = 'dark' | 'light';
 
 function App() {
@@ -204,9 +205,18 @@ function App() {
       }
 
       // K / P: Toggle Play/Pause
-      if (e.key === 'k' || e.key === 'p') {
+      // K / P: Toggle Play/Pause
+      if (e.key === 'k' || e.key === 'K' || e.key === 'p') {
         if (state.isPlaying) player?.pauseVideo();
         else player?.playVideo();
+      }
+
+      // Arrows for Sentence Navigation
+      if (e.key === 'ArrowLeft') {
+        handlePrevSubtitle();
+      }
+      if (e.key === 'ArrowRight') {
+        handleNextSubtitle();
       }
     };
 
@@ -318,6 +328,31 @@ function App() {
     }));
   };
 
+  const handleToggleRange = (id: string, start: number, end: number) => {
+    setMarkers(prev => prev.map(m => {
+      if (m.id === id) {
+        const currentIndices = new Set(m.misunderstoodIndices || []);
+        const range = [];
+        for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+          range.push(i);
+        }
+
+        // Logic: If ANY word in the range is NOT selected, select the whole range.
+        // If ALL words in the range are ALREADY selected, deselect the whole range.
+        const allSelected = range.every(idx => currentIndices.has(idx));
+
+        if (allSelected) {
+          range.forEach(idx => currentIndices.delete(idx));
+        } else {
+          range.forEach(idx => currentIndices.add(idx));
+        }
+
+        return { ...m, misunderstoodIndices: Array.from(currentIndices) };
+      }
+      return m;
+    }));
+  };
+
   const handleRemoveWord = (wordToRemove: string) => {
     setMarkers(prev => prev.map(m => {
       if (!m.subtitleText || !m.misunderstoodIndices?.length) return m;
@@ -359,6 +394,47 @@ function App() {
     if (player) {
       player.setPlaybackRate(rate);
       setState(prev => ({ ...prev, playbackRate: rate }));
+    }
+  };
+
+  const handlePrevSubtitle = async () => {
+    if (!player || subtitles.length === 0) return;
+
+    const t = await player.getCurrentTime();
+    // Find current or closest past subtitle
+    const currentIndex = subtitles.findIndex(s => t >= s.start && t < s.end);
+
+    if (currentIndex !== -1) {
+      // Strictly go to the previous subtitle as requested
+      const prevIndex = Math.max(0, currentIndex - 1);
+      player.seekTo(subtitles[prevIndex].start, true);
+    } else {
+      // If we are in a gap, find the last subtitle that ended before now
+      const lastIndex = subtitles.length - 1;
+      let targetIndex = -1;
+
+      for (let i = lastIndex; i >= 0; i--) {
+        if (subtitles[i].end <= t) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex !== -1) {
+        player.seekTo(subtitles[targetIndex].start, true);
+      }
+    }
+  };
+
+  const handleNextSubtitle = async () => {
+    if (!player || subtitles.length === 0) return;
+
+    const t = await player.getCurrentTime();
+    // Find subtitle that starts after current time
+    const nextSub = subtitles.find(s => s.start > t);
+
+    if (nextSub) {
+      player.seekTo(nextSub.start, true);
     }
   };
 
@@ -500,13 +576,30 @@ function App() {
           >
             Change Video
           </button>
+
+          <button
+            onClick={() => setView(view === 'shortcuts' ? 'loop' : 'shortcuts')}
+            className={`p-2 rounded-lg transition-colors ${view === 'shortcuts' ? 'bg-yellow-500 text-black' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}
+            title="Keyboard Shortcuts"
+          >
+            <Keyboard size={20} />
+          </button>
         </div>
       </div>
 
+
+
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Shortcuts Page Overlay */}
+        {view === 'shortcuts' && (
+          <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950 flex flex-col">
+            <ShortcutsPage onBack={() => setView('loop')} />
+          </div>
+        )}
+
         {/* Vocabulary Manager Overlay */}
         {view === 'vocab' && (
-          <div className="absolute inset-0 z-10 bg-gray-950">
+          <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950">
             <VocabularyManager
               markers={markers}
               onRemoveWord={handleRemoveWord}
@@ -517,7 +610,7 @@ function App() {
         )}
 
         {/* Main Player Area (Always Mounted, Hidden when 'vocab' is active to keep audio) */}
-        <div className={`flex-1 flex flex-col p-6 overflow-hidden ${view === 'vocab' ? 'invisible absolute pointer-events-none' : ''}`}>
+        <div className="flex-1 flex flex-col p-6 overflow-hidden">
 
           {/* Video Container */}
           <div className="flex-1 flex flex-col justify-center min-h-0">
@@ -547,6 +640,23 @@ function App() {
               >
                 {state.isPlaying ? <Pause fill="currentColor" /> : <Play fill="currentColor" className="ml-1" />}
               </button>
+
+              <div className="flex items-center gap-1 mx-2">
+                <button
+                  onClick={handlePrevSubtitle}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  title="Previous Sentence"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={handleNextSubtitle}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                  title="Next Sentence"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
 
               <div className="text-sm font-mono text-gray-600 dark:text-gray-400">
                 {formatTime(state.currentTime)} / {formatTime(state.duration)}
@@ -582,46 +692,37 @@ function App() {
           </div>
         </div>
 
-        {/* Right: Sidebar (Hide in Vocab Mode) */}
-        {view === 'loop' && (
-          <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 flex flex-col shadow-xl z-0 transition-colors">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-xl text-gray-900 dark:text-white">Review Points</h2>
-              <div className="flex gap-2">
-                <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-[10px] px-2 py-1 rounded-full border border-blue-200 dark:border-blue-800/50" title="Total subtitles loaded">
-                  {subtitles.length} SUBS
-                </span>
-                <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-[10px] px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700/50">
-                  {markers.length} MARKS
-                </span>
-              </div>
+        {/* Right: Sidebar (Hide in Vocab Mode, Keep mounted for Shortcuts to preserve scroll) */}
+        <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 flex flex-col shadow-xl z-0 transition-colors">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-xl text-gray-900 dark:text-white">Review Points</h2>
+            <div className="flex gap-2">
+              <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-[10px] px-2 py-1 rounded-full border border-blue-200 dark:border-blue-800/50" title="Total subtitles loaded">
+                {subtitles.length} SUBS
+              </span>
+              <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-[10px] px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700/50">
+                {markers.length} MARKS
+              </span>
             </div>
-
-            <div className="text-xs text-gray-500 mb-4 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700/50">
-              <p className="flex items-center gap-2 mb-1">
-                <span className="w-12 text-right font-mono bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded px-1">Space</span>
-                <span>Mark confusion point</span>
-              </p>
-              <p className="flex items-center gap-2">
-                <span className="w-12 text-right font-mono bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded px-1 shrink-0">S</span>
-                <span className="leading-tight">Hover on video subtitle region or press 'S' to reveal</span>
-              </p>
-            </div>
-
-            <MarkerList
-              markers={markers}
-              currentLoopId={currentLoop?.id || null}
-              onPlayLoop={handlePlayLoop}
-              onStopLoop={handleStopLoop}
-              onDelete={handleDeleteMarker}
-              onAddTag={handleAddTag}
-              onRemoveTag={handleRemoveTag}
-              onToggleWord={handleToggleWord}
-              onPlayOnce={handlePlaySegment}
-            />
           </div>
-        )}
+
+
+
+          <MarkerList
+            markers={markers}
+            currentLoopId={currentLoop?.id || null}
+            onPlayLoop={handlePlayLoop}
+            onStopLoop={handleStopLoop}
+            onDelete={handleDeleteMarker}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+            onToggleWord={handleToggleWord}
+            onToggleRange={handleToggleRange}
+            onPlayOnce={handlePlaySegment}
+          />
+        </div>
       </div>
+
     </div>
   );
 }
