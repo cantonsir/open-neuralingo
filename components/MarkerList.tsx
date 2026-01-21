@@ -141,7 +141,7 @@ const MarkerList: React.FC<MarkerListProps> = ({
                     />
                   ) : (
                     <>
-                      <span className="blur-sm select-none text-gray-900 dark:text-gray-100">
+                      <span className="blur-md select-none text-gray-900 dark:text-gray-100">
                         {marker.subtitleText}
                       </span>
                       <div className="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 font-medium text-xs uppercase tracking-wider">

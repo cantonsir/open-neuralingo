@@ -198,27 +198,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                             </div>
 
                                             {/* Audio Sample Strip */}
-                                            <div>
-                                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Audio Context</label>
-                                                <div className="bg-gray-100 dark:bg-gray-800/30 border border-gray-200 dark:border-gray-700 rounded-lg p-3 flex items-center justify-between transition-colors">
-                                                    <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end)}
-                                                            className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
-                                                        >
-                                                            <Play size={14} fill="currentColor" />
-                                                        </button>
-                                                        <div className="space-y-0.5">
-                                                            <div className="h-1 w-24 bg-gray-300 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                                <div className="h-full w-2/3 bg-gray-500" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <span className="text-[10px] font-mono text-gray-500">
-                                                        {(selectedMarker.end - selectedMarker.start).toFixed(1)}s
-                                                    </span>
-                                                </div>
-                                            </div>
+
                                         </div>
                                     </div>
                                 </div>

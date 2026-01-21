@@ -555,7 +555,7 @@ function App() {
               {/* Subtitle Toggle */}
               <button
                 onClick={() => setSubtitlesVisible(!subtitlesVisible)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4 ${subtitlesVisible || isPeekingSubs ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'bg-gray-800 text-gray-400 border border-transparent'
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4 ${subtitlesVisible || isPeekingSubs ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/50' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-transparent'
                   }`}
                 title="Toggle Subtitles (or press 'S' to peek')"
               >
@@ -572,7 +572,7 @@ function App() {
                   onClick={() => changePlaybackRate(rate)}
                   className={`
                       px-3 py-1 text-sm rounded-md font-medium transition-colors
-                      ${state.playbackRate === rate ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-400 hover:text-white'}
+                      ${state.playbackRate === rate ? 'bg-yellow-500 text-black' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:text-white'}
                     `}
                 >
                   {rate}x

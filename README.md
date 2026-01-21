@@ -47,7 +47,21 @@ EchoLoop is a premium, web-based tool designed for language learners and anyone 
    GEMINI_API_KEY=your_key_here
    ```
 
-4. **Launch the app:**
+4. **Backend Setup**:
+   Install the required Python dependencies:
+   ```bash
+   "C:\Users\Jayden\anaconda3\python.exe" -m pip install -r backend/requirements.txt
+   ```
+
+5. **Launch the app**:
+   You need to run both the backend and frontend servers:
+
+   **Terminal 1 (Backend)**:
+   ```bash
+   "C:\Users\Jayden\anaconda3\python.exe" backend/server.py
+   ```
+
+   **Terminal 2 (Frontend)**:
    ```bash
    npm run dev
    ```
