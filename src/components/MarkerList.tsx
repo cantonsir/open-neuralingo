@@ -40,11 +40,16 @@ const MarkerList: React.FC<MarkerListProps> = ({
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when a new marker is added
+  const prevLengthRef = React.useRef(markers.length);
+
+  // Auto-scroll to bottom ONLY when a new marker is added
   React.useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (markers.length > prevLengthRef.current) {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
     }
+    prevLengthRef.current = markers.length;
   }, [markers.length]);
 
   const toggleReveal = (id: string, e: React.MouseEvent) => {

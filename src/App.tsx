@@ -246,6 +246,7 @@ function App() {
 
       const newMarker: Marker = {
         id: Math.random().toString(36).substr(2, 9),
+        videoId: videoId, // Capture current video ID
         start,
         end,
         createdAt: now,
@@ -596,8 +597,28 @@ function App() {
     );
   }
 
-  const handlePlaySegment = (start: number, end: number) => {
+  const handlePlaySegment = async (start: number, end: number, targetVideoId?: string) => {
     if (!player) return;
+
+    // Check if we need to switch video
+    if (targetVideoId && targetVideoId !== videoId) {
+      if (confirm("This card is from a different video. Switch video?")) {
+        await fetchSubtitles(targetVideoId); // This sets videoId and subtitles
+        // After state update, we need to wait/hook into ready, but for now simple seek after load might fail
+        // We'll rely on onReady or effect. 
+        // A better way for immediate robust switch is simple:
+        // Just set state, and maybe use a temp effect or just let user play.
+        // For now, let's just switch and let auto-play happen if we can.
+        // React state update is async, so we can't seek immediately on the *old* player instance easily for the *new* video.
+        // But react-youtube handles ID change.
+
+        // We set a flag or temp segment to auto-play once loaded?
+        setTempSegment({ start, end });
+        // The player will reload. We need logic in onReady or useEffect to seek if tempSegment is set.
+      }
+      return;
+    }
+
     setCurrentLoop(null); // Ensure strict loop is off. CRITICAL: Do not set currentLoop, or it will loop!
     setTempSegment({ start, end });
     player.seekTo(start, true);

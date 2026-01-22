@@ -9,6 +9,7 @@ export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabular
 
 export interface Marker {
   id: string;
+  videoId?: string;
   start: number;
   end: number;
   createdAt: number;

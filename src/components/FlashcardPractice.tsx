@@ -5,7 +5,7 @@ import { Marker } from '../types';
 interface FlashcardPracticeProps {
     savedCards: Marker[];
     onExit: () => void;
-    onPlayAudio: (start: number, end: number) => void;
+    onPlayAudio: (start: number, end: number, videoId?: string) => void;
     previewMode?: boolean;
 }
 
@@ -32,7 +32,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
 
     const handlePlayAudio = () => {
         if (currentCard) {
-            onPlayAudio(currentCard.start, currentCard.end);
+            onPlayAudio(currentCard.start, currentCard.end, currentCard.videoId);
         }
     };
 

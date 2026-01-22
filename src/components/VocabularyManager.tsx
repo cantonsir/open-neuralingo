@@ -12,7 +12,7 @@ interface VocabularyManagerProps {
     savedCards?: Marker[]; // New prop for DB cards
     onRemoveWord: (word: string) => void;
     onUpdateVocabData: (markerId: string, index: number, field: 'definition' | 'notes', value: string) => void;
-    onPlaySegment: (start: number, end: number) => void;
+    onPlaySegment: (start: number, end: number, videoId?: string) => void;
     onSaveToDeck: (marker: Marker) => void;
     onDeleteCard?: (id: string) => void; // New prop for DB delete
     onUpdateCard?: (id: string, updates: Partial<Marker>) => void; // New prop for DB update
@@ -358,20 +358,20 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
                                             {/* Card Body */}
                                             <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                                {/* Front: Audio */}
-                                                <div className="col-span-1 lg:col-span-2 bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/20 rounded-lg p-4 flex items-center justify-between">
+                                                {/* Audio Playback Control */}
+                                                <div className="col-span-1 lg:col-span-2 bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-900/30 flex items-center justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="bg-yellow-100 dark:bg-yellow-500/20 p-2 rounded-full text-yellow-600 dark:text-yellow-500">
+                                                        <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-500">
                                                             <Volume2 size={20} />
                                                         </div>
                                                         <div>
-                                                            <span className="block text-xs font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-widest">Front (Question)</span>
-                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</span>
+                                                            <span className="text-[10px] font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider">Front (Question)</span>
+                                                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</p>
                                                         </div>
                                                     </div>
                                                     <button
-                                                        onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end)}
-                                                        className="px-4 py-2 bg-yellow-500 text-black font-bold rounded-lg shadow-sm hover:bg-yellow-400 transition-colors flex items-center gap-2 text-xs"
+                                                        onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end, selectedMarker.videoId)}
+                                                        className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
                                                     >
                                                         <Play size={14} fill="currentColor" /> Play
                                                     </button>

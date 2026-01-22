@@ -88,6 +88,7 @@ def get_cards():
             # Map DB fields to Frontend specific Marker fields (camelCase)
             marker = {
                 'id': c['id'],
+                'videoId': c['video_id'],
                 'start': c['start_time'],
                 'end': c['end_time'],
                 'subtitleText': c['subtitle_text'],
@@ -96,7 +97,7 @@ def get_cards():
                 'misunderstoodIndices': c['misunderstood_indices'],
                 'tags': c['tags'],
                 'note': c['note'],
-                'pressCount': c['press_count']
+                'press_count': c['press_count']
             }
             # Add videoId separately if needed, but Marker type doesn't strictly have it in frontend usage yet 
             # (it usually assumes context of current video, but for global deck we might need it. 
