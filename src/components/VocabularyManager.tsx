@@ -9,18 +9,28 @@ import FlashcardPractice from './FlashcardPractice';
 
 interface VocabularyManagerProps {
     markers: Marker[];
+    savedCards?: Marker[]; // New prop for DB cards
     onRemoveWord: (word: string) => void;
     onUpdateVocabData: (markerId: string, index: number, field: 'definition' | 'notes', value: string) => void;
     onPlaySegment: (start: number, end: number) => void;
     onSaveToDeck: (marker: Marker) => void;
+    onDeleteCard?: (id: string) => void; // New prop for DB delete
+    onUpdateCard?: (id: string, updates: Partial<Marker>) => void; // New prop for DB update
+    onDiscardSessionMarker?: (id: string) => void; // Prop for session discard
 }
 
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     markers,
+    savedCards = [],
+    onRemoveWord,
     onUpdateVocabData,
     onPlaySegment,
-    onSaveToDeck
+    onSaveToDeck,
+    onDeleteCard,
+    onUpdateCard,
+    onDiscardSessionMarker
 }) => {
+    const [viewMode, setViewMode] = useState<'session' | 'database'>('session');
     const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isPreviewing, setIsPreviewing] = useState(false);
@@ -53,11 +63,32 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         }
     };
 
-    // HELPER: Bulk Discard
+    // HELPER: Bulk Discard / Delete
     const handleBulkDiscard = () => {
+        if (viewMode === 'session') {
+            // Session Mode: Discard from markers list
+            if (onDiscardSessionMarker) {
+                checkedIds.forEach(id => onDiscardSessionMarker(id));
+            }
+        } else {
+            // Database Mode: Delete !
+            if (onDeleteCard) {
+                checkedIds.forEach(id => onDeleteCard(id));
+            }
+        }
+
+        // Single Item Discard Fallback
+        if (selectedMarker && checkedIds.size === 0) {
+            if (viewMode === 'session') {
+                onDiscardSessionMarker?.(selectedMarker.id);
+            } else {
+                onDeleteCard?.(selectedMarker.id);
+            }
+        }
+
         setCheckedIds(new Set());
         setShowDiscardModal(false);
-        setToast({ message: `${checkedIds.size} cards discarded`, type: 'success', actionLabel: 'Undo', onAction: () => { } });
+        setToast({ message: `Items Removed`, type: 'success', actionLabel: 'Undo', onAction: () => { } });
     };
 
     // HELPER: Bulk Save
@@ -68,11 +99,12 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         setCheckedIds(new Set()); // Clear selection after save
     };
 
-    // 1. Get all markers with marked words
+    // 1. Get List based on View Mode
     const activeMarkers = useMemo(() => {
-        return markers.filter(m => m.misunderstoodIndices && m.misunderstoodIndices.length > 0)
-            .sort((a, b) => a.createdAt - b.createdAt); // Oldest first
-    }, [markers]);
+        const source = viewMode === 'session' ? markers : savedCards;
+        return source.filter(m => m.misunderstoodIndices && m.misunderstoodIndices.length > 0)
+            .sort((a, b) => b.createdAt - a.createdAt); // Newest first for better UX
+    }, [markers, savedCards, viewMode]);
 
     // Select first marker by default if none selected
     if (!selectedMarkerId && activeMarkers.length > 0) {
@@ -166,7 +198,21 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         const def = await generateDefinition(text);
         setIsGenerating(false);
         if (def) {
-            onUpdateVocabData(markerId, index, 'definition', def);
+            if (viewMode === 'session') {
+                onUpdateVocabData(markerId, index, 'definition', def);
+            } else {
+                // Database update
+                const marker = activeMarkers.find(m => m.id === markerId);
+                if (marker) {
+                    const currentVocab = marker.vocabData || {};
+                    const currentItem = currentVocab[index] || { definition: '', notes: '' };
+                    const newVocab = {
+                        ...currentVocab,
+                        [index]: { ...currentItem, definition: def }
+                    };
+                    onUpdateCard?.(markerId, { vocabData: newVocab });
+                }
+            }
         } else {
             alert("Could not generate definition. Check API Key.");
         }
@@ -365,7 +411,21 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                                                     className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-32 resize-none"
                                                                     placeholder="Enter definition..."
                                                                     value={data.definition}
-                                                                    onChange={(e) => onUpdateVocabData(selectedMarker.id, mainIndex, 'definition', e.target.value)}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        if (viewMode === 'session') {
+                                                                            onUpdateVocabData(selectedMarker.id, mainIndex, 'definition', val);
+                                                                        } else {
+                                                                            // Database update
+                                                                            const currentVocab = selectedMarker.vocabData || {};
+                                                                            const currentItem = currentVocab[mainIndex] || { definition: '', notes: '' };
+                                                                            const newVocab = {
+                                                                                ...currentVocab,
+                                                                                [mainIndex]: { ...currentItem, definition: val }
+                                                                            };
+                                                                            onUpdateCard?.(selectedMarker.id, { vocabData: newVocab });
+                                                                        }
+                                                                    }}
                                                                 />
                                                             </div>
                                                         </div>
@@ -384,40 +444,39 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                 <div className="p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex justify-end gap-3 sticky bottom-0 z-10 transition-colors">
                     <button
                         onClick={() => {
-                            if (checkedIds.size > 0) {
+                            if (checkedIds.size > 0 || selectedMarker) {
                                 setShowDiscardModal(true);
-                            } else {
-                                if (selectedMarker) {
-                                    setShowDiscardModal(true);
-                                }
                             }
                         }}
                         className="px-6 py-2 rounded-lg text-sm font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                     >
-                        {checkedIds.size > 0 ? `Discard Selected (${checkedIds.size})` : 'Discard'}
+                        {viewMode === 'database' ? (checkedIds.size > 0 ? `Delete Selected (${checkedIds.size})` : 'Delete') : (checkedIds.size > 0 ? `Discard Selected (${checkedIds.size})` : 'Discard')}
                     </button>
-                    <button
-                        onClick={() => {
-                            if (checkedIds.size > 0) {
-                                handleBulkSave();
-                            } else if (selectedMarker) {
-                                onSaveToDeck(selectedMarker);
-                                setToast({ message: "Card saved to deck", type: 'success', actionLabel: 'Undo', onAction: () => { } });
-                            }
-                        }}
-                        className="px-6 py-2 rounded-lg text-sm font-bold bg-yellow-500 text-black hover:bg-yellow-400 shadow-lg shadow-yellow-500/20 transition-all flex items-center gap-2"
-                    >
-                        <Save size={16} />
-                        {checkedIds.size > 0 ? `Save Selected (${checkedIds.size})` : 'Save to Deck'}
-                    </button>
+
+                    {viewMode === 'session' && (
+                        <button
+                            onClick={() => {
+                                if (checkedIds.size > 0) {
+                                    handleBulkSave();
+                                } else if (selectedMarker) {
+                                    onSaveToDeck(selectedMarker);
+                                    setToast({ message: "Card saved to deck", type: 'success', actionLabel: 'Undo', onAction: () => { } });
+                                }
+                            }}
+                            className="px-6 py-2 rounded-lg text-sm font-bold bg-yellow-500 text-black hover:bg-yellow-400 shadow-lg shadow-yellow-500/20 transition-all flex items-center gap-2"
+                        >
+                            <Save size={16} />
+                            {checkedIds.size > 0 ? `Save Selected (${checkedIds.size})` : 'Save to Deck'}
+                        </button>
+                    )}
                 </div>
 
                 {/* Helper Components */}
                 {toast && <Toast {...toast} onUnmount={() => setToast(null)} />}
                 <Modal
                     isOpen={showDiscardModal}
-                    title={checkedIds.size > 0 ? `Discard ${checkedIds.size} Cards?` : (selectedMarker ? "Discard Card?" : "Discard")}
-                    description="This will remove this item from your review queue. This action cannot be undone."
+                    title={checkedIds.size > 0 ? `Delete ${checkedIds.size} Cards?` : (selectedMarker ? "Delete Card?" : "Delete")}
+                    description={`This will permanently remove this item from your ${viewMode === 'database' ? 'saved database' : 'session queue'}. This action cannot be undone.`}
                     confirmLabel="Discard"
                     isDestructive
                     onConfirm={handleBulkDiscard}
@@ -444,24 +503,49 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
             {/* Left Sidebar: Review Queue */}
             <div className="w-80 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 transition-colors">
                 {/* Sidebar Header */}
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-900 sticky top-0 z-10">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={handleSelectAll}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                            title="Select All"
-                        >
-                            {checkedIds.size === activeMarkers.length && activeMarkers.length > 0 ? (
-                                <CheckCircle2 size={18} className="text-blue-500" />
-                            ) : (
-                                <Circle size={18} />
-                            )}
-                        </button>
-                        <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                            Review Queue ({activeMarkers.length})
-                        </h2>
+                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex flex-col gap-4 bg-white dark:bg-gray-900 sticky top-0 z-10 transition-colors">
+                    {/* Header Controls */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleSelectAll}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                title="Select All"
+                            >
+                                {checkedIds.size === activeMarkers.length && activeMarkers.length > 0 ? (
+                                    <CheckCircle2 size={18} className="text-blue-500" />
+                                ) : (
+                                    <Circle size={18} />
+                                )}
+                            </button>
+                            <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                                {viewMode === 'session' ? 'Session Queue' : 'Saved Database'} ({activeMarkers.length})
+                            </h2>
+                        </div>
+                        <Flag size={14} className="text-gray-300" />
                     </div>
-                    <Flag size={14} className="text-gray-300" />
+
+                    {/* Mode Toggle Switch */}
+                    <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                        <button
+                            onClick={() => setViewMode('session')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'session'
+                                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
+                        >
+                            Session
+                        </button>
+                        <button
+                            onClick={() => setViewMode('database')}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'database'
+                                ? 'bg-white dark:bg-gray-700 text-yellow-600 dark:text-yellow-400 shadow-sm'
+                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
+                        >
+                            Database
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {activeMarkers.length === 0 ? (

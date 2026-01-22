@@ -11,13 +11,12 @@ import { Marker, Subtitle, PlayerState, TagType } from './types';
 import { parseSubtitles, parseYouTubeXml, parseTime, formatTime } from './utils';
 import VocabularyManager from './components/VocabularyManager';
 import FlashcardPractice from './components/FlashcardPractice';
+import { api } from './db';
 
 type View = 'loop' | 'vocab' | 'shortcuts' | 'flashcards';
 type Theme = 'dark' | 'light';
 
 function App() {
-  // --- State ---
-  const [theme, setTheme] = useState<Theme>('light');
   const [videoId, setVideoId] = useState<string>('');
   const [inputUrl, setInputUrl] = useState<string>('');
   const [inputSubs, setInputSubs] = useState<string>('');
@@ -25,7 +24,12 @@ function App() {
   const [showManualSetup, setShowManualSetup] = useState<boolean>(false);
 
   // --- Theme Logic ---
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem('theme') as Theme) || 'light';
+  });
+
   useEffect(() => {
+    localStorage.setItem('theme', theme);
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
@@ -60,26 +64,67 @@ function App() {
 
   // Load saved cards on mount
   useEffect(() => {
-    const saved = localStorage.getItem('saved_flashcards');
-    if (saved) {
-      try {
-        setSavedCards(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved cards", e);
+    const loadCards = async () => {
+      // 1. Migration: Check localStorage
+      const local = localStorage.getItem('saved_flashcards');
+      if (local) {
+        try {
+          const localCards: Marker[] = JSON.parse(local);
+          console.log("Migrating cards to DB...", localCards.length);
+          for (const c of localCards) {
+            await api.saveCard(c);
+          }
+          localStorage.removeItem('saved_flashcards');
+        } catch (e) {
+          console.error("Migration failed", e);
+        }
       }
-    }
+
+      // 2. Load from DB
+      const cards = await api.fetchCards();
+      setSavedCards(cards);
+    };
+    loadCards();
   }, []);
 
   // Save cards handler
-  const handleSaveToDeck = (marker: Marker) => {
+  const handleSaveToDeck = async (marker: Marker) => {
+    // Optimistic UI update
     setSavedCards(prev => {
-      // Avoid duplicates
       if (prev.some(c => c.id === marker.id)) return prev;
-      const newCards = [...prev, marker];
-      localStorage.setItem('saved_flashcards', JSON.stringify(newCards));
-      // alert("Saved to Deck!"); // REMOVED: Handled by Toast in VocabularyManager
-      return newCards;
+      return [...prev, marker];
     });
+
+    try {
+      await api.saveCard(marker);
+    } catch (e) {
+      console.error("Failed to save card to DB", e);
+      // Revert if failed (optional, but good practice)
+      setSavedCards(prev => prev.filter(c => c.id !== marker.id));
+      alert("Failed to save to database");
+    }
+  };
+
+  const handleDeleteFromDeck = async (id: string) => {
+    setSavedCards(prev => prev.filter(c => c.id !== id));
+    try {
+      await api.deleteCard(id);
+    } catch (e) {
+      console.error("Failed to delete card", e);
+      alert("Failed to delete from database");
+      // Revert logic could go here (fetching again)
+      const cards = await api.fetchCards();
+      setSavedCards(cards);
+    }
+  };
+
+  const handleUpdateCard = async (id: string, updates: Partial<Marker>) => {
+    setSavedCards(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    try {
+      await api.updateCard(id, updates);
+    } catch (e) {
+      console.error("Failed to update card", e);
+    }
   };
 
   // Ref for the loop interval
@@ -647,10 +692,14 @@ function App() {
           <div className="absolute inset-0 z-50 bg-gray-50 dark:bg-gray-950">
             <VocabularyManager
               markers={markers}
+              savedCards={savedCards}
               onRemoveWord={handleRemoveWord}
               onUpdateVocabData={handleUpdateVocabData}
               onPlaySegment={handlePlaySegment}
               onSaveToDeck={handleSaveToDeck}
+              onDeleteCard={handleDeleteFromDeck}
+              onUpdateCard={handleUpdateCard}
+              onDiscardSessionMarker={handleDeleteMarker}
             />
           </div>
         )}
