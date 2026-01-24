@@ -7,16 +7,19 @@ import MarkerList from './components/MarkerList';
 import Timeline from './components/Timeline';
 import Sidebar from './components/Sidebar';
 import HomeView from './components/HomeView';
-import HistoryView, { addToHistory } from './components/HistoryView';
+import HistoryView from './components/HistoryView';
 import SettingsPanel from './components/SettingsPanel';
 import { Marker, Subtitle, PlayerState, TagType } from './types';
 
 import { parseSubtitles, formatTime } from './utils';
 import VocabularyManager from './components/VocabularyManager';
 import FlashcardPractice from './components/FlashcardPractice';
+import LearningHome from './components/LearningHome';
+import CourseDashboard from './components/CourseDashboard';
+import LearningSession from './components/LearningSession';
 import { api } from './db';
 
-type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history';
+type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning';
 type Theme = 'dark' | 'light';
 
 function App() {
@@ -44,6 +47,15 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
+  // --- Target Language (for learning) ---
+  const [targetLanguage, setTargetLanguage] = useState<string>(() => {
+    return localStorage.getItem('targetLanguage') || 'en';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('targetLanguage', targetLanguage);
+  }, [targetLanguage]);
+
   const [player, setPlayer] = useState<YouTubePlayer | null>(null);
   const [state, setState] = useState<PlayerState>({
     currentTime: 0,
@@ -65,6 +77,11 @@ function App() {
 
   const [savedCards, setSavedCards] = useState<Marker[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Learning Section navigation state
+  const [learningView, setLearningView] = useState<'home' | 'course' | 'lesson'>('home');
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number>(0);
 
   // Load saved cards on mount
   useEffect(() => {
@@ -165,7 +182,7 @@ function App() {
   const fetchSubtitles = async (id: string) => {
     setIsFetchingSubs(true);
     try {
-      const response = await fetch(`/api/transcript?videoId=${id}`);
+      const response = await fetch(`/api/transcript?videoId=${id}&language=${targetLanguage}`);
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
       }
@@ -194,10 +211,11 @@ function App() {
         // Silently fail, use default title
       }
 
-      addToHistory({
+      api.saveToHistory({
         videoId: id,
         title: videoTitle,
         thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+        watchedAt: Date.now(),
         wordsLearned: 0
       });
 
@@ -587,6 +605,8 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         theme={theme}
         toggleTheme={toggleTheme}
+        targetLanguage={targetLanguage}
+        onLanguageChange={setTargetLanguage}
       />
 
       {/* Main Content Area */}
@@ -623,6 +643,47 @@ function App() {
               onExit={() => setView('home')}
               onPlayAudio={handlePlaySegment}
             />
+          </div>
+        )}
+
+        {/* Learning Section - 3 Level Hierarchy */}
+        {view === 'learning' && (
+          <div className="flex-1 overflow-hidden">
+            {/* Level 1: Goal Videos List */}
+            {learningView === 'home' && (
+              <LearningHome
+                defaultLanguage={targetLanguage}
+                onSelectGoal={(goalId) => {
+                  setSelectedGoalId(goalId);
+                  setLearningView('course');
+                }}
+              />
+            )}
+
+            {/* Level 2: Course Dashboard (Segments) */}
+            {learningView === 'course' && selectedGoalId && (
+              <CourseDashboard
+                goalId={selectedGoalId}
+                onBack={() => {
+                  setLearningView('home');
+                  setSelectedGoalId(null);
+                }}
+                onStartLesson={(goalId, segmentIndex) => {
+                  setSelectedSegmentIndex(segmentIndex);
+                  setLearningView('lesson');
+                }}
+              />
+            )}
+
+            {/* Level 3: Lesson Drills */}
+            {learningView === 'lesson' && selectedGoalId && (
+              <LearningSession
+                videoId={selectedGoalId}
+                transcriptSegments={[[]]} // Will be fetched from API
+                segmentDuration={4}
+                onExit={() => setLearningView('course')}
+              />
+            )}
           </div>
         )}
 

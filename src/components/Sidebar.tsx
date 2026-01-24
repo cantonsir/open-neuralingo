@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Zap, Home, PlayCircle, BookOpen, Layers, Settings, History, GraduationCap, ChevronRight, ChevronLeft, PanelLeftClose, PanelLeft } from 'lucide-react';
 
-type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history';
+type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning';
 type Theme = 'dark' | 'light';
 
 interface SidebarProps {
@@ -164,10 +164,9 @@ export default function Sidebar({
                 <NavItem
                     icon={<GraduationCap size={20} />}
                     label="Lessons"
-                    isActive={false}
-                    comingSoon
+                    isActive={view === 'learning'}
                     collapsed={collapsed}
-                    onClick={() => { }}
+                    onClick={() => setView('learning')}
                 />
 
                 {/* DATABASE Section */}

@@ -58,6 +58,8 @@ You need to run **both** the backend and frontend terminals.
 **Terminal 1 (Backend - SQLite API)**:
 ```bash
 python backend/server.py
+
+C:\Users\Jayden\anaconda3\python.exe
 ```
 *(Runs on http://localhost:5000)*
 

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { X, Sun, Moon, Keyboard, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Sun, Moon, Keyboard, Globe } from 'lucide-react';
 
 interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
     theme: 'dark' | 'light';
     toggleTheme: () => void;
+    targetLanguage: string;
+    onLanguageChange: (language: string) => void;
 }
 
 const shortcuts = [
@@ -16,10 +18,35 @@ const shortcuts = [
     { key: '→', action: 'Next sentence' },
 ];
 
-export default function SettingsPanel({ isOpen, onClose, theme, toggleTheme }: SettingsPanelProps) {
+// Common languages with emoji flags
+const SUPPORTED_LANGUAGES = [
+    { code: 'en', name: 'English', flag: '🇺🇸' },
+    { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+    { code: 'fr', name: 'French', flag: '🇫🇷' },
+    { code: 'de', name: 'German', flag: '🇩🇪' },
+    { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+    { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+    { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+    { code: 'pt', name: 'Portuguese', flag: '🇧🇷' },
+    { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+    { code: 'it', name: 'Italian', flag: '🇮🇹' },
+    { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+    { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+];
+
+export default function SettingsPanel({
+    isOpen,
+    onClose,
+    theme,
+    toggleTheme,
+    targetLanguage,
+    onLanguageChange
+}: SettingsPanelProps) {
     const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>('general');
 
     if (!isOpen) return null;
+
+    const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === targetLanguage) || SUPPORTED_LANGUAGES[0];
 
     return (
         <>
@@ -47,8 +74,8 @@ export default function SettingsPanel({ isOpen, onClose, theme, toggleTheme }: S
                     <button
                         onClick={() => setActiveTab('general')}
                         className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'general'
-                                ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-500'
-                                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-500'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                     >
                         General
@@ -56,8 +83,8 @@ export default function SettingsPanel({ isOpen, onClose, theme, toggleTheme }: S
                     <button
                         onClick={() => setActiveTab('shortcuts')}
                         className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'shortcuts'
-                                ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-500'
-                                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            ? 'text-yellow-600 dark:text-yellow-400 border-b-2 border-yellow-500'
+                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                             }`}
                     >
                         Shortcuts
@@ -68,6 +95,31 @@ export default function SettingsPanel({ isOpen, onClose, theme, toggleTheme }: S
                 <div className="flex-1 overflow-y-auto p-6">
                     {activeTab === 'general' && (
                         <div className="space-y-6">
+                            {/* Learning Language */}
+                            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Globe size={20} className="text-blue-500" />
+                                    <div>
+                                        <div className="font-medium text-gray-900 dark:text-white">Learning Language</div>
+                                        <div className="text-sm text-gray-500">The language you want to learn</div>
+                                    </div>
+                                </div>
+                                <select
+                                    value={targetLanguage}
+                                    onChange={(e) => onLanguageChange(e.target.value)}
+                                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                >
+                                    {SUPPORTED_LANGUAGES.map(lang => (
+                                        <option key={lang.code} value={lang.code}>
+                                            {lang.flag} {lang.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    Videos will fetch subtitles in this language when available
+                                </p>
+                            </div>
+
                             {/* Theme Toggle */}
                             <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
                                 <div className="flex items-center gap-3">

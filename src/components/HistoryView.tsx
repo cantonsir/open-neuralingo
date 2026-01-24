@@ -1,49 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Clock, BookOpen, Layers, TrendingUp, Trash2, X, Check } from 'lucide-react';
-
-export interface HistoryItem {
-    videoId: string;
-    title: string;
-    thumbnail: string;
-    watchedAt: number; // timestamp
-    duration?: string;
-    wordsLearned?: number;
-}
-
-const HISTORY_KEY = 'echoloop_watch_history';
-
-// Utility functions for history management
-export function getHistory(): HistoryItem[] {
-    try {
-        const data = localStorage.getItem(HISTORY_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch {
-        return [];
-    }
-}
-
-export function saveHistory(history: HistoryItem[]) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-}
-
-export function addToHistory(item: Omit<HistoryItem, 'watchedAt'>) {
-    const history = getHistory();
-    // Remove existing entry for same video (if any)
-    const filtered = history.filter(h => h.videoId !== item.videoId);
-    // Add to beginning with current timestamp
-    const newHistory = [{ ...item, watchedAt: Date.now() }, ...filtered];
-    // Keep only last 50 videos
-    saveHistory(newHistory.slice(0, 50));
-}
-
-export function removeFromHistory(videoId: string) {
-    const history = getHistory();
-    saveHistory(history.filter(h => h.videoId !== videoId));
-}
-
-export function clearAllHistory() {
-    localStorage.removeItem(HISTORY_KEY);
-}
+import { api, HistoryItem } from '../db';
 
 function formatTimeAgo(timestamp: number): string {
     const now = Date.now();
@@ -69,30 +26,51 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [selectMode, setSelectMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [loading, setLoading] = useState(true);
 
     // Load history on mount
     useEffect(() => {
-        setHistory(getHistory());
+        const loadHistory = async () => {
+            setLoading(true);
+            const data = await api.fetchHistory();
+            setHistory(data);
+            setLoading(false);
+        };
+        loadHistory();
     }, []);
 
-    const handleDelete = (videoId: string) => {
-        removeFromHistory(videoId);
-        setHistory(getHistory());
+    const handleDelete = async (videoId: string) => {
+        try {
+            await api.deleteFromHistory(videoId);
+            setHistory(prev => prev.filter(h => h.videoId !== videoId));
+        } catch (error) {
+            console.error('Failed to delete:', error);
+        }
     };
 
-    const handleDeleteSelected = () => {
-        selectedIds.forEach(id => removeFromHistory(id));
-        setSelectedIds(new Set());
-        setSelectMode(false);
-        setHistory(getHistory());
-    };
-
-    const handleClearAll = () => {
-        if (confirm('Are you sure you want to clear all watch history?')) {
-            clearAllHistory();
-            setHistory([]);
-            setSelectMode(false);
+    const handleDeleteSelected = async () => {
+        try {
+            for (const id of selectedIds) {
+                await api.deleteFromHistory(id);
+            }
+            setHistory(prev => prev.filter(h => !selectedIds.has(h.videoId)));
             setSelectedIds(new Set());
+            setSelectMode(false);
+        } catch (error) {
+            console.error('Failed to delete selected:', error);
+        }
+    };
+
+    const handleClearAll = async () => {
+        if (confirm('Are you sure you want to clear all watch history?')) {
+            try {
+                await api.clearHistory();
+                setHistory([]);
+                setSelectMode(false);
+                setSelectedIds(new Set());
+            } catch (error) {
+                console.error('Failed to clear history:', error);
+            }
         }
     };
 
@@ -113,6 +91,14 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
             setSelectedIds(new Set(history.map(h => h.videoId)));
         }
     };
+
+    if (loading) {
+        return (
+            <div className="flex-1 flex items-center justify-center">
+                <div className="text-gray-500">Loading history...</div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 overflow-y-auto p-6">
@@ -205,7 +191,7 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
                 </div>
             </div>
 
-            {/* History Grid - YouTube Style */}
+            {/* History Grid */}
             {history.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {history.map((item) => (
@@ -247,7 +233,7 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
                                     </div>
                                 )}
 
-                                {/* Play overlay (only in non-select mode) */}
+                                {/* Play overlay */}
                                 {!selectMode && (
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                                         <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
@@ -256,7 +242,7 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
                                     </div>
                                 )}
 
-                                {/* Delete button (appears on hover in non-select mode) */}
+                                {/* Delete button */}
                                 {!selectMode && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleDelete(item.videoId); }}
