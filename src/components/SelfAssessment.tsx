@@ -26,12 +26,12 @@ interface AssessmentResult {
 }
 
 interface TestResponse {
-    questionId: number;
+    sentenceId: number;
     sentence: string;
-    response: 1 | 2 | 3 | 4;
+    understood: boolean;
     replays: number;
-    responseTimeMs: number;
-    markedWords: string[];
+    reactionTimeMs: number;
+    markedIndices: number[];
 }
 
 interface SelfAssessmentProps {
@@ -148,11 +148,14 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
 
     // Results Dashboard View
     if (mode === 'results' && savedAssessment) {
-        const avgScore = savedTestResults
-            ? savedTestResults.reduce((sum, r) => sum + r.response, 0) / savedTestResults.length
-            : null;
+        const understoodCount = savedTestResults
+            ? savedTestResults.filter(r => r.understood).length
+            : 0;
         const totalReplays = savedTestResults
             ? savedTestResults.reduce((sum, r) => sum + r.replays, 0)
+            : 0;
+        const avgThinkingTime = savedTestResults && savedTestResults.length > 0
+            ? savedTestResults.reduce((sum, r) => sum + r.reactionTimeMs, 0) / savedTestResults.length
             : 0;
 
         return (
@@ -225,17 +228,21 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
                             Part B: Mini-Test Results
                         </h2>
                         {savedTestResults ? (
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-purple-600">{avgScore?.toFixed(1)}</div>
-                                    <div className="text-xs text-gray-500">Avg Score (1-4)</div>
+                                    <div className="text-3xl font-bold text-purple-600">{understoodCount}/10</div>
+                                    <div className="text-xs text-gray-500">Understood</div>
                                 </div>
                                 <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 text-center">
                                     <div className="text-3xl font-bold text-blue-600">{totalReplays}</div>
                                     <div className="text-xs text-gray-500">Total Replays</div>
                                 </div>
                                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-green-600">{savedTestResults.length}</div>
+                                    <div className="text-3xl font-bold text-green-600">{(avgThinkingTime / 1000).toFixed(1)}s</div>
+                                    <div className="text-xs text-gray-500">Avg Thinking Time</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 rounded-xl p-4 text-center">
+                                    <div className="text-3xl font-bold text-orange-600">{savedTestResults.length}</div>
                                     <div className="text-xs text-gray-500">Questions</div>
                                 </div>
                             </div>

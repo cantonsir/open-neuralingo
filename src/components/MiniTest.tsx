@@ -50,10 +50,36 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [testComplete, setTestComplete] = useState(false);
     const [analysis, setAnalysis] = useState<ListeningAnalysis | null>(null);
-    const startTimeRef = useRef<number>(0);
+    const [thinkingTimeSum, setThinkingTimeSum] = useState<number>(0);
+    const lastPauseRef = useRef<number>(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Load assessment, generate sentences, and PRE-GENERATE all audio
+    // Helper to fetch and cache audio for a specific index
+    const fetchAudioForIndex = async (index: number, sentencesList: TestSentence[]) => {
+        if (index < 0 || index >= sentencesList.length) return null;
+        const sentence = sentencesList[index];
+
+        // Return existing if already cached
+        if (audioCache.has(sentence.id)) return audioCache.get(sentence.id);
+
+        try {
+            const audioUrl = await generateSpeech({
+                text: sentence.sentence,
+                voiceName: 'Kore'
+            });
+            setAudioCache(prev => {
+                const newCache = new Map(prev);
+                newCache.set(sentence.id, audioUrl);
+                return newCache;
+            });
+            return audioUrl;
+        } catch (error) {
+            console.error(`Failed to fetch audio for index ${index}:`, error);
+            return null;
+        }
+    };
+
+    // Load assessment and generate sentences
     useEffect(() => {
         const loadTest = async () => {
             // 1. Get assessment
@@ -67,30 +93,29 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             const generatedSentences = await generateTestSentences(assessment);
             setSentences(generatedSentences);
 
-            // 3. Pre-generate TTS audio for ALL sentences
-            setLoadingProgress({ current: 0, total: generatedSentences.length, phase: 'audio' });
-            const cache = new Map<number, string>();
+            // 3. JIT: Only generate the first audio upfront
+            setLoadingProgress({ current: 0, total: 1, phase: 'audio' });
 
-            for (let i = 0; i < generatedSentences.length; i++) {
-                const sentence = generatedSentences[i];
-                setLoadingProgress({ current: i + 1, total: generatedSentences.length, phase: 'audio' });
-
+            if (generatedSentences.length > 0) {
+                const firstId = generatedSentences[0].id;
                 try {
-                    console.log(`Generating TTS for: "${sentence.sentence}"`);
                     const audioUrl = await generateSpeech({
-                        text: sentence.sentence,
+                        text: generatedSentences[0].sentence,
                         voiceName: 'Kore'
                     });
-                    cache.set(sentence.id, audioUrl);
+                    setAudioCache(new Map([[firstId, audioUrl]]));
+
+                    // Pre-fetch the second one in the background
+                    if (generatedSentences.length > 1) {
+                        fetchAudioForIndex(1, generatedSentences);
+                    }
                 } catch (error) {
-                    console.error(`Failed to generate audio for sentence ${i}:`, error);
-                    // Continue with other sentences, we'll use fallback for this one
+                    console.error("Failed to generate first audio:", error);
                 }
             }
 
-            setAudioCache(cache);
             setLoading(false);
-            startTimeRef.current = Date.now();
+            // Thinking time model: clock will start via onended after audio plays
         };
 
         loadTest();
@@ -106,8 +131,8 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
 
     const currentSentence = sentences[currentIndex];
 
-    // Play audio from cache (instant!) or fallback to browser TTS
-    const speak = () => {
+    // Play audio from cache or fetch on-demand
+    const speak = async () => {
         if (!currentSentence) return;
 
         // Stop any current audio
@@ -116,36 +141,64 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             audioRef.current.currentTime = 0;
         }
 
-        const cachedUrl = audioCache.get(currentSentence.id);
+        let cachedUrl = audioCache.get(currentSentence.id);
 
-        if (cachedUrl) {
-            // Play from cache - INSTANT!
-            const audio = new Audio(cachedUrl);
-            audioRef.current = audio;
-
-            audio.onplay = () => setIsPlaying(true);
-            audio.onended = () => setIsPlaying(false);
-            audio.onerror = () => {
+        // If not in cache, fetch it now (fallback/JIT)
+        if (!cachedUrl) {
+            setIsPlaying(true); // Show animation while fetching
+            cachedUrl = await fetchAudioForIndex(currentIndex, sentences) || undefined;
+            if (!cachedUrl) {
                 setIsPlaying(false);
-                // Fallback to browser TTS
                 fallbackSpeak(currentSentence.sentence);
-            };
-
-            audio.play();
-        } else {
-            // No cached audio, use browser fallback
-            fallbackSpeak(currentSentence.sentence);
+                return;
+            }
         }
+
+        // If we were in a "thinking" pause, add that silence gap to the sum
+        if (lastPauseRef.current !== 0) {
+            const silenceGap = Date.now() - lastPauseRef.current;
+            setThinkingTimeSum(prev => prev + silenceGap);
+            lastPauseRef.current = 0;
+        }
+
+        const audio = new Audio(cachedUrl);
+        audioRef.current = audio;
+
+        audio.onplay = () => setIsPlaying(true);
+        audio.onended = () => {
+            setIsPlaying(false);
+            lastPauseRef.current = Date.now(); // Record start of "thinking" silence
+        };
+        audio.onerror = () => {
+            setIsPlaying(false);
+            fallbackSpeak(currentSentence.sentence);
+        };
+
+        audio.play().catch(err => {
+            console.error("Playback error:", err);
+            setIsPlaying(false);
+            fallbackSpeak(currentSentence.sentence);
+        });
     };
 
     // Fallback to browser TTS if Gemini fails
     const fallbackSpeak = (text: string) => {
+        // If we were in a silence gap, add it to sum
+        if (lastPauseRef.current !== 0) {
+            const silenceGap = Date.now() - lastPauseRef.current;
+            setThinkingTimeSum(prev => prev + silenceGap);
+            lastPauseRef.current = 0;
+        }
+
         speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1;
         utterance.lang = 'en-US';
         utterance.onstart = () => setIsPlaying(true);
-        utterance.onend = () => setIsPlaying(false);
+        utterance.onend = () => {
+            setIsPlaying(false);
+            lastPauseRef.current = Date.now(); // Clock starts after audio ends
+        };
         speechSynthesis.speak(utterance);
     };
 
@@ -154,7 +207,7 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
         speak();
     };
 
-    const handleSlowPlay = () => {
+    const handleSlowPlay = async () => {
         setReplays(prev => prev + 1);
         if (!currentSentence) return;
 
@@ -164,29 +217,56 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             audioRef.current.currentTime = 0;
         }
 
-        const cachedUrl = audioCache.get(currentSentence.id);
+        let cachedUrl = audioCache.get(currentSentence.id);
 
-        if (cachedUrl) {
-            // Play from cache with SLOW playback rate
-            const audio = new Audio(cachedUrl);
-            audio.playbackRate = 0.7; // Slow playback!
-            audioRef.current = audio;
+        if (!cachedUrl) {
+            setIsPlaying(true);
+            cachedUrl = await fetchAudioForIndex(currentIndex, sentences) || undefined;
+            if (!cachedUrl) {
+                setIsPlaying(false);
 
-            audio.onplay = () => setIsPlaying(true);
-            audio.onended = () => setIsPlaying(false);
-            audio.onerror = () => setIsPlaying(false);
+                // If we were in a silence gap, add it to sum
+                if (lastPauseRef.current !== 0) {
+                    const silenceGap = Date.now() - lastPauseRef.current;
+                    setThinkingTimeSum(prev => prev + silenceGap);
+                    lastPauseRef.current = 0;
+                }
 
-            audio.play();
-        } else {
-            // Fallback to browser TTS
-            speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(currentSentence.sentence);
-            utterance.rate = 0.7;
-            utterance.lang = 'en-US';
-            utterance.onstart = () => setIsPlaying(true);
-            utterance.onend = () => setIsPlaying(false);
-            speechSynthesis.speak(utterance);
+                // Fallback to browser TTS
+                speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(currentSentence.sentence);
+                utterance.rate = 0.7;
+                utterance.lang = 'en-US';
+                utterance.onstart = () => setIsPlaying(true);
+                utterance.onend = () => {
+                    setIsPlaying(false);
+                    lastPauseRef.current = Date.now();
+                };
+                speechSynthesis.speak(utterance);
+                return;
+            }
         }
+
+        // If we were in a "thinking" pause, add that silence gap to the sum
+        if (lastPauseRef.current !== 0) {
+            const silenceGap = Date.now() - lastPauseRef.current;
+            setThinkingTimeSum(prev => prev + silenceGap);
+            lastPauseRef.current = 0;
+        }
+
+        // Play from cache with SLOW playback rate
+        const audio = new Audio(cachedUrl);
+        audio.playbackRate = 0.7; // Slow playback!
+        audioRef.current = audio;
+
+        audio.onplay = () => setIsPlaying(true);
+        audio.onended = () => {
+            setIsPlaying(false);
+            lastPauseRef.current = Date.now(); // Record start of "thinking" silence
+        };
+        audio.onerror = () => setIsPlaying(false);
+
+        audio.play();
     };
 
     // Handle response: simplified to understood (true) or not sure (false)
@@ -196,7 +276,7 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             sentence: currentSentence.sentence,
             understood,
             replays,
-            reactionTimeMs: Date.now() - startTimeRef.current,
+            reactionTimeMs: thinkingTimeSum,
             markedIndices: Array.from(markedIndices),
         };
 
@@ -205,13 +285,25 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
 
         if (currentIndex < sentences.length - 1) {
             // Next question
-            setCurrentIndex(prev => prev + 1);
+            const nextIndex = currentIndex + 1;
+            setCurrentIndex(nextIndex);
             setShowTranscript(false);
             setReplays(0);
             setMarkedIndices(new Set());
-            startTimeRef.current = Date.now();
+            setThinkingTimeSum(0);
+            lastPauseRef.current = 0;
+
+            // Background pre-fetch for the one after next
+            if (nextIndex + 1 < sentences.length) {
+                fetchAudioForIndex(nextIndex + 1, sentences);
+            }
         } else {
-            // Test complete - run AI analysis
+            // Test complete - stop audio and run AI analysis
+            if (audioRef.current) {
+                audioRef.current.pause();
+            }
+            setIsPlaying(false);
+
             setLoading(true);
             setLoadingProgress({ current: 0, total: 0, phase: 'analyzing' });
 
@@ -250,10 +342,11 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
 
     // Auto-play on new sentence
     useEffect(() => {
-        if (currentSentence && !loading) {
-            setTimeout(() => speak(), 500);
+        if (currentSentence && !loading && !testComplete) {
+            const timer = setTimeout(() => speak(), 500);
+            return () => clearTimeout(timer);
         }
-    }, [currentIndex, loading]);
+    }, [currentIndex, loading, testComplete]);
 
     // Loading state with progress
     if (loading) {
@@ -327,7 +420,7 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                         </div>
                         <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800 text-center">
                             <div className="text-3xl font-bold text-green-500">{(avgReactionTime / 1000).toFixed(1)}s</div>
-                            <div className="text-xs text-gray-500">Avg Time</div>
+                            <div className="text-xs text-gray-500">Avg Thinking Time</div>
                         </div>
                     </div>
 
@@ -452,7 +545,15 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                                 </div>
 
                                 <button
-                                    onClick={() => setShowTranscript(true)}
+                                    onClick={() => {
+                                        // Add the final thinking gap before revealing
+                                        if (lastPauseRef.current !== 0) {
+                                            const silenceGap = Date.now() - lastPauseRef.current;
+                                            setThinkingTimeSum(prev => prev + silenceGap);
+                                            lastPauseRef.current = 0;
+                                        }
+                                        setShowTranscript(true);
+                                    }}
                                     className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
                                 >
                                     Show Transcript
@@ -467,18 +568,21 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                                 <div className="flex flex-wrap gap-2 mb-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl justify-center">
                                     {currentSentence.sentence.split(' ').map((word, i) => {
                                         const isMarked = markedIndices.has(i);
+                                        const isPhrasePart = isMarked && (markedIndices.has(i - 1) || markedIndices.has(i + 1));
                                         return (
                                             <button
                                                 key={i}
                                                 onClick={() => toggleWordMark(i)}
                                                 className={`relative px-2 py-1 rounded transition-all ${isMarked
-                                                    ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
+                                                    ? isPhrasePart
+                                                        ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 shadow-sm'
+                                                        : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800'
                                                     : 'bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
                                                     }`}
                                             >
                                                 {word}
                                                 {isMarked && (
-                                                    <span className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full translate-x-1/2 -translate-y-1/2 bg-red-500 border border-white dark:border-gray-900"></span>
+                                                    <span className={`absolute top-0 right-0 w-1.5 h-1.5 rounded-full translate-x-1/2 -translate-y-1/2 border border-white dark:border-gray-900 ${isPhrasePart ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                                 )}
                                             </button>
                                         );
