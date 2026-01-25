@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Zap, Home, PlayCircle, BookOpen, Layers, Settings, History, GraduationCap, ChevronRight, ChevronLeft, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, PanelLeftClose, PanelLeft } from 'lucide-react';
 
-type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning';
+type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment';
 type Theme = 'dark' | 'light';
 
 interface SidebarProps {
@@ -132,10 +132,10 @@ export default function Sidebar({
 
             {/* Navigation */}
             <nav className={`flex-1 ${collapsed ? 'px-2' : 'px-3'} py-2 overflow-y-auto`}>
-                {/* Home */}
+                {/* Dashboard */}
                 <NavItem
-                    icon={<Home size={20} />}
-                    label="Home"
+                    icon={<LayoutDashboard size={20} />}
+                    label="Dashboard"
                     isActive={view === 'home'}
                     collapsed={collapsed}
                     onClick={() => setView('home')}
@@ -147,16 +147,8 @@ export default function Sidebar({
                     icon={<PlayCircle size={20} />}
                     label="Listen & Loop"
                     isActive={view === 'loop'}
-                    isDisabled={!videoId}
                     collapsed={collapsed}
                     onClick={() => setView('loop')}
-                />
-                <NavItem
-                    icon={<History size={20} />}
-                    label="History"
-                    isActive={view === 'history'}
-                    collapsed={collapsed}
-                    onClick={() => setView('history')}
                 />
 
                 {/* LEARNING Section */}
@@ -168,6 +160,13 @@ export default function Sidebar({
                     collapsed={collapsed}
                     onClick={() => setView('learning')}
                 />
+                <NavItem
+                    icon={<ClipboardCheck size={20} />}
+                    label="Assessment"
+                    isActive={view === 'assessment'}
+                    collapsed={collapsed}
+                    onClick={() => setView('assessment')}
+                />
 
                 {/* DATABASE Section */}
                 <SectionHeader label="Database" collapsed={collapsed} />
@@ -175,7 +174,6 @@ export default function Sidebar({
                     icon={<BookOpen size={20} />}
                     label="My Words"
                     isActive={view === 'vocab'}
-                    isDisabled={!videoId}
                     badge={savedCardsCount}
                     collapsed={collapsed}
                     onClick={() => setView('vocab')}
