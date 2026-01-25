@@ -167,14 +167,14 @@ export default function DashboardView({
                             <div key={day} className="flex-1 flex flex-col items-center gap-2">
                                 <div
                                     className={`w-full rounded-lg transition-all ${weeklyStreak[i]
-                                            ? 'bg-gradient-to-t from-yellow-500 to-orange-400'
-                                            : 'bg-gray-100 dark:bg-gray-800'
+                                        ? 'bg-gradient-to-t from-yellow-500 to-orange-400'
+                                        : 'bg-gray-100 dark:bg-gray-800'
                                         }`}
                                     style={{ height: weeklyStreak[i] ? `${40 + Math.random() * 40}px` : '20px' }}
                                 />
                                 <span className={`text-xs font-medium ${weeklyStreak[i]
-                                        ? 'text-yellow-600 dark:text-yellow-400'
-                                        : 'text-gray-400'
+                                    ? 'text-yellow-600 dark:text-yellow-400'
+                                    : 'text-gray-400'
                                     }`}>
                                     {day}
                                 </span>

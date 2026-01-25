@@ -7,8 +7,11 @@ export interface TTSOptions {
 }
 
 // Voice options from Gemini TTS
+// Voice options from Gemini TTS / Cloud TTS (Chirp 3 HD)
+// Both services support these voice names now (e.g. 'Kore', 'Charon')
 export const VOICE_OPTIONS = [
     'Kore',    // Default
+
     'Charon',
     'Fenrir',
     'Aoede',
@@ -16,11 +19,83 @@ export const VOICE_OPTIONS = [
     'Zephyr'
 ];
 
+// User provided API Key for Cloud TTS (Chirp 3 HD)
+// Loaded from .env.local
+const CLOUD_TTS_API_KEY = import.meta.env.VITE_CLOUD_TTS_API_KEY;
+
+/**
+ * Generate speech audio from text using Cloud TTS (Chirp 3 HD) first,
+ * falling back to Gemini 2.5 Flash TTS if needed.
+ * Returns a blob URL that can be played in an audio element
+ */
+export async function generateSpeech(options: TTSOptions): Promise<string> {
+    // 1. Try Google Cloud TTS (Chirp 3 HD)
+    try {
+        // console.log('Attempting Cloud TTS (Chirp 3 HD)...', options.text.substring(0, 20) + '...');
+        return await generateCloudSpeech(options);
+    } catch (cloudError) {
+        console.warn('Cloud TTS failed, falling back to Gemini TTS:', cloudError);
+
+        // 2. Fallback to Gemini 2.5 Flash TTS
+        return await generateGeminiSpeech(options);
+    }
+}
+
+/**
+ * Generate speech using Google Cloud Text-to-Speech API (Chirp 3 HD)
+ */
+async function generateCloudSpeech(options: TTSOptions): Promise<string> {
+    const { text, voiceName = 'Kore' } = options;
+
+    if (!CLOUD_TTS_API_KEY) {
+        throw new Error('Missing Cloud TTS API Key');
+    }
+
+    const response = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CLOUD_TTS_API_KEY}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                input: { text },
+                voice: {
+                    languageCode: 'en-US',
+                    // Construct the full Chirp 3 HD voice ID (e.g. 'en-US-Chirp3-HD-Kore')
+                    name: `en-US-Chirp3-HD-${voiceName}`
+                },
+                audioConfig: {
+                    audioEncoding: 'MP3'
+                }
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud TTS API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.audioContent) {
+        throw new Error('No audio content in Cloud TTS response');
+    }
+
+    // Convert base64 MP3 to Blob URL
+    const binaryString = atob(data.audioContent);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'audio/mp3' });
+    return URL.createObjectURL(blob);
+}
+
 /**
  * Generate speech audio from text using Gemini 2.5 Flash TTS
  * Returns a blob URL that can be played in an audio element
  */
-export async function generateSpeech(options: TTSOptions): Promise<string> {
+async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
     if (!apiKey) {
