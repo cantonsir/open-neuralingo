@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, RotateCcw, Volume2, ArrowLeft } from 'lucide-react';
-import { Marker } from '../types';
+import { Marker } from '../../types';
 
 interface FlashcardPracticeProps {
     savedCards: Marker[];

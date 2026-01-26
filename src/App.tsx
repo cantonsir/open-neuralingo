@@ -3,30 +3,36 @@ import { createPortal } from 'react-dom';
 import { YouTubePlayer } from 'react-youtube';
 import { Play, Pause, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import VideoPlayer from './components/VideoPlayer';
-import MarkerList from './components/MarkerList';
-import Timeline from './components/Timeline';
-import Sidebar from './components/Sidebar';
-import HomeView from './components/HomeView';
-import HistoryView from './components/HistoryView';
-import DashboardView from './components/DashboardView';
-import SettingsPanel from './components/SettingsPanel';
-import { Marker, Subtitle, PlayerState, TagType } from './types';
+import VideoPlayer from './components/listening/VideoPlayer';
+import MarkerList from './components/listening/MarkerList';
+import Timeline from './components/listening/Timeline';
+import Sidebar from './components/common/Sidebar';
+import HomeView from './components/common/HomeView';
+import HistoryView from './components/listening/HistoryView';
+import DashboardView from './components/listening/DashboardView';
+import SettingsPanel from './components/common/SettingsPanel';
+import { Marker, Subtitle, PlayerState, TagType, Module, View } from './types';
 
 import { parseSubtitles, formatTime } from './utils';
-import VocabularyManager from './components/VocabularyManager';
-import FlashcardPractice from './components/FlashcardPractice';
-import LearningHome from './components/LearningHome';
-import CourseDashboard from './components/CourseDashboard';
-import LearningSession from './components/LearningSession';
-import SelfAssessment from './components/SelfAssessment';
-import MiniTest from './components/MiniTest';
+import VocabularyManager from './components/listening/VocabularyManager';
+import FlashcardPractice from './components/listening/FlashcardPractice';
+import LearningHome from './components/listening/LearningHome';
+import CourseDashboard from './components/listening/CourseDashboard';
+import LearningSession from './components/listening/LearningSession';
+import SelfAssessment from './components/listening/SelfAssessment';
+import MiniTest from './components/listening/MiniTest';
+import ReadingView from './components/reading/ReadingView';
+import SpeakingView from './components/speaking/SpeakingView';
+import WritingView from './components/writing/WritingView';
+import ReadingDashboard from './components/reading/ReadingDashboard';
+import SpeakingDashboard from './components/speaking/SpeakingDashboard';
+import WritingDashboard from './components/writing/WritingDashboard';
 import { api, GoalVideo, GoalVideoDetail } from './db';
 
-type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest';
 type Theme = 'dark' | 'light';
 
 function App() {
+  const [activeModule, setActiveModule] = useState<Module>('listening');
   const [videoId, setVideoId] = useState<string>('');
   const [inputUrl, setInputUrl] = useState<string>('');
   const [inputSubs, setInputSubs] = useState<string>('');
@@ -727,6 +733,8 @@ function App() {
         savedCardsCount={savedCards.length}
         markersCount={markers.length}
         videoId={videoId}
+        activeModule={activeModule}
+        setActiveModule={setActiveModule}
       />
 
       {/* Settings Panel */}
@@ -741,10 +749,26 @@ function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* PERSISTENT PLAYER WRAPPER */}
-          {/* We keep this mounted always if we have a videoId (or even if not, to be safe, but usually videoId required) */}
-          {/* We use a strategy: precise CSS positioning or Portal?
+        {activeModule === 'reading' && (
+          view === 'home' ? <ReadingDashboard onNavigate={setView} /> :
+            <ReadingView />
+        )}
+
+        {activeModule === 'speaking' && (
+          view === 'home' ? <SpeakingDashboard onNavigate={setView} /> :
+            <SpeakingView />
+        )}
+
+        {activeModule === 'writing' && (
+          view === 'home' ? <WritingDashboard onNavigate={setView} /> :
+            <WritingView />
+        )}
+
+        {activeModule === 'listening' && (
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            {/* PERSISTENT PLAYER WRAPPER */}
+            {/* We keep this mounted always if we have a videoId (or even if not, to be safe, but usually videoId required) */}
+            {/* We use a strategy: precise CSS positioning or Portal?
             Let's use a "Slot" approach. We render the player here, but hidden if not needed.
             When in Loop View, we want it to visually be in that specific spot.
             
@@ -764,346 +788,347 @@ function App() {
             Yes, that's the standard way to keep state.
         */}
 
-          {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
-          <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'}`}>
-            {/* Persistent URL Bar at Top */}
-            <div className="shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3">
-              <div className="flex items-center gap-3 max-w-3xl">
-                <div className="relative flex-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.3-4.3" />
-                  </svg>
-                  <input
-                    type="text"
-                    value={inputUrl}
-                    onChange={(e) => setInputUrl(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2.5 pl-10 pr-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all"
-                    placeholder="Paste YouTube URL here..."
-                  />
-                </div>
-                <button
-                  onClick={() => {
-                    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-                    const match = inputUrl.match(regExp);
-                    const id = match && match[2].length === 11 ? match[2] : null;
-                    if (id) handleFetchFromHome(id);
-                    else alert('Please enter a valid YouTube URL');
-                  }}
-                  disabled={isFetchingSubs || !inputUrl.trim()}
-                  className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white font-bold py-2.5 px-5 rounded-lg transition-all shadow-md shadow-yellow-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none text-sm"
-                >
-                  {isFetchingSubs ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" x2="12" y1="15" y2="3" />
-                      </svg>
-                      Load Video
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Main Content Area */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Empty State */}
-              {!videoId ? (
-                <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-gray-50 to-yellow-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900">
-                  <div className="text-center max-w-md">
-                    <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-yellow-400/20 to-orange-500/20 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500">
-                        <polygon points="5 3 19 12 5 21 5 3" />
-                      </svg>
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Video Loaded</h2>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Paste a YouTube URL above and click <strong>Load Video</strong> to start practicing.
-                    </p>
+            {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
+            <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'}`}>
+              {/* Persistent URL Bar at Top */}
+              <div className="shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3">
+                <div className="flex items-center gap-3 max-w-3xl">
+                  <div className="relative flex-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.3-4.3" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={inputUrl}
+                      onChange={(e) => setInputUrl(e.target.value)}
+                      className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2.5 pl-10 pr-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all"
+                      placeholder="Paste YouTube URL here..."
+                    />
                   </div>
+                  <button
+                    onClick={() => {
+                      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                      const match = inputUrl.match(regExp);
+                      const id = match && match[2].length === 11 ? match[2] : null;
+                      if (id) handleFetchFromHome(id);
+                      else alert('Please enter a valid YouTube URL');
+                    }}
+                    disabled={isFetchingSubs || !inputUrl.trim()}
+                    className="flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-white font-bold py-2.5 px-5 rounded-lg transition-all shadow-md shadow-yellow-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none text-sm"
+                  >
+                    {isFetchingSubs ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        Load Video
+                      </>
+                    )}
+                  </button>
                 </div>
-              ) : (
-                <>
-                  {/* Video Area */}
-                  <div className="flex-1 flex flex-col p-6 overflow-hidden">
-                    {/* Video Container */}
-                    <div className="flex-1 flex flex-col justify-center min-h-0">
-                      <VideoPlayer
-                        videoId={videoId}
-                        onReady={(p) => {
-                          setPlayer(p);
-                          // Handle pending segment immediately when player is ready
-                          // Note: this might fire multiple times if component re-renders but usually onReady is once per videoId change
-                        }}
-                        onStateChange={(s) => setState(prev => ({ ...prev, ...s }))}
-                        currentSubtitle={getCurrentSubtitle()}
-                        playbackRate={state.playbackRate}
-                        forceShowSubtitle={subtitlesVisible || isPeekingSubs}
-                      />
+              </div>
 
-                      <Timeline
-                        duration={state.duration}
-                        currentTime={state.currentTime}
-                        markers={markers}
-                        onSeek={(t) => player?.seekTo(t, true)}
-                      />
+              {/* Main Content Area */}
+              <div className="flex-1 flex overflow-hidden">
+                {/* Empty State */}
+                {!videoId ? (
+                  <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-gray-50 to-yellow-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900">
+                    <div className="text-center max-w-md">
+                      <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-yellow-400/20 to-orange-500/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-500">
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      </div>
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Video Loaded</h2>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Paste a YouTube URL above and click <strong>Load Video</strong> to start practicing.
+                      </p>
                     </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Video Area */}
+                    <div className="flex-1 flex flex-col p-6 overflow-hidden">
+                      {/* Video Container */}
+                      <div className="flex-1 flex flex-col justify-center min-h-0">
+                        <VideoPlayer
+                          videoId={videoId}
+                          onReady={(p) => {
+                            setPlayer(p);
+                            // Handle pending segment immediately when player is ready
+                            // Note: this might fire multiple times if component re-renders but usually onReady is once per videoId change
+                          }}
+                          onStateChange={(s) => setState(prev => ({ ...prev, ...s }))}
+                          currentSubtitle={getCurrentSubtitle()}
+                          playbackRate={state.playbackRate}
+                          forceShowSubtitle={subtitlesVisible || isPeekingSubs}
+                        />
 
-                    {/* Controls */}
-                    <div className="h-20 flex items-center justify-between mt-4 bg-white/80 dark:bg-gray-900/50 rounded-xl px-6 border border-gray-200 dark:border-gray-800 transition-colors">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => state.isPlaying ? player?.pauseVideo() : player?.playVideo()}
-                          className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-full hover:from-yellow-400 hover:to-orange-400 transition-all shadow-lg shadow-yellow-500/25"
-                        >
-                          {state.isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} className="ml-0.5" />}
-                        </button>
-
-                        <div className="flex items-center gap-1 mx-2">
-                          <button
-                            onClick={handlePrevSubtitle}
-                            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                            title="Previous Sentence"
-                          >
-                            <ChevronLeft size={16} />
-                          </button>
-                          <button
-                            onClick={handleNextSubtitle}
-                            className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                            title="Next Sentence"
-                          >
-                            <ChevronRight size={16} />
-                          </button>
-                        </div>
-
-                        <div className="text-sm font-mono text-gray-600 dark:text-gray-400">
-                          {formatTime(state.currentTime)} / {formatTime(state.duration)}
-                        </div>
-
-                        {/* Subtitle Toggle */}
-                        <button
-                          onClick={() => setSubtitlesVisible(!subtitlesVisible)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4 ${subtitlesVisible || isPeekingSubs ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/50' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-transparent'
-                            }`}
-                          title="Toggle Subtitles (or press 'S' to peek')"
-                        >
-                          {subtitlesVisible || isPeekingSubs ? <Eye size={16} /> : <EyeOff size={16} />}
-                          <span>{subtitlesVisible ? 'SUBS ON' : 'SUBS OFF'}</span>
-                        </button>
+                        <Timeline
+                          duration={state.duration}
+                          currentTime={state.currentTime}
+                          markers={markers}
+                          onSeek={(t) => player?.seekTo(t, true)}
+                        />
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-gray-500 uppercase mr-2">Speed</span>
-                        {[0.75, 1, 1.25].map(rate => (
+                      {/* Controls */}
+                      <div className="h-20 flex items-center justify-between mt-4 bg-white/80 dark:bg-gray-900/50 rounded-xl px-6 border border-gray-200 dark:border-gray-800 transition-colors">
+                        <div className="flex items-center gap-4">
                           <button
-                            key={rate}
-                            onClick={() => changePlaybackRate(rate)}
-                            className={`
+                            onClick={() => state.isPlaying ? player?.pauseVideo() : player?.playVideo()}
+                            className="w-12 h-12 flex items-center justify-center bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-full hover:from-yellow-400 hover:to-orange-400 transition-all shadow-lg shadow-yellow-500/25"
+                          >
+                            {state.isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} className="ml-0.5" />}
+                          </button>
+
+                          <div className="flex items-center gap-1 mx-2">
+                            <button
+                              onClick={handlePrevSubtitle}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                              title="Previous Sentence"
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                            <button
+                              onClick={handleNextSubtitle}
+                              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                              title="Next Sentence"
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+
+                          <div className="text-sm font-mono text-gray-600 dark:text-gray-400">
+                            {formatTime(state.currentTime)} / {formatTime(state.duration)}
+                          </div>
+
+                          {/* Subtitle Toggle */}
+                          <button
+                            onClick={() => setSubtitlesVisible(!subtitlesVisible)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ml-4 ${subtitlesVisible || isPeekingSubs ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/50' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-transparent'
+                              }`}
+                            title="Toggle Subtitles (or press 'S' to peek')"
+                          >
+                            {subtitlesVisible || isPeekingSubs ? <Eye size={16} /> : <EyeOff size={16} />}
+                            <span>{subtitlesVisible ? 'SUBS ON' : 'SUBS OFF'}</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-500 uppercase mr-2">Speed</span>
+                          {[0.75, 1, 1.25].map(rate => (
+                            <button
+                              key={rate}
+                              onClick={() => changePlaybackRate(rate)}
+                              className={`
                                 px-3 py-1 text-sm rounded-md font-medium transition-colors
                                 ${state.playbackRate === rate ? 'bg-yellow-500 text-black' : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:text-white'}
                               `}
-                          >
-                            {rate}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Panel: Review Points */}
-                  <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 flex flex-col shadow-xl transition-colors">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="font-bold text-xl text-gray-900 dark:text-white">Review Points</h2>
-                      <div className="flex gap-2">
-                        <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-[10px] px-2 py-1 rounded-full border border-blue-200 dark:border-blue-800/50" title="Total subtitles loaded">
-                          {subtitles.length} SUBS
-                        </span>
-                        <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-[10px] px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700/50">
-                          {markers.length} MARKS
-                        </span>
+                            >
+                              {rate}x
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    <MarkerList
-                      markers={markers}
-                      currentLoopId={currentLoop?.id || null}
-                      onPlayLoop={handlePlayLoop}
-                      onStopLoop={handleStopLoop}
-                      onDelete={handleDeleteMarker}
-                      onAddTag={handleAddTag}
-                      onRemoveTag={handleRemoveTag}
-                      onToggleWord={handleToggleWord}
-                      onToggleRange={handleToggleRange}
-                      onPlayOnce={handlePlaySegment}
-                    />
-                  </div>
-                </>
-              )}
+                    {/* Right Panel: Review Points */}
+                    <div className="w-96 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 p-6 flex flex-col shadow-xl transition-colors">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-bold text-xl text-gray-900 dark:text-white">Review Points</h2>
+                        <div className="flex gap-2">
+                          <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-[10px] px-2 py-1 rounded-full border border-blue-200 dark:border-blue-800/50" title="Total subtitles loaded">
+                            {subtitles.length} SUBS
+                          </span>
+                          <span className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-[10px] px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700/50">
+                            {markers.length} MARKS
+                          </span>
+                        </div>
+                      </div>
+
+                      <MarkerList
+                        markers={markers}
+                        currentLoopId={currentLoop?.id || null}
+                        onPlayLoop={handlePlayLoop}
+                        onStopLoop={handleStopLoop}
+                        onDelete={handleDeleteMarker}
+                        onAddTag={handleAddTag}
+                        onRemoveTag={handleRemoveTag}
+                        onToggleWord={handleToggleWord}
+                        onToggleRange={handleToggleRange}
+                        onPlayOnce={handlePlaySegment}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Dashboard View */}
+            {view === 'home' && (
+              <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
+                <DashboardView
+                  onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+                  onNavigate={(v) => setView(v as View)}
+                  savedCardsCount={savedCards.length}
+                  markersCount={markers.length}
+                />
+              </div>
+            )}
+
+            {/* History View */}
+            {view === 'history' && (
+              <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                <HistoryView
+                  onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+                  savedCardsCount={savedCards.length}
+                  markersCount={markers.length}
+                />
+              </div>
+            )}
+
+            {/* Flashcards View */}
+            {view === 'flashcards' && (
+              <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                <FlashcardPractice
+                  savedCards={savedCards}
+                  onExit={() => setView('home')}
+                  onPlayAudio={handlePlaySegment}
+                />
+              </div>
+            )}
+
+            {/* Learning Section - 3 Level Hierarchy */}
+            {view === 'learning' && (
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Level 1: Goal Videos List */}
+                {learningView === 'home' && (
+                  <LearningHome
+                    defaultLanguage={targetLanguage}
+                    cachedGoals={learningGoals}
+                    isLoaded={goalsLoaded}
+                    onGoalsUpdate={setLearningGoals}
+                    onSelectGoal={(goalId) => {
+                      setSelectedGoalId(goalId);
+                      setLearningView('course');
+                    }}
+                  />
+                )}
+
+                {/* Level 2: Course Dashboard (Segments) */}
+                {learningView === 'course' && selectedGoalId && (
+                  <CourseDashboard
+                    goalId={selectedGoalId}
+                    cachedGoal={goalDetailsCache[selectedGoalId]}
+                    onCacheUpdate={refreshGoalDetails}
+                    onBack={() => {
+                      setLearningView('home');
+                      setSelectedGoalId(null);
+                    }}
+                    onWatchVideo={async (videoId) => {
+                      // Navigate to Listen & Loop with this video
+                      await fetchSubtitles(videoId);
+                      setView('loop');
+                    }}
+                    onStartLesson={async (goalId, segmentIndex, videoId, startTime, endTime) => {
+                      setSelectedSegmentIndex(segmentIndex);
+
+                      // Fetch segment sentences from API
+                      try {
+                        const data = await api.fetchSegmentSentences(goalId, segmentIndex);
+                        setSelectedSegmentData({
+                          videoId,
+                          subtitle: data.sentences || [],
+                          startTime,
+                          endTime
+                        });
+                        setLearningView('lesson');
+                      } catch (error) {
+                        console.error('Failed to load segment:', error);
+                      }
+                    }}
+                  />
+                )}
+
+                {/* Level 3: Lesson Drills */}
+                {learningView === 'lesson' && selectedGoalId && selectedSegmentData && (
+                  <LearningSession
+                    goalId={selectedGoalId}
+                    videoId={selectedSegmentData.videoId}
+                    segmentIndex={selectedSegmentIndex}
+                    segmentSubtitle={selectedSegmentData.subtitle}
+                    segmentStartTime={selectedSegmentData.startTime}
+                    segmentEndTime={selectedSegmentData.endTime}
+                    onExit={() => {
+                      setLearningView('course');
+                      setSelectedSegmentData(null);
+                    }}
+                    onComplete={() => {
+                      refreshGoalDetails(selectedGoalId);
+                      setLearningView('course');
+                      setSelectedSegmentData(null);
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Vocabulary Manager View */}
+            {view === 'vocab' && (
+              <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                <VocabularyManager
+                  markers={markers}
+                  savedCards={savedCards}
+                  onRemoveWord={handleRemoveWord}
+                  onUpdateVocabData={handleUpdateVocabData}
+                  onPlaySegment={handlePlaySegment}
+                  onSaveToDeck={handleSaveToDeck}
+                  onDeleteCard={handleDeleteFromDeck}
+                  onUpdateCard={handleUpdateCard}
+                  onDiscardSessionMarker={handleDeleteMarker}
+                />
+              </div>
+            )}
+
+            {/* Self-Assessment View */}
+            {view === 'assessment' && (
+              <SelfAssessment
+                onComplete={() => setView('home')}
+                onStartTest={() => {
+                  setMiniTestKey(prev => prev + 1); // Force fresh component
+                  setView('minitest');
+                }}
+                cachedProfile={assessmentProfile}
+                cachedResults={assessmentResults}
+                isLoaded={assessmentLoaded}
+                onProfileUpdate={setAssessmentProfile}
+                onResultsUpdate={setAssessmentResults}
+              />
+            )}
+
+            {/* Mini-Test View */}
+            {view === 'minitest' && (
+              <MiniTest
+                key={miniTestKey}
+                onComplete={() => {
+                  refreshAssessmentData();
+                  setView('assessment');
+                }}
+                onBack={() => setView('assessment')}
+              />
+            )}
+
           </div>
-
-          {/* Dashboard View */}
-          {view === 'home' && (
-            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
-              <DashboardView
-                onPlayVideo={(videoId) => fetchSubtitles(videoId)}
-                onNavigate={(v) => setView(v as View)}
-                savedCardsCount={savedCards.length}
-                markersCount={markers.length}
-              />
-            </div>
-          )}
-
-          {/* History View */}
-          {view === 'history' && (
-            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-              <HistoryView
-                onPlayVideo={(videoId) => fetchSubtitles(videoId)}
-                savedCardsCount={savedCards.length}
-                markersCount={markers.length}
-              />
-            </div>
-          )}
-
-          {/* Flashcards View */}
-          {view === 'flashcards' && (
-            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-              <FlashcardPractice
-                savedCards={savedCards}
-                onExit={() => setView('home')}
-                onPlayAudio={handlePlaySegment}
-              />
-            </div>
-          )}
-
-          {/* Learning Section - 3 Level Hierarchy */}
-          {view === 'learning' && (
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Level 1: Goal Videos List */}
-              {learningView === 'home' && (
-                <LearningHome
-                  defaultLanguage={targetLanguage}
-                  cachedGoals={learningGoals}
-                  isLoaded={goalsLoaded}
-                  onGoalsUpdate={setLearningGoals}
-                  onSelectGoal={(goalId) => {
-                    setSelectedGoalId(goalId);
-                    setLearningView('course');
-                  }}
-                />
-              )}
-
-              {/* Level 2: Course Dashboard (Segments) */}
-              {learningView === 'course' && selectedGoalId && (
-                <CourseDashboard
-                  goalId={selectedGoalId}
-                  cachedGoal={goalDetailsCache[selectedGoalId]}
-                  onCacheUpdate={refreshGoalDetails}
-                  onBack={() => {
-                    setLearningView('home');
-                    setSelectedGoalId(null);
-                  }}
-                  onWatchVideo={async (videoId) => {
-                    // Navigate to Listen & Loop with this video
-                    await fetchSubtitles(videoId);
-                    setView('loop');
-                  }}
-                  onStartLesson={async (goalId, segmentIndex, videoId, startTime, endTime) => {
-                    setSelectedSegmentIndex(segmentIndex);
-
-                    // Fetch segment sentences from API
-                    try {
-                      const data = await api.fetchSegmentSentences(goalId, segmentIndex);
-                      setSelectedSegmentData({
-                        videoId,
-                        subtitle: data.sentences || [],
-                        startTime,
-                        endTime
-                      });
-                      setLearningView('lesson');
-                    } catch (error) {
-                      console.error('Failed to load segment:', error);
-                    }
-                  }}
-                />
-              )}
-
-              {/* Level 3: Lesson Drills */}
-              {learningView === 'lesson' && selectedGoalId && selectedSegmentData && (
-                <LearningSession
-                  goalId={selectedGoalId}
-                  videoId={selectedSegmentData.videoId}
-                  segmentIndex={selectedSegmentIndex}
-                  segmentSubtitle={selectedSegmentData.subtitle}
-                  segmentStartTime={selectedSegmentData.startTime}
-                  segmentEndTime={selectedSegmentData.endTime}
-                  onExit={() => {
-                    setLearningView('course');
-                    setSelectedSegmentData(null);
-                  }}
-                  onComplete={() => {
-                    refreshGoalDetails(selectedGoalId);
-                    setLearningView('course');
-                    setSelectedSegmentData(null);
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Vocabulary Manager View */}
-          {view === 'vocab' && (
-            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-              <VocabularyManager
-                markers={markers}
-                savedCards={savedCards}
-                onRemoveWord={handleRemoveWord}
-                onUpdateVocabData={handleUpdateVocabData}
-                onPlaySegment={handlePlaySegment}
-                onSaveToDeck={handleSaveToDeck}
-                onDeleteCard={handleDeleteFromDeck}
-                onUpdateCard={handleUpdateCard}
-                onDiscardSessionMarker={handleDeleteMarker}
-              />
-            </div>
-          )}
-
-          {/* Self-Assessment View */}
-          {view === 'assessment' && (
-            <SelfAssessment
-              onComplete={() => setView('home')}
-              onStartTest={() => {
-                setMiniTestKey(prev => prev + 1); // Force fresh component
-                setView('minitest');
-              }}
-              cachedProfile={assessmentProfile}
-              cachedResults={assessmentResults}
-              isLoaded={assessmentLoaded}
-              onProfileUpdate={setAssessmentProfile}
-              onResultsUpdate={setAssessmentResults}
-            />
-          )}
-
-          {/* Mini-Test View */}
-          {view === 'minitest' && (
-            <MiniTest
-              key={miniTestKey}
-              onComplete={() => {
-                refreshAssessmentData();
-                setView('assessment');
-              }}
-              onBack={() => setView('assessment')}
-            />
-          )}
-
-        </div>
+        )}
       </div>
     </div>
   );

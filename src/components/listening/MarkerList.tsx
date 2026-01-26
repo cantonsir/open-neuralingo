@@ -1,7 +1,7 @@
 import React from 'react';
-import { Marker, TagType } from '../types';
+import { Marker, TagType } from '../../types';
 import { Play, Repeat, Trash2, Tag as TagIcon, MoreHorizontal } from 'lucide-react';
-import { formatTime } from '../utils';
+import { formatTime } from '../../utils';
 import VocabularyBreakdown from './VocabularyBreakdown';
 
 interface MarkerListProps {

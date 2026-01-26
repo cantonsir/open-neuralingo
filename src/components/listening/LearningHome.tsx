@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Play, Trash2, Clock, BookOpen, Loader2, Globe } from 'lucide-react';
-import { api, GoalVideo } from '../db';
+import { api, GoalVideo } from '../../db';
 
 interface LearningHomeProps {
     onSelectGoal: (goalId: string) => void;

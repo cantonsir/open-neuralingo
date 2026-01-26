@@ -13,9 +13,9 @@ import {
     TrendingUp,
     Eye
 } from 'lucide-react';
-import { generateTestSentences, TestSentence, analyzeListeningResults, TestResult, ListeningAnalysis } from '../services/geminiService';
+import { generateTestSentences, TestSentence, analyzeListeningResults, TestResult, ListeningAnalysis } from '../../services/geminiService';
 import ListeningFeedbackSliders, { SliderValues, DEFAULT_SLIDER_VALUES } from './ListeningFeedbackSliders';
-import { useAudioPlayer } from '../hooks/useAudioPlayer';
+import { useAudioPlayer } from '../../hooks/useAudioPlayer';
 
 interface AssessmentResult {
     targetLanguage: string;

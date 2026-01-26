@@ -1,5 +1,5 @@
 import React from 'react';
-import { Marker } from '../types';
+import { Marker } from '../../types';
 
 interface TimelineProps {
   duration: number;

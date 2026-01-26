@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Clock, BookOpen, Layers, TrendingUp, Trash2, X, Check } from 'lucide-react';
-import { api, HistoryItem } from '../db';
+import { api, HistoryItem } from '../../db';
 
 function formatTimeAgo(timestamp: number): string {
     const now = Date.now();

@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Marker } from '../types';
+import { Marker } from '../../types';
 import { BookOpen, Activity, Play, Trash2, Save, Flag, Volume2, Sparkles, CheckCircle2, Circle, Eye } from 'lucide-react';
-import { formatTime } from '../utils';
-import { generateDefinition } from '../ai';
-import Toast from './Toast';
-import Modal from './Modal';
+import { formatTime } from '../../utils';
+import { generateDefinition } from '../../ai';
+import Toast from '../common/Toast';
+import Modal from '../common/Modal';
 import FlashcardPractice from './FlashcardPractice';
 
 interface VocabularyManagerProps {

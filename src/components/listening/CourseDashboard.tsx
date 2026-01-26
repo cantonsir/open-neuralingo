@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Play, Lock, CheckCircle, Clock, BookOpen, Loader2, Target, Headphones } from 'lucide-react';
-import { api, GoalVideoDetail, Segment } from '../db';
+import { api, GoalVideoDetail, Segment } from '../../db';
 
 interface CourseDashboardProps {
     goalId: string;

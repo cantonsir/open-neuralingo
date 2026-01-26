@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import YouTube, { YouTubeProps, YouTubePlayer } from 'react-youtube';
-import { Subtitle, PlayerState } from '../types';
+import { Subtitle, PlayerState } from '../../types';
 
 interface VideoPlayerProps {
   videoId: string;

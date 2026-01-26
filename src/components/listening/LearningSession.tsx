@@ -17,8 +17,8 @@ import {
     X
 } from 'lucide-react';
 import ListeningFeedbackSliders, { SliderValues, DEFAULT_SLIDER_VALUES } from './ListeningFeedbackSliders';
-import { useAudioPlayer } from '../hooks/useAudioPlayer';
-import { api, SegmentMastery, SegmentTestResult, SegmentLesson } from '../db';
+import { useAudioPlayer } from '../../hooks/useAudioPlayer';
+import { api, SegmentMastery, SegmentTestResult, SegmentLesson } from '../../db';
 import {
     generateSegmentTestSentences,
     SegmentTestSentence,
@@ -27,7 +27,7 @@ import {
     ListeningAnalysis,
     generateSegmentLessons,
     SegmentLessonContent
-} from '../services/geminiService';
+} from '../../services/geminiService';
 
 interface LearningSessionProps {
     goalId: string;
@@ -104,13 +104,13 @@ export default function LearningSession({
     // Wrapper to play the current sentence
     const playSentence = async () => {
         if (!currentSentence || isExiting.current) return;
-        
+
         // Add thinking time before playing
         const thinkingGap = getThinkingGap();
         if (thinkingGap > 0) {
             setThinkingTimeSum(prev => prev + thinkingGap);
         }
-        
+
         await speakFromHook(currentSentence);
     };
 
@@ -122,20 +122,20 @@ export default function LearningSession({
     const handleSlowPlay = async () => {
         setReplays(prev => prev + 1);
         if (!currentSentence || isExiting.current) return;
-        
+
         // Add thinking time before playing
         const thinkingGap = getThinkingGap();
         if (thinkingGap > 0) {
             setThinkingTimeSum(prev => prev + thinkingGap);
         }
-        
+
         await speakSlowFromHook(currentSentence);
     };
 
     // Initialize test
     useEffect(() => {
         let cancelled = false; // Guard against StrictMode double-run
-        
+
         const initTest = async () => {
             setPhase('loading');
             setLoadingMessage('Loading lesson data...');
@@ -143,7 +143,7 @@ export default function LearningSession({
             // Clear any previous audio cache
             clearCache();
             isExiting.current = false;
-            
+
             setCurrentIndex(0);
             setShowTranscript(false);
             setResponses([]);
@@ -160,23 +160,23 @@ export default function LearningSession({
                 // If lesson is completed, show summary view
                 if (masteryData && masteryData.videoWatched) {
                     setLoadingMessage('Loading your results...');
-                    
+
                     // Fetch saved test results and lessons
                     const [tests, lessonData] = await Promise.all([
                         api.getSegmentTests(goalId, segmentIndex),
                         api.getSegmentLessons(goalId, segmentIndex)
                     ]);
-                    
+
                     if (cancelled) return;
                     setSavedTests(tests);
                     setSavedLessons(lessonData);
-                    
+
                     // Set analysis from the most recent test
                     if (tests.length > 0 && tests[0].analysis) {
                         setAnalysis(tests[0].analysis as ListeningAnalysis);
                         setTestAccuracy(tests[0].accuracy);
                     }
-                    
+
                     setPhase('summary');
                     return;
                 }
@@ -575,121 +575,121 @@ export default function LearningSession({
             <div className="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-y-auto p-6">
                     <div className="max-w-2xl mx-auto w-full pb-8">
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-6">
-                        <button onClick={handleExit} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                            <ArrowLeft size={20} />
-                            Exit
-                        </button>
-                        <span className="text-sm text-gray-500">
-                            Lesson {currentLessonIndex + 1} of {lessons.length}
-                        </span>
-                    </div>
-
-                    {/* Lesson Card */}
-                    <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 mb-6 border border-gray-200 dark:border-gray-800">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                                <BookOpen size={20} className="text-yellow-500" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                                    {currentLesson.content.title}
-                                </h2>
-                                <p className="text-sm text-gray-500">{currentLesson.type.replace('_', ' ')}</p>
-                            </div>
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-6">
+                            <button onClick={handleExit} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                                <ArrowLeft size={20} />
+                                Exit
+                            </button>
+                            <span className="text-sm text-gray-500">
+                                Lesson {currentLessonIndex + 1} of {lessons.length}
+                            </span>
                         </div>
 
-                        <p className="text-gray-600 dark:text-gray-300 mb-6">
-                            {currentLesson.content.description}
-                        </p>
+                        {/* Lesson Card */}
+                        <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 mb-6 border border-gray-200 dark:border-gray-800">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                    <BookOpen size={20} className="text-yellow-500" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                        {currentLesson.content.title}
+                                    </h2>
+                                    <p className="text-sm text-gray-500">{currentLesson.type.replace('_', ' ')}</p>
+                                </div>
+                            </div>
 
-                        {/* Vocabulary lesson */}
-                        {currentLesson.content.words && (
-                            <div className="space-y-4">
-                                {currentLesson.content.words.map((word, i) => (
-                                    <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-lg font-semibold text-yellow-600 dark:text-yellow-400">
-                                                {word.word}
-                                            </span>
-                                            {word.pronunciation && (
-                                                <span className="text-sm text-gray-500">/{word.pronunciation}/</span>
+                            <p className="text-gray-600 dark:text-gray-300 mb-6">
+                                {currentLesson.content.description}
+                            </p>
+
+                            {/* Vocabulary lesson */}
+                            {currentLesson.content.words && (
+                                <div className="space-y-4">
+                                    {currentLesson.content.words.map((word, i) => (
+                                        <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-lg font-semibold text-yellow-600 dark:text-yellow-400">
+                                                    {word.word}
+                                                </span>
+                                                {word.pronunciation && (
+                                                    <span className="text-sm text-gray-500">/{word.pronunciation}/</span>
+                                                )}
+                                            </div>
+                                            <p className="text-gray-700 dark:text-gray-300 mb-2">{word.meaning}</p>
+                                            <p className="text-sm text-gray-500 italic">"{word.example}"</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Sentences for practice */}
+                            {currentLesson.content.sentences && (
+                                <div className="space-y-4">
+                                    {currentLesson.content.sentences.map((sent, i) => (
+                                        <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                            <p className="text-lg text-gray-900 dark:text-white mb-2">
+                                                "{sent.original}"
+                                            </p>
+                                            {sent.explanation && (
+                                                <p className="text-sm text-gray-500">{sent.explanation}</p>
                                             )}
                                         </div>
-                                        <p className="text-gray-700 dark:text-gray-300 mb-2">{word.meaning}</p>
-                                        <p className="text-sm text-gray-500 italic">"{word.example}"</p>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            )}
 
-                        {/* Sentences for practice */}
-                        {currentLesson.content.sentences && (
-                            <div className="space-y-4">
-                                {currentLesson.content.sentences.map((sent, i) => (
-                                    <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                        <p className="text-lg text-gray-900 dark:text-white mb-2">
-                                            "{sent.original}"
-                                        </p>
-                                        {sent.explanation && (
-                                            <p className="text-sm text-gray-500">{sent.explanation}</p>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                            {/* Patterns */}
+                            {currentLesson.content.patterns && (
+                                <div className="space-y-4">
+                                    {currentLesson.content.patterns.map((pattern, i) => (
+                                        <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                            <p className="font-semibold text-gray-900 dark:text-white mb-2">
+                                                {pattern.pattern}
+                                            </p>
+                                            <ul className="space-y-1">
+                                                {pattern.examples.map((ex, j) => (
+                                                    <li key={j} className="text-sm text-gray-600 dark:text-gray-400">
+                                                        • {ex}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
-                        {/* Patterns */}
-                        {currentLesson.content.patterns && (
-                            <div className="space-y-4">
-                                {currentLesson.content.patterns.map((pattern, i) => (
-                                    <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                        <p className="font-semibold text-gray-900 dark:text-white mb-2">
-                                            {pattern.pattern}
-                                        </p>
-                                        <ul className="space-y-1">
-                                            {pattern.examples.map((ex, j) => (
-                                                <li key={j} className="text-sm text-gray-600 dark:text-gray-400">
-                                                    • {ex}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Navigation */}
-                    <div className="flex gap-3">
-                        {currentLessonIndex > 0 && (
-                            <button
-                                onClick={() => setCurrentLessonIndex(prev => prev - 1)}
-                                className="px-6 py-4 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-all flex items-center justify-center gap-2"
-                            >
-                                <ChevronRight size={20} className="rotate-180" />
-                                Previous
-                            </button>
-                        )}
-                        {currentLessonIndex < lessons.length - 1 ? (
-                            <button
-                                onClick={() => setCurrentLessonIndex(prev => prev + 1)}
-                                className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
-                            >
-                                Next Lesson
-                                <ChevronRight size={20} />
-                            </button>
-                        ) : (
-                            <button
-                                onClick={retakeTest}
-                                className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
-                            >
-                                <RefreshCw size={20} />
-                                Take Test Again
-                            </button>
-                        )}
-                    </div>
+                        {/* Navigation */}
+                        <div className="flex gap-3">
+                            {currentLessonIndex > 0 && (
+                                <button
+                                    onClick={() => setCurrentLessonIndex(prev => prev - 1)}
+                                    className="px-6 py-4 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <ChevronRight size={20} className="rotate-180" />
+                                    Previous
+                                </button>
+                            )}
+                            {currentLessonIndex < lessons.length - 1 ? (
+                                <button
+                                    onClick={() => setCurrentLessonIndex(prev => prev + 1)}
+                                    className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
+                                >
+                                    Next Lesson
+                                    <ChevronRight size={20} />
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={retakeTest}
+                                    className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <RefreshCw size={20} />
+                                    Take Test Again
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -699,7 +699,7 @@ export default function LearningSession({
     // Summary phase (viewing completed lesson)
     if (phase === 'summary') {
         const latestTest = savedTests[0];
-        
+
         return (
             <div className="flex-1 flex flex-col min-h-0 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                 <div className="flex-1 min-h-0 overflow-y-auto p-6">
@@ -734,7 +734,7 @@ export default function LearningSession({
                                     <Target size={18} className="text-yellow-500" />
                                     Your Test Results
                                 </h3>
-                                
+
                                 <div className="grid grid-cols-3 gap-4 mb-4">
                                     <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                                         <div className="text-2xl font-bold text-green-500">{latestTest.accuracy}%</div>
@@ -754,14 +754,12 @@ export default function LearningSession({
                                 <div className="space-y-2">
                                     <p className="text-sm text-gray-500 font-medium mb-2">Test Sentences:</p>
                                     {latestTest.responses.map((resp, i) => (
-                                        <div key={i} className={`p-3 rounded-lg flex items-start gap-3 ${
-                                            resp.understood 
+                                        <div key={i} className={`p-3 rounded-lg flex items-start gap-3 ${resp.understood
                                                 ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30'
                                                 : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30'
-                                        }`}>
-                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                                                resp.understood ? 'bg-green-500' : 'bg-red-500'
                                             }`}>
+                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${resp.understood ? 'bg-green-500' : 'bg-red-500'
+                                                }`}>
                                                 {resp.understood ? (
                                                     <Check size={12} className="text-white" />
                                                 ) : (

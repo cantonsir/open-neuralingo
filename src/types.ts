@@ -5,6 +5,10 @@ export interface Subtitle {
   text: string;
 }
 
+export type Module = 'listening' | 'reading' | 'speaking' | 'writing';
+
+export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction';
+
 export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary';
 
 export interface Marker {
