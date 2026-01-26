@@ -62,7 +62,9 @@ ${level >= 4 ? '- Longer sentences (10-15 words)\n- Natural speech patterns with
 Content theme: Create sentences that would naturally appear in ${content}.
 
 IMPORTANT: Return ONLY a valid JSON array with exactly 10 objects. No markdown, no explanation.
-Format: [{"id": 1, "sentence": "...", "difficulty": "easy|medium|hard"}, ...]`;
+Format: [{"id": 1, "sentence": "...", "difficulty": "easy|medium|hard"}, ...]
+
+CRITICAL: Return ONLY raw text for sentences. DO NOT use markdown like **bold** or *italics*. Do not include any [bracketed text] or (parentheses) unless they are part of natural speech.`;
 }
 
 export async function generateTestSentences(assessment: AssessmentResult): Promise<TestSentence[]> {
@@ -105,7 +107,13 @@ export async function generateTestSentences(assessment: AssessmentResult): Promi
         }
 
         const sentences: TestSentence[] = JSON.parse(jsonMatch[0]);
-        return sentences.slice(0, 10);
+
+        // Sanitize and re-index sentences to ensure unique IDs (fixes audio/text mismatch bugs)
+        const baseId = Date.now();
+        return sentences.slice(0, 10).map((s, index) => ({
+            ...s,
+            id: baseId + index // Unique IDs based on timestamp
+        }));
     } catch (error) {
         console.error('Gemini API error:', error);
         return getFallbackSentences(assessment.listeningLevel);
@@ -151,6 +159,11 @@ export interface TestResult {
     replays: number;
     reactionTimeMs: number;
     markedWordIndices: number[];
+    // Detailed feedback sliders (1-5 scale, only for "Not Sure" responses)
+    wordBoundaries?: number;  // 1=all blended, 5=clear boundaries
+    familiarity?: number;     // 1=completely new, 5=very familiar
+    meaningClarity?: number;  // 1=no idea, 5=fully understood
+    wordConfusion?: number;   // 1=heard different word, 5=no confusion
 }
 
 export interface ListeningAnalysis {
@@ -179,24 +192,84 @@ export async function analyzeListeningResults(results: TestResult[]): Promise<Li
         })
     ).filter(w => w);
 
+    // Calculate slider averages for struggled sentences
+    const struggledResults = results.filter(r => !r.understood && r.wordBoundaries !== undefined);
+    const avgWordBoundaries = struggledResults.length > 0 
+        ? struggledResults.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / struggledResults.length 
+        : null;
+    const avgFamiliarity = struggledResults.length > 0 
+        ? struggledResults.reduce((sum, r) => sum + (r.familiarity || 3), 0) / struggledResults.length 
+        : null;
+    const avgMeaningClarity = struggledResults.length > 0 
+        ? struggledResults.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / struggledResults.length 
+        : null;
+    const avgWordConfusion = struggledResults.length > 0 
+        ? struggledResults.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / struggledResults.length 
+        : null;
+
+    // Identify specific difficulty patterns
+    const difficultyPatterns = [];
+    if (avgWordBoundaries !== null && avgWordBoundaries < 3) {
+        difficultyPatterns.push('word boundary recognition (connected speech, linking sounds)');
+    }
+    if (avgFamiliarity !== null && avgFamiliarity < 3) {
+        difficultyPatterns.push('vocabulary familiarity (unknown words/phrases)');
+    }
+    if (avgMeaningClarity !== null && avgMeaningClarity < 3) {
+        difficultyPatterns.push('meaning comprehension (grammar, context)');
+    }
+    if (avgWordConfusion !== null && avgWordConfusion < 3) {
+        difficultyPatterns.push('word confusion (mishearing similar-sounding words)');
+    }
+
     const prompt = `You are an expert language learning analyst. Analyze this listening test performance:
 
-TEST RESULTS (10 questions):
-- Understood clearly: ${understoodCount}/10
+TEST RESULTS (${results.length} questions):
+- Understood clearly: ${understoodCount}/${results.length}
 - Total replays needed: ${totalReplays}
 - Average reaction time: ${Math.round(avgReactionTime)}ms
 - Words user couldn't catch: ${markedWords.join(', ') || 'none'}
 
-SENTENCES TESTED:
-${results.map((r, i) => `${i + 1}. "${r.sentence}" - ${r.understood ? 'Understood' : 'Struggled'}, ${r.replays} replays, marked: ${r.markedWordIndices.length} words`).join('\n')}
+DETAILED DIFFICULTY ANALYSIS (from user self-assessment, scale 1-5):
+${avgWordBoundaries !== null ? `- Word Boundaries: ${avgWordBoundaries.toFixed(1)}/5 (1=all words blended together, 5=clear word boundaries)` : '- Word Boundaries: not assessed'}
+${avgFamiliarity !== null ? `- Vocabulary Familiarity: ${avgFamiliarity.toFixed(1)}/5 (1=completely new words, 5=very familiar)` : '- Vocabulary Familiarity: not assessed'}
+${avgMeaningClarity !== null ? `- Meaning Clarity: ${avgMeaningClarity.toFixed(1)}/5 (1=no idea what it meant, 5=fully understood)` : '- Meaning Clarity: not assessed'}
+${avgWordConfusion !== null ? `- Word Confusion: ${avgWordConfusion.toFixed(1)}/5 (1=heard a different word, 5=no confusion)` : '- Word Confusion: not assessed'}
+${difficultyPatterns.length > 0 ? `\nIDENTIFIED DIFFICULTY PATTERNS: ${difficultyPatterns.join(', ')}` : ''}
 
-Based on this data, provide a listening ability analysis. Return ONLY valid JSON:
+SENTENCES TESTED (with per-sentence self-assessment where available):
+${results.map((r, i) => {
+    const markedWordsInSentence = r.markedWordIndices.map(idx => r.sentence.split(' ')[idx]).filter(w => w);
+    let details = `${i + 1}. "${r.sentence}"
+   Status: ${r.understood ? '✓ Understood' : '✗ Struggled'} | Replays: ${r.replays}`;
+    if (markedWordsInSentence.length > 0) {
+        details += ` | Missed words: ${markedWordsInSentence.join(', ')}`;
+    }
+    if (!r.understood && r.wordBoundaries !== undefined) {
+        details += `\n   Self-assessment: Boundaries=${r.wordBoundaries}/5, Familiarity=${r.familiarity}/5, Meaning=${r.meaningClarity}/5, Confusion=${r.wordConfusion || 5}/5`;
+        // Interpret the scores for this specific sentence
+        const issues = [];
+        if (r.wordBoundaries && r.wordBoundaries <= 2) issues.push('words blended together');
+        if (r.familiarity && r.familiarity <= 2) issues.push('unfamiliar vocabulary');
+        if (r.meaningClarity && r.meaningClarity <= 2) issues.push('unclear meaning');
+        if (r.wordConfusion && r.wordConfusion <= 2) issues.push('confused with similar word');
+        if (issues.length > 0) details += `\n   Issues: ${issues.join(', ')}`;
+    }
+    return details;
+}).join('\n\n')}
+
+Based on this data, provide a listening ability analysis. Pay special attention to the self-assessment scores to identify specific areas for improvement:
+- Low word boundaries (1-2) → Focus on connected speech, contractions, linking sounds
+- Low familiarity (1-2) → Focus on vocabulary building, common phrases
+- Low meaning clarity (1-2) → Focus on grammar patterns, context clues
+
+Return ONLY valid JSON:
 {
   "overallLevel": "beginner|intermediate|advanced",
   "strengths": ["strength1", "strength2"],
   "weaknesses": ["weakness1", "weakness2"], 
   "recommendations": ["tip1", "tip2", "tip3"],
-  "summary": "2-3 sentence summary of their listening ability"
+  "summary": "2-3 sentence summary of their listening ability, specifically addressing their self-identified difficulties"
 }`;
 
     try {
@@ -250,5 +323,308 @@ function getDefaultAnalysis(results: TestResult[]): ListeningAnalysis {
         ],
         summary: `You understood ${understoodCount}/10 sentences. Keep practicing to improve your listening comprehension!`
     };
+}
+
+
+// ===== SEGMENT LEARNING: AI-GENERATED TEST SENTENCES =====
+
+export interface SegmentTestSentence {
+    id: number;
+    sentence: string;
+    difficulty: 'easy' | 'medium' | 'hard';
+    relatedVocab: string[];  // Key words from segment this tests
+}
+
+interface UserProfile {
+    listeningLevel: number;
+    difficulties: string[];
+    weaknesses: string[];
+}
+
+export async function generateSegmentTestSentences(
+    segmentSubtitle: string[],
+    userProfile: UserProfile,
+    numSentences: number = 5
+): Promise<SegmentTestSentence[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        console.error('Missing VITE_GEMINI_API_KEY');
+        return getSegmentFallbackSentences(segmentSubtitle, numSentences);
+    }
+
+    const subtitleText = segmentSubtitle.join(' ');
+    const difficulties = userProfile.difficulties.map(d => difficultyLabels[d] || d).join(', ');
+    const weaknesses = userProfile.weaknesses.join(', ');
+
+    const prompt = `You are a language learning expert creating a listening test.
+
+CONTEXT - Video Segment Subtitle:
+"${subtitleText.slice(0, 1500)}"
+
+LEARNER PROFILE:
+- Listening level: ${userProfile.listeningLevel}/5 (0=beginner, 5=advanced)
+- Main difficulties: ${difficulties || 'general listening'}
+- Weak areas from previous tests: ${weaknesses || 'none identified'}
+
+YOUR TASK:
+Generate exactly ${numSentences} NEW sentences for a listening test. These sentences should:
+1. Use vocabulary and topics from the video segment above
+2. Target the learner's weak areas (${weaknesses || 'general comprehension'})
+3. Be at appropriate difficulty for level ${userProfile.listeningLevel}
+4. NOT be direct copies from the subtitle - create new sentences using similar words/themes
+
+Sentence requirements for level ${userProfile.listeningLevel}:
+${userProfile.listeningLevel <= 1 ? '- Very short (4-6 words), basic vocabulary, clear grammar' : ''}
+${userProfile.listeningLevel === 2 ? '- Short (6-8 words), common vocabulary, simple structures' : ''}
+${userProfile.listeningLevel === 3 ? '- Medium (8-10 words), natural vocabulary, some idioms' : ''}
+${userProfile.listeningLevel >= 4 ? '- Longer (10-15 words), natural speech patterns, contractions, linking sounds' : ''}
+
+IMPORTANT: Return ONLY valid JSON array. No markdown, no explanation.
+Format: [{"id": 1, "sentence": "...", "difficulty": "easy|medium|hard", "relatedVocab": ["word1", "word2"]}, ...]`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 1024,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('No JSON array found in response');
+        }
+
+        const sentences: SegmentTestSentence[] = JSON.parse(jsonMatch[0]);
+        const baseId = Date.now();
+        return sentences.slice(0, numSentences).map((s, index) => ({
+            ...s,
+            id: baseId + index // Unique IDs based on timestamp
+        }));
+    } catch (error) {
+        console.error('Segment test generation error:', error);
+        return getSegmentFallbackSentences(segmentSubtitle, numSentences);
+    }
+}
+
+function getSegmentFallbackSentences(segmentSubtitle: string[], numSentences: number): SegmentTestSentence[] {
+    // Create simple sentences from segment vocabulary
+    const allText = segmentSubtitle.join(' ');
+    const words = allText.split(/\s+/).filter(w => w.length > 4).slice(0, 20);
+    
+    const fallback: SegmentTestSentence[] = [
+        { id: 1, sentence: "Can you understand what I'm saying?", difficulty: 'easy', relatedVocab: [] },
+        { id: 2, sentence: "Let me explain this more clearly.", difficulty: 'easy', relatedVocab: [] },
+        { id: 3, sentence: "This is an important point to remember.", difficulty: 'medium', relatedVocab: [] },
+        { id: 4, sentence: "I'd like to discuss this topic further.", difficulty: 'medium', relatedVocab: [] },
+        { id: 5, sentence: "There are several things we need to consider.", difficulty: 'hard', relatedVocab: [] },
+    ];
+    
+    return fallback.slice(0, numSentences);
+}
+
+
+// ===== SEGMENT LEARNING: GENERATE LESSONS FROM MISTAKES =====
+
+export interface SegmentLessonContent {
+    type: 'vocabulary' | 'slow_practice' | 'pattern_drill' | 'explanation';
+    content: {
+        title: string;
+        description: string;
+        words?: Array<{ word: string; meaning: string; example: string; pronunciation?: string }>;
+        sentences?: Array<{ original: string; slow: boolean; explanation?: string }>;
+        patterns?: Array<{ pattern: string; examples: string[] }>;
+    };
+}
+
+export async function generateSegmentLessons(
+    testResults: TestResult[],
+    segmentSubtitle: string[],
+    analysis: ListeningAnalysis
+): Promise<SegmentLessonContent[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        return getDefaultLessons(testResults);
+    }
+
+    // Find sentences user struggled with
+    const struggledSentences = testResults.filter(r => !r.understood || r.replays > 1);
+    const markedWords = testResults.flatMap((r) =>
+        r.markedWordIndices.map(idx => {
+            const words = r.sentence.split(' ');
+            return words[idx] || '';
+        })
+    ).filter(w => w);
+
+    // Analyze slider data for targeted lessons
+    const resultsWithSliders = testResults.filter(r => !r.understood && r.wordBoundaries !== undefined);
+    const avgWordBoundaries = resultsWithSliders.length > 0 
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / resultsWithSliders.length 
+        : null;
+    const avgFamiliarity = resultsWithSliders.length > 0 
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.familiarity || 3), 0) / resultsWithSliders.length 
+        : null;
+    const avgMeaningClarity = resultsWithSliders.length > 0 
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / resultsWithSliders.length 
+        : null;
+    const avgWordConfusion = resultsWithSliders.length > 0 
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / resultsWithSliders.length 
+        : null;
+
+    // Determine priority lesson types based on slider scores
+    const lessonPriorities = [];
+    if (avgWordBoundaries !== null && avgWordBoundaries < 3) {
+        lessonPriorities.push('CONNECTED SPEECH: Focus on word linking, contractions, sound reductions');
+    }
+    if (avgFamiliarity !== null && avgFamiliarity < 3) {
+        lessonPriorities.push('VOCABULARY: Focus on teaching unfamiliar words and phrases');
+    }
+    if (avgMeaningClarity !== null && avgMeaningClarity < 3) {
+        lessonPriorities.push('COMPREHENSION: Focus on grammar patterns and context understanding');
+    }
+    if (avgWordConfusion !== null && avgWordConfusion < 3) {
+        lessonPriorities.push('MINIMAL PAIRS: Focus on similar-sounding words the student confuses');
+    }
+
+    // Build per-sentence breakdown for struggled sentences
+    const perSentenceBreakdown = resultsWithSliders.map((r, i) => {
+        const markedWordsInSentence = r.markedWordIndices.map(idx => r.sentence.split(' ')[idx]).filter(w => w);
+        const issues = [];
+        if (r.wordBoundaries && r.wordBoundaries <= 2) issues.push('words blended together');
+        if (r.familiarity && r.familiarity <= 2) issues.push('unfamiliar vocabulary');
+        if (r.meaningClarity && r.meaningClarity <= 2) issues.push('unclear meaning');
+        if (r.wordConfusion && r.wordConfusion <= 2) issues.push('confused with similar word');
+        return `"${r.sentence}"
+   Scores: Boundaries=${r.wordBoundaries}/5, Familiarity=${r.familiarity}/5, Meaning=${r.meaningClarity}/5, Confusion=${r.wordConfusion || 5}/5
+   ${markedWordsInSentence.length > 0 ? `Missed words: ${markedWordsInSentence.join(', ')}` : ''}
+   ${issues.length > 0 ? `Main issues: ${issues.join(', ')}` : 'Minor difficulty'}`;
+    }).join('\n\n');
+
+    const prompt = `You are a language learning expert creating targeted lessons.
+
+OVERALL ANALYSIS:
+- Analysis: ${analysis.summary}
+- Weaknesses: ${analysis.weaknesses.join(', ')}
+- Words they couldn't catch: ${markedWords.join(', ') || 'none marked'}
+
+AVERAGE SELF-ASSESSMENT SCORES (pattern detection, scale 1-5):
+${avgWordBoundaries !== null ? `- Word Boundaries: ${avgWordBoundaries.toFixed(1)}/5 (student ${avgWordBoundaries < 3 ? 'STRUGGLES with' : 'can handle'} hearing where words begin/end)` : ''}
+${avgFamiliarity !== null ? `- Vocabulary Familiarity: ${avgFamiliarity.toFixed(1)}/5 (words feel ${avgFamiliarity < 3 ? 'UNFAMILIAR' : 'familiar'} to student)` : ''}
+${avgMeaningClarity !== null ? `- Meaning Clarity: ${avgMeaningClarity.toFixed(1)}/5 (student ${avgMeaningClarity < 3 ? 'STRUGGLES to grasp' : 'understands'} meaning)` : ''}
+${avgWordConfusion !== null ? `- Word Confusion: ${avgWordConfusion.toFixed(1)}/5 (student ${avgWordConfusion < 3 ? 'MISHEARS words as similar-sounding words' : 'correctly identifies words'})` : ''}
+
+${lessonPriorities.length > 0 ? `LESSON PRIORITIES (based on lowest average scores):\n${lessonPriorities.map((p, i) => `${i + 1}. ${p}`).join('\n')}` : ''}
+
+PER-SENTENCE BREAKDOWN (specific difficulties for each struggled sentence):
+${perSentenceBreakdown || 'No detailed feedback provided'}
+
+VIDEO SEGMENT CONTEXT:
+"${segmentSubtitle.join(' ').slice(0, 1000)}"
+
+Generate 2-3 focused lessons to help the student improve. PRIORITIZE lessons based on the self-assessment scores:
+- If Word Boundaries is low (< 3): Create "explanation" lesson about connected speech, linking sounds, contractions
+- If Familiarity is low (< 3): Create "vocabulary" lesson with word meanings, examples, pronunciation
+- If Meaning Clarity is low (< 3): Create "pattern_drill" lesson about grammar patterns and context
+- If Word Confusion is low (< 3): Create "minimal_pairs" lesson to distinguish similar-sounding words
+
+Lesson types you can create:
+1. "vocabulary" - Break down difficult words with meaning, pronunciation tips, example sentences
+2. "slow_practice" - Sentences to practice at slow speed with explanations
+3. "pattern_drill" - Common patterns/phrases that need practice
+4. "explanation" - Explain why certain sounds are hard to catch (linking, reduction, etc.)
+5. "minimal_pairs" - Practice distinguishing similar-sounding words (e.g., ship/sheep, think/sink)
+
+Return ONLY valid JSON array:
+[{
+  "type": "vocabulary|slow_practice|pattern_drill|explanation",
+  "content": {
+    "title": "Lesson title",
+    "description": "What this lesson teaches",
+    "words": [{"word": "...", "meaning": "...", "example": "...", "pronunciation": "..."}],
+    "sentences": [{"original": "...", "slow": true, "explanation": "..."}],
+    "patterns": [{"pattern": "...", "examples": ["...", "..."]}]
+  }
+}]`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.6,
+                        maxOutputTokens: 2048,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('No JSON array found');
+        }
+
+        return JSON.parse(jsonMatch[0]) as SegmentLessonContent[];
+    } catch (error) {
+        console.error('Lesson generation error:', error);
+        return getDefaultLessons(testResults);
+    }
+}
+
+function getDefaultLessons(testResults: TestResult[]): SegmentLessonContent[] {
+    const struggledSentences = testResults.filter(r => !r.understood);
+    
+    return [
+        {
+            type: 'slow_practice',
+            content: {
+                title: 'Slow Listening Practice',
+                description: 'Listen to these sentences at a slower speed to catch every word.',
+                sentences: struggledSentences.slice(0, 3).map(r => ({
+                    original: r.sentence,
+                    slow: true,
+                    explanation: 'Focus on each word carefully.'
+                }))
+            }
+        },
+        {
+            type: 'explanation',
+            content: {
+                title: 'Listening Tips',
+                description: 'Common reasons for missing words in fast speech.',
+                patterns: [
+                    { pattern: 'Word linking', examples: ['going to → gonna', 'want to → wanna'] },
+                    { pattern: 'Reduced sounds', examples: ['him → \'im', 'her → \'er'] }
+                ]
+            }
+        }
+    ];
 }
 

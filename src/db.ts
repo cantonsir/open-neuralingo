@@ -77,6 +77,54 @@ export interface GoalVideoDetail extends GoalVideo {
     segments: Segment[];
 }
 
+// Segment Learning Types (Test-Learn-Watch Flow)
+export interface SegmentMastery {
+    testAttempts: number;
+    bestAccuracy: number;
+    isMastered: boolean;
+    videoWatched: boolean;
+    lastTestAt: number | null;
+}
+
+export interface SegmentTestResult {
+    id: string;
+    attemptNumber: number;
+    takenAt: number;
+    score: number;
+    totalQuestions: number;
+    accuracy: number;
+    sentences: Array<{ id: number; sentence: string; difficulty: string }>;
+    analysis: {
+        overallLevel?: string;
+        strengths?: string[];
+        weaknesses?: string[];
+        recommendations?: string[];
+        summary?: string;
+    } | null;
+    responses: Array<{
+        sentence: string;
+        understood: boolean;
+        replays: number;
+        reactionTimeMs: number;
+        markedIndices: number[];
+    }>;
+}
+
+export interface SegmentLesson {
+    id: string;
+    testId: string | null;
+    type: string;
+    content: {
+        title?: string;
+        description?: string;
+        words?: Array<{ word: string; meaning: string; example: string }>;
+        sentences?: Array<{ original: string; slow: boolean; explanation?: string }>;
+        patterns?: Array<{ pattern: string; examples: string[] }>;
+    };
+    createdAt: number;
+    completed: boolean;
+}
+
 export const api = {
     /**
      * Fetch all saved flashcards from the persistent database.
@@ -381,6 +429,137 @@ export const api = {
         } catch (error) {
             console.error('API fetchSegmentSentences error:', error);
             return { sentences: [], count: 0 };
+        }
+    },
+
+    // --- Segment Learning API (Test-Learn-Watch Flow) ---
+
+    /**
+     * Get mastery status for a segment.
+     */
+    async getSegmentMastery(goalId: string, segmentIndex: number): Promise<SegmentMastery> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/mastery`);
+            if (!response.ok) throw new Error('Failed to fetch mastery');
+            return await response.json();
+        } catch (error) {
+            console.error('API getSegmentMastery error:', error);
+            return { testAttempts: 0, bestAccuracy: 0, isMastered: false, videoWatched: false, lastTestAt: null };
+        }
+    },
+
+    /**
+     * Save a segment test result.
+     */
+    async saveSegmentTest(
+        goalId: string,
+        segmentIndex: number,
+        data: {
+            sentences: Array<{ id: number; sentence: string; difficulty: string }>;
+            responses: Array<{
+                sentence: string;
+                understood: boolean;
+                replays: number;
+                reactionTimeMs: number;
+                markedIndices: number[];
+            }>;
+            analysis: object;
+        }
+    ): Promise<{ status: string; testId: string; attemptNumber: number; score: number; accuracy: number; isMastered: boolean }> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error('Failed to save test');
+            return await response.json();
+        } catch (error) {
+            console.error('API saveSegmentTest error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get all test attempts for a segment.
+     */
+    async getSegmentTests(goalId: string, segmentIndex: number): Promise<SegmentTestResult[]> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/tests`);
+            if (!response.ok) throw new Error('Failed to fetch tests');
+            return await response.json();
+        } catch (error) {
+            console.error('API getSegmentTests error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Save AI-generated lessons for a segment.
+     */
+    async saveSegmentLessons(
+        goalId: string,
+        segmentIndex: number,
+        data: {
+            testId: string;
+            lessons: Array<{ type: string; content: object }>;
+        }
+    ): Promise<{ status: string; lessonIds: string[]; count: number }> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/lessons`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error('Failed to save lessons');
+            return await response.json();
+        } catch (error) {
+            console.error('API saveSegmentLessons error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get all lessons for a segment.
+     */
+    async getSegmentLessons(goalId: string, segmentIndex: number): Promise<SegmentLesson[]> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/lessons`);
+            if (!response.ok) throw new Error('Failed to fetch lessons');
+            return await response.json();
+        } catch (error) {
+            console.error('API getSegmentLessons error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Mark a lesson as completed.
+     */
+    async completeSegmentLesson(goalId: string, segmentIndex: number, lessonId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/lessons/${lessonId}/complete`, {
+                method: 'POST',
+            });
+            if (!response.ok) throw new Error('Failed to complete lesson');
+        } catch (error) {
+            console.error('API completeSegmentLesson error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Mark segment as watched (video completed).
+     */
+    async markSegmentWatched(goalId: string, segmentIndex: number): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/segment-learning/${goalId}/${segmentIndex}/watch`, {
+                method: 'POST',
+            });
+            if (!response.ok) throw new Error('Failed to mark watched');
+        } catch (error) {
+            console.error('API markSegmentWatched error:', error);
+            throw error;
         }
     },
 };

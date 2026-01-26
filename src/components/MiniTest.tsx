@@ -10,10 +10,12 @@ import {
     Trophy,
     Target,
     Zap,
-    TrendingUp
+    TrendingUp,
+    Eye
 } from 'lucide-react';
 import { generateTestSentences, TestSentence, analyzeListeningResults, TestResult, ListeningAnalysis } from '../services/geminiService';
-import { generateSpeech, revokeAudioUrl } from '../services/ttsService';
+import ListeningFeedbackSliders, { SliderValues, DEFAULT_SLIDER_VALUES } from './ListeningFeedbackSliders';
+import { useAudioPlayer } from '../hooks/useAudioPlayer';
 
 interface AssessmentResult {
     targetLanguage: string;
@@ -30,6 +32,11 @@ interface TestResponseData {
     replays: number;
     reactionTimeMs: number;
     markedIndices: number[];
+    // Detailed feedback for "Not Sure" responses
+    wordBoundaries?: number;
+    familiarity?: number;
+    meaningClarity?: number;
+    wordConfusion?: number;
 }
 
 interface MiniTestProps {
@@ -37,240 +44,116 @@ interface MiniTestProps {
     onBack: () => void;
 }
 
-export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
+const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, phase: 'sentences' as 'sentences' | 'audio' | 'analyzing' });
     const [sentences, setSentences] = useState<TestSentence[]>([]);
-    const [audioCache, setAudioCache] = useState<Map<number, string>>(new Map());
     const [currentIndex, setCurrentIndex] = useState(0);
     const [showTranscript, setShowTranscript] = useState(false);
     const [responses, setResponses] = useState<TestResponseData[]>([]);
     const [replays, setReplays] = useState(0);
-    const [markedIndices, setMarkedIndices] = useState<Set<number>>(new Set()); // word indices
-    const [isPlaying, setIsPlaying] = useState(false);
+    const [markedIndices, setMarkedIndices] = useState<Set<number>>(new Set());
     const [testComplete, setTestComplete] = useState(false);
     const [analysis, setAnalysis] = useState<ListeningAnalysis | null>(null);
     const [thinkingTimeSum, setThinkingTimeSum] = useState<number>(0);
-    const lastPauseRef = useRef<number>(0);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Helper to fetch and cache audio for a specific index
-    const fetchAudioForIndex = async (index: number, sentencesList: TestSentence[]) => {
-        if (index < 0 || index >= sentencesList.length) return null;
-        const sentence = sentencesList[index];
+    // Slider state for "Not Sure" feedback
+    const [showSliders, setShowSliders] = useState(false);
+    const [sliderValues, setSliderValues] = useState<SliderValues>(DEFAULT_SLIDER_VALUES);
 
-        // Return existing if already cached
-        if (audioCache.has(sentence.id)) return audioCache.get(sentence.id);
+    // Use the shared audio player hook
+    const audioPlayer = useAudioPlayer({ voiceName: 'Kore' });
+    const { isPlaying, audioProgress, speak, speakSlow, stopAll, preloadAudio, clearCache, getThinkingGap, resetThinkingTimer, isExiting } = audioPlayer;
 
-        try {
-            const audioUrl = await generateSpeech({
-                text: sentence.sentence,
-                voiceName: 'Kore'
-            });
-            setAudioCache(prev => {
-                const newCache = new Map(prev);
-                newCache.set(sentence.id, audioUrl);
-                return newCache;
-            });
-            return audioUrl;
-        } catch (error) {
-            console.error(`Failed to fetch audio for index ${index}:`, error);
-            return null;
-        }
-    };
+    const currentSentence = sentences[currentIndex];
 
     // Load assessment and generate sentences
     useEffect(() => {
+        let cancelled = false; // Guard against StrictMode double-run
+
         const loadTest = async () => {
-            // 1. Get assessment
-            const stored = localStorage.getItem('assessment_result');
-            const assessment: AssessmentResult = stored
-                ? JSON.parse(stored)
-                : { targetLanguage: 'en', targetContent: 'movies', listeningLevel: 2, subtitleDependence: 1, difficulties: [] };
+            // Clear any previous audio cache
+            clearCache();
+            isExiting.current = false;
+
+            // 1. Get assessment from API
+            let assessment: AssessmentResult = { targetLanguage: 'en', targetContent: 'movies', listeningLevel: 2, subtitleDependence: 1, difficulties: [] };
+            try {
+                const res = await fetch('/api/assessment/profile');
+                if (cancelled) return;
+                if (res.ok) {
+                    const profile = await res.json();
+                    if (profile) assessment = profile;
+                }
+            } catch (e) {
+                console.error("Failed to fetch profile, using defaults", e);
+            }
+
+            if (cancelled) return;
 
             // 2. Generate sentences
             setLoadingProgress({ current: 0, total: 0, phase: 'sentences' });
             const generatedSentences = await generateTestSentences(assessment);
+            if (cancelled) return;
             setSentences(generatedSentences);
 
-            // 3. JIT: Only generate the first audio upfront
+            // 3. Preload first audio
             setLoadingProgress({ current: 0, total: 1, phase: 'audio' });
-
             if (generatedSentences.length > 0) {
-                const firstId = generatedSentences[0].id;
-                try {
-                    const audioUrl = await generateSpeech({
-                        text: generatedSentences[0].sentence,
-                        voiceName: 'Kore'
-                    });
-                    setAudioCache(new Map([[firstId, audioUrl]]));
+                await preloadAudio(generatedSentences[0]);
+                if (cancelled) return;
 
-                    // Pre-fetch the second one in the background
-                    if (generatedSentences.length > 1) {
-                        fetchAudioForIndex(1, generatedSentences);
-                    }
-                } catch (error) {
-                    console.error("Failed to generate first audio:", error);
+                // Pre-fetch the second one in background
+                if (generatedSentences.length > 1) {
+                    preloadAudio(generatedSentences[1]);
                 }
             }
 
             setLoading(false);
-            // Thinking time model: clock will start via onended after audio plays
         };
 
         loadTest();
 
-        // Cleanup all cached audio URLs on unmount
         return () => {
-            audioCache.forEach(url => revokeAudioUrl(url));
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
+            cancelled = true;
         };
-    }, []);
+    }, [clearCache, preloadAudio, isExiting]);
 
-    const currentSentence = sentences[currentIndex];
-
-    // Play audio from cache or fetch on-demand
-    const speak = async () => {
+    // Play current sentence
+    const playSentence = async () => {
         if (!currentSentence) return;
 
-        // Stop any current audio
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
+        // Add thinking time gap
+        const gap = getThinkingGap();
+        if (gap > 0) {
+            setThinkingTimeSum(prev => prev + gap);
+            resetThinkingTimer();
         }
 
-        let cachedUrl = audioCache.get(currentSentence.id);
-
-        // If not in cache, fetch it now (fallback/JIT)
-        if (!cachedUrl) {
-            setIsPlaying(true); // Show animation while fetching
-            cachedUrl = await fetchAudioForIndex(currentIndex, sentences) || undefined;
-            if (!cachedUrl) {
-                setIsPlaying(false);
-                fallbackSpeak(currentSentence.sentence);
-                return;
-            }
-        }
-
-        // If we were in a "thinking" pause, add that silence gap to the sum
-        if (lastPauseRef.current !== 0) {
-            const silenceGap = Date.now() - lastPauseRef.current;
-            setThinkingTimeSum(prev => prev + silenceGap);
-            lastPauseRef.current = 0;
-        }
-
-        const audio = new Audio(cachedUrl);
-        audioRef.current = audio;
-
-        audio.onplay = () => setIsPlaying(true);
-        audio.onended = () => {
-            setIsPlaying(false);
-            lastPauseRef.current = Date.now(); // Record start of "thinking" silence
-        };
-        audio.onerror = () => {
-            setIsPlaying(false);
-            fallbackSpeak(currentSentence.sentence);
-        };
-
-        audio.play().catch(err => {
-            console.error("Playback error:", err);
-            setIsPlaying(false);
-            fallbackSpeak(currentSentence.sentence);
-        });
-    };
-
-    // Fallback to browser TTS if Gemini fails
-    const fallbackSpeak = (text: string) => {
-        // If we were in a silence gap, add it to sum
-        if (lastPauseRef.current !== 0) {
-            const silenceGap = Date.now() - lastPauseRef.current;
-            setThinkingTimeSum(prev => prev + silenceGap);
-            lastPauseRef.current = 0;
-        }
-
-        speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1;
-        utterance.lang = 'en-US';
-        utterance.onstart = () => setIsPlaying(true);
-        utterance.onend = () => {
-            setIsPlaying(false);
-            lastPauseRef.current = Date.now(); // Clock starts after audio ends
-        };
-        speechSynthesis.speak(utterance);
+        await speak(currentSentence);
     };
 
     const handleReplay = () => {
         setReplays(prev => prev + 1);
-        speak();
+        playSentence();
     };
 
     const handleSlowPlay = async () => {
         setReplays(prev => prev + 1);
         if (!currentSentence) return;
 
-        // Stop any current audio
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
+        // Add thinking time gap
+        const gap = getThinkingGap();
+        if (gap > 0) {
+            setThinkingTimeSum(prev => prev + gap);
+            resetThinkingTimer();
         }
 
-        let cachedUrl = audioCache.get(currentSentence.id);
-
-        if (!cachedUrl) {
-            setIsPlaying(true);
-            cachedUrl = await fetchAudioForIndex(currentIndex, sentences) || undefined;
-            if (!cachedUrl) {
-                setIsPlaying(false);
-
-                // If we were in a silence gap, add it to sum
-                if (lastPauseRef.current !== 0) {
-                    const silenceGap = Date.now() - lastPauseRef.current;
-                    setThinkingTimeSum(prev => prev + silenceGap);
-                    lastPauseRef.current = 0;
-                }
-
-                // Fallback to browser TTS
-                speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(currentSentence.sentence);
-                utterance.rate = 0.7;
-                utterance.lang = 'en-US';
-                utterance.onstart = () => setIsPlaying(true);
-                utterance.onend = () => {
-                    setIsPlaying(false);
-                    lastPauseRef.current = Date.now();
-                };
-                speechSynthesis.speak(utterance);
-                return;
-            }
-        }
-
-        // If we were in a "thinking" pause, add that silence gap to the sum
-        if (lastPauseRef.current !== 0) {
-            const silenceGap = Date.now() - lastPauseRef.current;
-            setThinkingTimeSum(prev => prev + silenceGap);
-            lastPauseRef.current = 0;
-        }
-
-        // Play from cache with SLOW playback rate
-        const audio = new Audio(cachedUrl);
-        audio.playbackRate = 0.7; // Slow playback!
-        audioRef.current = audio;
-
-        audio.onplay = () => setIsPlaying(true);
-        audio.onended = () => {
-            setIsPlaying(false);
-            lastPauseRef.current = Date.now(); // Record start of "thinking" silence
-        };
-        audio.onerror = () => setIsPlaying(false);
-
-        audio.play();
+        await speakSlow(currentSentence, 0.7);
     };
 
     // Handle response: simplified to understood (true) or not sure (false)
-    const handleResponse = async (understood: boolean) => {
+    const handleResponse = async (understood: boolean, sliderData?: SliderValues) => {
         const responseData: TestResponseData = {
             sentenceId: currentSentence.id,
             sentence: currentSentence.sentence,
@@ -278,10 +161,20 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             replays,
             reactionTimeMs: thinkingTimeSum,
             markedIndices: Array.from(markedIndices),
+            ...(sliderData && {
+                wordBoundaries: sliderData.wordBoundaries,
+                familiarity: sliderData.familiarity,
+                meaningClarity: sliderData.meaningClarity,
+                wordConfusion: sliderData.wordConfusion,
+            }),
         };
 
         const newResponses = [...responses, responseData];
         setResponses(newResponses);
+
+        // Reset slider state
+        setShowSliders(false);
+        setSliderValues(DEFAULT_SLIDER_VALUES);
 
         if (currentIndex < sentences.length - 1) {
             // Next question
@@ -291,41 +184,62 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
             setReplays(0);
             setMarkedIndices(new Set());
             setThinkingTimeSum(0);
-            lastPauseRef.current = 0;
+            resetThinkingTimer();
 
             // Background pre-fetch for the one after next
             if (nextIndex + 1 < sentences.length) {
-                fetchAudioForIndex(nextIndex + 1, sentences);
+                preloadAudio(sentences[nextIndex + 1]);
             }
         } else {
             // Test complete - stop audio and run AI analysis
-            if (audioRef.current) {
-                audioRef.current.pause();
-            }
-            setIsPlaying(false);
+            stopAll();
 
             setLoading(true);
             setLoadingProgress({ current: 0, total: 0, phase: 'analyzing' });
 
-            // Convert to TestResult format for analysis
+            // Convert to TestResult format for analysis (including slider data)
             const testResults: TestResult[] = newResponses.map(r => ({
                 sentence: r.sentence,
                 understood: r.understood,
                 replays: r.replays,
                 reactionTimeMs: r.reactionTimeMs,
                 markedWordIndices: r.markedIndices,
+                wordBoundaries: r.wordBoundaries,
+                familiarity: r.familiarity,
+                meaningClarity: r.meaningClarity,
+                wordConfusion: r.wordConfusion,
             }));
 
             const analysisResult = await analyzeListeningResults(testResults);
             setAnalysis(analysisResult);
 
-            // Save results
-            localStorage.setItem('minitest_results', JSON.stringify(newResponses));
-            localStorage.setItem('minitest_analysis', JSON.stringify(analysisResult));
+            // Save results to API
+            try {
+                await fetch('/api/assessment/results', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        responses: newResponses,
+                        analysis: analysisResult
+                    })
+                });
+            } catch (error) {
+                console.error("Failed to save results:", error);
+            }
 
             setLoading(false);
             setTestComplete(true);
         }
+    };
+
+    // Handle "Not Sure" click - show sliders
+    const handleNotSure = () => {
+        setShowSliders(true);
+    };
+
+    // Confirm slider values and submit response
+    const handleSliderSubmit = () => {
+        handleResponse(false, sliderValues);
     };
 
     const toggleWordMark = (index: number) => {
@@ -342,8 +256,12 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
 
     // Auto-play on new sentence
     useEffect(() => {
-        if (currentSentence && !loading && !testComplete) {
-            const timer = setTimeout(() => speak(), 500);
+        if (currentSentence && !loading && !testComplete && !isExiting.current) {
+            const timer = setTimeout(() => {
+                if (!isExiting.current) {
+                    playSentence();
+                }
+            }, 500);
             return () => clearTimeout(timer);
         }
     }, [currentIndex, loading, testComplete]);
@@ -467,10 +385,13 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                     )}
 
                     <button
-                        onClick={onComplete}
+                        onClick={() => {
+                            stopAll();
+                            onComplete();
+                        }}
                         className="w-full px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg"
                     >
-                        Back to Dashboard
+                        Back to Assessment
                     </button>
                 </div>
             </div>
@@ -486,7 +407,10 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                         <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
                             <div className="flex items-center gap-3">
                                 <button
-                                    onClick={onBack}
+                                    onClick={() => {
+                                        stopAll();
+                                        onBack();
+                                    }}
                                     className="flex items-center gap-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                                     title="Exit to Assessment"
                                 >
@@ -515,13 +439,24 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                         {!showTranscript ? (
                             /* Front: Audio */
                             <div className="text-center py-8">
-                                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
                                     {isPlaying ? (
                                         <Volume2 size={48} className="text-purple-500 animate-pulse" />
                                     ) : (
                                         <Volume2 size={48} className="text-purple-500" />
                                     )}
                                 </div>
+
+                                {/* Audio Progress Bar */}
+                                <div className="w-48 mx-auto mb-6">
+                                    <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full bg-gradient-to-r from-purple-500 to-pink-500 ${isPlaying ? '' : 'opacity-60'}`}
+                                            style={{ width: `${audioProgress * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+
                                 <p className="text-gray-500 dark:text-gray-400 mb-8">
                                     Listen carefully, then reveal the transcript
                                 </p>
@@ -547,10 +482,10 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                                 <button
                                     onClick={() => {
                                         // Add the final thinking gap before revealing
-                                        if (lastPauseRef.current !== 0) {
-                                            const silenceGap = Date.now() - lastPauseRef.current;
-                                            setThinkingTimeSum(prev => prev + silenceGap);
-                                            lastPauseRef.current = 0;
+                                        const gap = getThinkingGap();
+                                        if (gap > 0) {
+                                            setThinkingTimeSum(prev => prev + gap);
+                                            resetThinkingTimer();
                                         }
                                         setShowTranscript(true);
                                     }}
@@ -592,22 +527,32 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
                                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4">
                                     Did you catch the sentence?
                                 </h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button
-                                        onClick={() => handleResponse(true)}
-                                        className="flex items-center justify-center gap-3 p-5 rounded-xl border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 hover:border-green-500 hover:scale-[1.02] transition-all"
-                                    >
-                                        <Check size={24} className="text-green-500" />
-                                        <span className="font-bold text-green-700 dark:text-green-400">Got It</span>
-                                    </button>
-                                    <button
-                                        onClick={() => handleResponse(false)}
-                                        className="flex items-center justify-center gap-3 p-5 rounded-xl border-2 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:border-orange-500 hover:scale-[1.02] transition-all"
-                                    >
-                                        <HelpCircle size={24} className="text-orange-500" />
-                                        <span className="font-bold text-orange-700 dark:text-orange-400">Not Sure</span>
-                                    </button>
-                                </div>
+
+                                {/* Slider Panel for "Not Sure" */}
+                                {showSliders ? (
+                                    <ListeningFeedbackSliders
+                                        values={sliderValues}
+                                        onChange={setSliderValues}
+                                        onSubmit={handleSliderSubmit}
+                                    />
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <button
+                                            onClick={() => handleResponse(true)}
+                                            className="flex items-center justify-center gap-3 p-5 rounded-xl border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 hover:border-green-500 hover:scale-[1.02] transition-all"
+                                        >
+                                            <Check size={24} className="text-green-500" />
+                                            <span className="font-bold text-green-700 dark:text-green-400">Got It</span>
+                                        </button>
+                                        <button
+                                            onClick={handleNotSure}
+                                            className="flex items-center justify-center gap-3 p-5 rounded-xl border-2 border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 hover:border-orange-500 hover:scale-[1.02] transition-all"
+                                        >
+                                            <HelpCircle size={24} className="text-orange-500" />
+                                            <span className="font-bold text-orange-700 dark:text-orange-400">Not Sure</span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -622,3 +567,5 @@ export default function MiniTest({ onComplete, onBack }: MiniTestProps) {
         </div>
     );
 }
+
+export default MiniTest;

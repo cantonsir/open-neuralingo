@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { YouTubePlayer } from 'react-youtube';
 import { Play, Pause, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -20,7 +21,7 @@ import CourseDashboard from './components/CourseDashboard';
 import LearningSession from './components/LearningSession';
 import SelfAssessment from './components/SelfAssessment';
 import MiniTest from './components/MiniTest';
-import { api } from './db';
+import { api, GoalVideo, GoalVideoDetail } from './db';
 
 type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest';
 type Theme = 'dark' | 'light';
@@ -77,6 +78,7 @@ function App() {
   const [view, setView] = useState<View>('loop');
 
   const [tempSegment, setTempSegment] = useState<{ start: number, end: number } | null>(null);
+  const [pendingSegment, setPendingSegment] = useState<{ start: number, end: number } | null>(null);
 
   const [savedCards, setSavedCards] = useState<Marker[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -85,6 +87,97 @@ function App() {
   const [learningView, setLearningView] = useState<'home' | 'course' | 'lesson'>('home');
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState<number>(0);
+  const [selectedSegmentData, setSelectedSegmentData] = useState<{
+    videoId: string;
+    subtitle: string[];
+    startTime: number;
+    endTime: number;
+  } | null>(null);
+
+  // Assessment data cache (loaded once)
+  const [assessmentProfile, setAssessmentProfile] = useState<any>(null);
+  const [assessmentResults, setAssessmentResults] = useState<any[] | null>(null);
+  const [assessmentLoaded, setAssessmentLoaded] = useState(false);
+
+  // Learning goals cache (loaded once)
+  const [learningGoals, setLearningGoals] = useState<GoalVideo[]>([]);
+  const [goalsLoaded, setGoalsLoaded] = useState(false);
+  // Course details cache (GoalVideoDetail by goalId)
+  const [goalDetailsCache, setGoalDetailsCache] = useState<Record<string, GoalVideoDetail>>({});
+
+  // Key to force MiniTest remount (clears cache on retake)
+  const [miniTestKey, setMiniTestKey] = useState(0);
+
+  // Load all cached data once on app mount
+  useEffect(() => {
+    const loadCachedData = async () => {
+      try {
+        // Load all data in parallel
+        const [profileRes, resultsRes, goals] = await Promise.all([
+          fetch('/api/assessment/profile'),
+          fetch('/api/assessment/results'),
+          api.fetchGoals()
+        ]);
+
+        // Assessment profile
+        if (profileRes.ok) {
+          const profile = await profileRes.json();
+          setAssessmentProfile(profile);
+        }
+
+        // Assessment results
+        if (resultsRes.ok) {
+          const results = await resultsRes.json();
+          if (results && results.length > 0) {
+            setAssessmentResults(results);
+          }
+        }
+
+        // Learning goals
+        setLearningGoals(goals);
+      } catch (error) {
+        console.error('Failed to load cached data:', error);
+      } finally {
+        setAssessmentLoaded(true);
+        setGoalsLoaded(true);
+      }
+    };
+    loadCachedData();
+  }, []);
+
+  // Callback to refresh assessment data after updates
+  const refreshAssessmentData = useCallback(async () => {
+    try {
+      const [profileRes, resultsRes] = await Promise.all([
+        fetch('/api/assessment/profile'),
+        fetch('/api/assessment/results')
+      ]);
+
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        setAssessmentProfile(profile);
+      }
+
+      if (resultsRes.ok) {
+        const results = await resultsRes.json();
+        setAssessmentResults(results && results.length > 0 ? results : null);
+      }
+    } catch (error) {
+      console.error('Failed to refresh assessment data:', error);
+    }
+  }, []);
+
+  // Update goal details cache
+  const refreshGoalDetails = useCallback(async (goalId: string) => {
+    try {
+      const details = await api.fetchGoal(goalId);
+      if (details) {
+        setGoalDetailsCache(prev => ({ ...prev, [goalId]: details }));
+      }
+    } catch (e) {
+      console.error("Failed to refresh goal details", e);
+    }
+  }, []);
 
   // Load saved cards on mount
   useEffect(() => {
@@ -182,7 +275,7 @@ function App() {
 
   const [isFetchingSubs, setIsFetchingSubs] = useState(false);
 
-  const fetchSubtitles = async (id: string) => {
+  const fetchSubtitles = async (id: string, shouldNavigate: boolean = true) => {
     setIsFetchingSubs(true);
     try {
       const response = await fetch(`/api/transcript?videoId=${id}&language=${targetLanguage}`);
@@ -199,6 +292,7 @@ function App() {
       }));
 
       setSubtitles(parsed);
+      setPlayer(null); // Reset player - new one will be set on onReady
       setVideoId(id);
       setIsSetupMode(false); // Auto-start if successful
 
@@ -222,7 +316,9 @@ function App() {
         wordsLearned: 0
       });
 
-      setView('loop'); // Navigate to practice view
+      if (shouldNavigate) {
+        setView('loop'); // Navigate to practice view only if requested
+      }
     } catch (error) {
       console.error(error);
       alert('Failed to fetch subtitles. Make sure the backend server is running (python backend/server.py)!');
@@ -349,6 +445,9 @@ function App() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [addMarker, isSetupMode, player, state.isPlaying]);
+
+  // NOTE: Pending segment handling is now done directly in the VideoPlayer onReady callback
+  // to ensure proper timing before YouTube autoplay starts.
 
 
   // --- Loop Engine ---
@@ -555,21 +654,49 @@ function App() {
   };
 
   const handlePlaySegment = async (start: number, end: number, targetVideoId?: string) => {
-    if (!player) return;
-
-    // Check if we need to switch video
+    // If there's a target video and we need to switch
     if (targetVideoId && targetVideoId !== videoId) {
-      if (confirm("This card is from a different video. Switch video?")) {
-        await fetchSubtitles(targetVideoId);
-        setTempSegment({ start, end });
+      // Store segment to play when player is ready
+      setPendingSegment({ start, end });
+      // If in vocab mode, stay there. Otherwise go to loop.
+      const shouldNavigate = view !== 'vocab';
+      await fetchSubtitles(targetVideoId, shouldNavigate);
+      if (shouldNavigate) setView('loop');
+      return;
+    }
+
+    // If we're not on the loop OR vocab view, navigate to loop view
+    if (view !== 'loop' && view !== 'vocab') {
+      if (videoId) {
+        setPendingSegment({ start, end });
+        setView('loop');
+      } else {
+        console.warn('No video loaded to play segment from');
       }
       return;
     }
 
-    setCurrentLoop(null);
-    setTempSegment({ start, end });
-    player.seekTo(start, true);
-    player.playVideo();
+    // If no player yet but we have a videoId, set pending segment and wait for player
+    if (!player && videoId) {
+      setPendingSegment({ start, end });
+      return;
+    }
+
+    // If no player and no video, we can't play
+    if (!player || typeof player.seekTo !== 'function' || typeof player.playVideo !== 'function') {
+      console.warn('No video player available or player not ready');
+      return;
+    }
+
+    // Player ready - just seek and play
+    try {
+      setCurrentLoop(null);
+      setTempSegment({ start, end });
+      player.seekTo(start, true);
+      player.playVideo();
+    } catch (err) {
+      console.warn('Failed to play segment:', err);
+    }
   };
 
   // --- Render ---
@@ -614,117 +741,31 @@ function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Dashboard View */}
-        {view === 'home' && (
-          <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
-            <DashboardView
-              onPlayVideo={(videoId) => fetchSubtitles(videoId)}
-              onNavigate={(v) => setView(v as View)}
-              savedCardsCount={savedCards.length}
-              markersCount={markers.length}
-            />
-          </div>
-        )}
+        <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* PERSISTENT PLAYER WRAPPER */}
+          {/* We keep this mounted always if we have a videoId (or even if not, to be safe, but usually videoId required) */}
+          {/* We use a strategy: precise CSS positioning or Portal?
+            Let's use a "Slot" approach. We render the player here, but hidden if not needed.
+            When in Loop View, we want it to visually be in that specific spot.
+            
+            Actually, let's try a Portal properly later if needed. For now:
+            RENDER IT HIDDEN if view != 'loop'.
+            RENDER IT VISIBLE if view == 'loop'.
+            
+            BUT it needs to be IN THE FLOW for 'loop' view.
+            
+            Let's just use absolute positioning 'off screen' when hidden,
+            and 'inset-0' or similar when visible?
+            
+            No, 'loop' view uses Flexbox layout.
+            
+            Let's try this:
+            We render `LoopViewContainer` that is ALWAYS mounted but `display: none` when not active?
+            Yes, that's the standard way to keep state.
+        */}
 
-        {/* History View */}
-        {view === 'history' && (
-          <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-            <HistoryView
-              onPlayVideo={(videoId) => fetchSubtitles(videoId)}
-              savedCardsCount={savedCards.length}
-              markersCount={markers.length}
-            />
-          </div>
-        )}
-
-        {/* Flashcards View */}
-        {view === 'flashcards' && (
-          <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-            <FlashcardPractice
-              savedCards={savedCards}
-              onExit={() => setView('home')}
-              onPlayAudio={handlePlaySegment}
-            />
-          </div>
-        )}
-
-        {/* Learning Section - 3 Level Hierarchy */}
-        {view === 'learning' && (
-          <div className="flex-1 overflow-hidden">
-            {/* Level 1: Goal Videos List */}
-            {learningView === 'home' && (
-              <LearningHome
-                defaultLanguage={targetLanguage}
-                onSelectGoal={(goalId) => {
-                  setSelectedGoalId(goalId);
-                  setLearningView('course');
-                }}
-              />
-            )}
-
-            {/* Level 2: Course Dashboard (Segments) */}
-            {learningView === 'course' && selectedGoalId && (
-              <CourseDashboard
-                goalId={selectedGoalId}
-                onBack={() => {
-                  setLearningView('home');
-                  setSelectedGoalId(null);
-                }}
-                onStartLesson={(goalId, segmentIndex) => {
-                  setSelectedSegmentIndex(segmentIndex);
-                  setLearningView('lesson');
-                }}
-              />
-            )}
-
-            {/* Level 3: Lesson Drills */}
-            {learningView === 'lesson' && selectedGoalId && (
-              <LearningSession
-                videoId={selectedGoalId}
-                transcriptSegments={[[]]} // Will be fetched from API
-                segmentDuration={4}
-                onExit={() => setLearningView('course')}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Vocabulary Manager View */}
-        {view === 'vocab' && (
-          <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-            <VocabularyManager
-              markers={markers}
-              savedCards={savedCards}
-              onRemoveWord={handleRemoveWord}
-              onUpdateVocabData={handleUpdateVocabData}
-              onPlaySegment={handlePlaySegment}
-              onSaveToDeck={handleSaveToDeck}
-              onDeleteCard={handleDeleteFromDeck}
-              onUpdateCard={handleUpdateCard}
-              onDiscardSessionMarker={handleDeleteMarker}
-            />
-          </div>
-        )}
-
-        {/* Self-Assessment View */}
-        {view === 'assessment' && (
-          <SelfAssessment
-            onComplete={() => setView('home')}
-            onStartTest={() => setView('minitest')}
-          />
-        )}
-
-        {/* Mini-Test View */}
-        {view === 'minitest' && (
-          <MiniTest
-            onComplete={() => setView('home')}
-            onBack={() => setView('assessment')}
-          />
-        )}
-
-        {/* Practice View (Video Player) */}
-        {view === 'loop' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
+          <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'}`}>
             {/* Persistent URL Bar at Top */}
             <div className="shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-3">
               <div className="flex items-center gap-3 max-w-3xl">
@@ -796,7 +837,11 @@ function App() {
                     <div className="flex-1 flex flex-col justify-center min-h-0">
                       <VideoPlayer
                         videoId={videoId}
-                        onReady={(p) => setPlayer(p)}
+                        onReady={(p) => {
+                          setPlayer(p);
+                          // Handle pending segment immediately when player is ready
+                          // Note: this might fire multiple times if component re-renders but usually onReady is once per videoId change
+                        }}
                         onStateChange={(s) => setState(prev => ({ ...prev, ...s }))}
                         currentSubtitle={getCurrentSubtitle()}
                         playbackRate={state.playbackRate}
@@ -903,7 +948,162 @@ function App() {
               )}
             </div>
           </div>
-        )}
+
+          {/* Dashboard View */}
+          {view === 'home' && (
+            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
+              <DashboardView
+                onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+                onNavigate={(v) => setView(v as View)}
+                savedCardsCount={savedCards.length}
+                markersCount={markers.length}
+              />
+            </div>
+          )}
+
+          {/* History View */}
+          {view === 'history' && (
+            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+              <HistoryView
+                onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+                savedCardsCount={savedCards.length}
+                markersCount={markers.length}
+              />
+            </div>
+          )}
+
+          {/* Flashcards View */}
+          {view === 'flashcards' && (
+            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+              <FlashcardPractice
+                savedCards={savedCards}
+                onExit={() => setView('home')}
+                onPlayAudio={handlePlaySegment}
+              />
+            </div>
+          )}
+
+          {/* Learning Section - 3 Level Hierarchy */}
+          {view === 'learning' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Level 1: Goal Videos List */}
+              {learningView === 'home' && (
+                <LearningHome
+                  defaultLanguage={targetLanguage}
+                  cachedGoals={learningGoals}
+                  isLoaded={goalsLoaded}
+                  onGoalsUpdate={setLearningGoals}
+                  onSelectGoal={(goalId) => {
+                    setSelectedGoalId(goalId);
+                    setLearningView('course');
+                  }}
+                />
+              )}
+
+              {/* Level 2: Course Dashboard (Segments) */}
+              {learningView === 'course' && selectedGoalId && (
+                <CourseDashboard
+                  goalId={selectedGoalId}
+                  cachedGoal={goalDetailsCache[selectedGoalId]}
+                  onCacheUpdate={refreshGoalDetails}
+                  onBack={() => {
+                    setLearningView('home');
+                    setSelectedGoalId(null);
+                  }}
+                  onWatchVideo={async (videoId) => {
+                    // Navigate to Listen & Loop with this video
+                    await fetchSubtitles(videoId);
+                    setView('loop');
+                  }}
+                  onStartLesson={async (goalId, segmentIndex, videoId, startTime, endTime) => {
+                    setSelectedSegmentIndex(segmentIndex);
+
+                    // Fetch segment sentences from API
+                    try {
+                      const data = await api.fetchSegmentSentences(goalId, segmentIndex);
+                      setSelectedSegmentData({
+                        videoId,
+                        subtitle: data.sentences || [],
+                        startTime,
+                        endTime
+                      });
+                      setLearningView('lesson');
+                    } catch (error) {
+                      console.error('Failed to load segment:', error);
+                    }
+                  }}
+                />
+              )}
+
+              {/* Level 3: Lesson Drills */}
+              {learningView === 'lesson' && selectedGoalId && selectedSegmentData && (
+                <LearningSession
+                  goalId={selectedGoalId}
+                  videoId={selectedSegmentData.videoId}
+                  segmentIndex={selectedSegmentIndex}
+                  segmentSubtitle={selectedSegmentData.subtitle}
+                  segmentStartTime={selectedSegmentData.startTime}
+                  segmentEndTime={selectedSegmentData.endTime}
+                  onExit={() => {
+                    setLearningView('course');
+                    setSelectedSegmentData(null);
+                  }}
+                  onComplete={() => {
+                    refreshGoalDetails(selectedGoalId);
+                    setLearningView('course');
+                    setSelectedSegmentData(null);
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Vocabulary Manager View */}
+          {view === 'vocab' && (
+            <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+              <VocabularyManager
+                markers={markers}
+                savedCards={savedCards}
+                onRemoveWord={handleRemoveWord}
+                onUpdateVocabData={handleUpdateVocabData}
+                onPlaySegment={handlePlaySegment}
+                onSaveToDeck={handleSaveToDeck}
+                onDeleteCard={handleDeleteFromDeck}
+                onUpdateCard={handleUpdateCard}
+                onDiscardSessionMarker={handleDeleteMarker}
+              />
+            </div>
+          )}
+
+          {/* Self-Assessment View */}
+          {view === 'assessment' && (
+            <SelfAssessment
+              onComplete={() => setView('home')}
+              onStartTest={() => {
+                setMiniTestKey(prev => prev + 1); // Force fresh component
+                setView('minitest');
+              }}
+              cachedProfile={assessmentProfile}
+              cachedResults={assessmentResults}
+              isLoaded={assessmentLoaded}
+              onProfileUpdate={setAssessmentProfile}
+              onResultsUpdate={setAssessmentResults}
+            />
+          )}
+
+          {/* Mini-Test View */}
+          {view === 'minitest' && (
+            <MiniTest
+              key={miniTestKey}
+              onComplete={() => {
+                refreshAssessmentData();
+                setView('assessment');
+              }}
+              onBack={() => setView('assessment')}
+            />
+          )}
+
+        </div>
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   currentSubtitle: Subtitle | null;
   playbackRate: number;
   forceShowSubtitle: boolean;
+  startTime?: number; // Optional: start position in seconds for the video
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -17,7 +18,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onStateChange,
   currentSubtitle,
   playbackRate,
-  forceShowSubtitle
+  forceShowSubtitle,
+  startTime
 }) => {
   const playerRef = useRef<YouTubePlayer | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       fs: 0,
       disablekb: 1,
       origin: getOrigin(),
+      start: startTime ? Math.floor(startTime) : undefined, // Start at specified time if provided
     },
   };
 

@@ -5,6 +5,9 @@ import { api, GoalVideo } from '../db';
 interface LearningHomeProps {
     onSelectGoal: (goalId: string) => void;
     defaultLanguage?: string;
+    cachedGoals?: GoalVideo[];
+    isLoaded?: boolean;
+    onGoalsUpdate?: (goals: GoalVideo[]) => void;
 }
 
 // Common languages with emoji flags
@@ -36,23 +39,33 @@ const LANGUAGE_NAMES: Record<string, string> = {
     'ar': 'Arabic',
 };
 
-const LearningHome: React.FC<LearningHomeProps> = ({ onSelectGoal, defaultLanguage = 'en' }) => {
-    const [goals, setGoals] = useState<GoalVideo[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+const LearningHome: React.FC<LearningHomeProps> = ({ 
+    onSelectGoal, 
+    defaultLanguage = 'en',
+    cachedGoals = [],
+    isLoaded = false,
+    onGoalsUpdate
+}) => {
+    const [goals, setGoals] = useState<GoalVideo[]>(cachedGoals);
+    const [isLoading, setIsLoading] = useState(!isLoaded);
     const [isAddingGoal, setIsAddingGoal] = useState(false);
     const [newVideoUrl, setNewVideoUrl] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Load goals on mount
+    // Sync with cached data from parent
     useEffect(() => {
-        loadGoals();
-    }, []);
+        if (isLoaded) {
+            setGoals(cachedGoals);
+            setIsLoading(false);
+        }
+    }, [cachedGoals, isLoaded]);
 
     const loadGoals = async () => {
         setIsLoading(true);
         const fetchedGoals = await api.fetchGoals();
         setGoals(fetchedGoals);
+        onGoalsUpdate?.(fetchedGoals); // Update parent cache
         setIsLoading(false);
     };
 

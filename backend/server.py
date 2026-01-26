@@ -89,6 +89,104 @@ def init_db():
             transcript TEXT
         )
     ''')
+    
+    # Assessment & Mini-Test tables
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS assessment_profiles (
+            id TEXT PRIMARY KEY,
+            target_language TEXT DEFAULT 'en',
+            target_content TEXT DEFAULT 'general',
+            listening_level INTEGER DEFAULT 2,
+            subtitle_dependence INTEGER DEFAULT 1,
+            difficulties TEXT, -- JSON list
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS mini_test_results (
+            id TEXT PRIMARY KEY,
+            taken_at INTEGER,
+            score INTEGER,
+            total_questions INTEGER,
+            analysis_json TEXT -- Full analysis object
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS mini_test_details (
+            id TEXT PRIMARY KEY,
+            result_id TEXT NOT NULL,
+            question_index INTEGER,
+            sentence TEXT,
+            understood BOOLEAN,
+            replays INTEGER,
+            reaction_time_ms INTEGER,
+            marked_indices TEXT, -- JSON list
+            FOREIGN KEY (result_id) REFERENCES mini_test_results(id)
+        )
+    ''')
+    
+    # Segment Learning: Test-Learn-Watch Flow
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS segment_tests (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            segment_index INTEGER NOT NULL,
+            attempt_number INTEGER DEFAULT 1,
+            sentences_json TEXT NOT NULL, -- AI-generated test sentences
+            taken_at INTEGER,
+            score INTEGER DEFAULT 0,
+            total_questions INTEGER DEFAULT 5,
+            accuracy REAL DEFAULT 0.0,
+            analysis_json TEXT, -- AI feedback after test
+            FOREIGN KEY (goal_id) REFERENCES goal_videos(id)
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS segment_test_details (
+            id TEXT PRIMARY KEY,
+            test_id TEXT NOT NULL,
+            question_index INTEGER,
+            sentence TEXT,
+            understood BOOLEAN,
+            replays INTEGER DEFAULT 0,
+            reaction_time_ms INTEGER DEFAULT 0,
+            marked_indices TEXT, -- JSON list of word indices user couldn't catch
+            FOREIGN KEY (test_id) REFERENCES segment_tests(id)
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS segment_lessons (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            segment_index INTEGER NOT NULL,
+            test_id TEXT, -- Which test generated this lesson
+            lesson_type TEXT, -- 'vocabulary', 'pattern', 'slow_practice', etc.
+            content_json TEXT NOT NULL, -- Lesson content (varies by type)
+            created_at INTEGER,
+            completed BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (goal_id) REFERENCES goal_videos(id),
+            FOREIGN KEY (test_id) REFERENCES segment_tests(id)
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS segment_mastery (
+            goal_id TEXT NOT NULL,
+            segment_index INTEGER NOT NULL,
+            test_attempts INTEGER DEFAULT 0,
+            best_accuracy REAL DEFAULT 0.0,
+            is_mastered BOOLEAN DEFAULT FALSE,
+            video_watched BOOLEAN DEFAULT FALSE,
+            last_test_at INTEGER,
+            PRIMARY KEY (goal_id, segment_index),
+            FOREIGN KEY (goal_id) REFERENCES goal_videos(id)
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -700,7 +798,16 @@ def create_goal_video():
             duration_seconds = 0
         
         segment_duration = data.get('segmentDuration', 240)  # Default 4 minutes
-        total_segments = max(1, (duration_seconds + segment_duration - 1) // segment_duration)
+        
+        # Calculate total segments, merging small final segments with the previous one
+        # e.g., 20:28 video with 4-min segments = 5 segments (last one is 4:24 instead of 4:00 + 0:24)
+        if duration_seconds <= segment_duration:
+            total_segments = 1
+        else:
+            # Number of full segments
+            full_segments = duration_seconds // segment_duration
+            # The last segment will include any remaining time
+            total_segments = full_segments
         
         # Get video title from oEmbed
         title = data.get('title', f'YouTube Video ({video_id})')
@@ -762,6 +869,7 @@ def get_goal_video(goal_id):
         # Parse transcript and split into segments
         transcript = json.loads(g['transcript']) if g['transcript'] else []
         segment_duration = g['segment_duration']
+        video_end_time = transcript[-1]['start'] + transcript[-1]['duration'] if transcript else 0
         
         segments = []
         current_segment = []
@@ -769,11 +877,29 @@ def get_goal_video(goal_id):
         segment_index = 0
         
         for item in transcript:
-            if item['start'] - segment_start >= segment_duration and current_segment:
-                # Get segment progress
-                progress = conn.execute('''
-                    SELECT * FROM segment_progress WHERE video_id = ? AND segment_index = ?
+            # Check if we should start a new segment
+            time_elapsed = item['start'] - segment_start
+            remaining_time = video_end_time - item['start']
+            
+            # Only split if:
+            # 1. We've exceeded segment duration
+            # 2. The remaining time is >= segment_duration (avoid tiny last segments)
+            if time_elapsed >= segment_duration and current_segment and remaining_time >= segment_duration:
+                # Get segment mastery (new system)
+                mastery = conn.execute('''
+                    SELECT * FROM segment_mastery WHERE goal_id = ? AND segment_index = ?
                 ''', (goal_id, segment_index)).fetchone()
+                
+                # Check if previous segment is complete to unlock this one
+                prev_complete = True
+                if segment_index > 0:
+                    prev_mastery = conn.execute('''
+                        SELECT video_watched FROM segment_mastery WHERE goal_id = ? AND segment_index = ?
+                    ''', (goal_id, segment_index - 1)).fetchone()
+                    prev_complete = prev_mastery and prev_mastery['video_watched']
+                
+                is_unlocked = segment_index == 0 or prev_complete
+                is_complete = mastery and mastery['video_watched']
                 
                 segments.append({
                     'index': segment_index,
@@ -781,8 +907,8 @@ def get_goal_video(goal_id):
                     'endTime': item['start'],
                     'sentences': len(current_segment),
                     'preview': current_segment[0]['text'][:50] + '...' if current_segment else '',
-                    'isUnlocked': bool(progress['is_unlocked']) if progress else segment_index == 0,
-                    'progress': (progress['completed_items'] / progress['total_items'] * 100) if progress and progress['total_items'] > 0 else 0
+                    'isUnlocked': is_unlocked,
+                    'progress': 100 if is_complete else 0
                 })
                 
                 current_segment = []
@@ -791,20 +917,31 @@ def get_goal_video(goal_id):
             
             current_segment.append(item)
         
-        # Add last segment
+        # Add last segment (includes any remaining short portion)
         if current_segment:
-            progress = conn.execute('''
-                SELECT * FROM segment_progress WHERE video_id = ? AND segment_index = ?
+            mastery = conn.execute('''
+                SELECT * FROM segment_mastery WHERE goal_id = ? AND segment_index = ?
             ''', (goal_id, segment_index)).fetchone()
+            
+            # Check if previous segment is complete to unlock this one
+            prev_complete = True
+            if segment_index > 0:
+                prev_mastery = conn.execute('''
+                    SELECT video_watched FROM segment_mastery WHERE goal_id = ? AND segment_index = ?
+                ''', (goal_id, segment_index - 1)).fetchone()
+                prev_complete = prev_mastery and prev_mastery['video_watched']
+            
+            is_unlocked = segment_index == 0 or prev_complete
+            is_complete = mastery and mastery['video_watched']
             
             segments.append({
                 'index': segment_index,
                 'startTime': segment_start,
-                'endTime': transcript[-1]['start'] + transcript[-1]['duration'] if transcript else 0,
+                'endTime': video_end_time,
                 'sentences': len(current_segment),
                 'preview': current_segment[0]['text'][:50] + '...' if current_segment else '',
-                'isUnlocked': bool(progress['is_unlocked']) if progress else segment_index == 0,
-                'progress': (progress['completed_items'] / progress['total_items'] * 100) if progress and progress['total_items'] > 0 else 0
+                'isUnlocked': is_unlocked,
+                'progress': 100 if is_complete else 0
             })
         
         conn.close()
@@ -882,9 +1019,511 @@ def get_segment_sentences(goal_id, segment_index):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# --- Assessment API ---
+
+@app.route('/api/assessment/profile', methods=['GET'])
+def get_assessment_profile():
+    """Get the user's latest assessment profile"""
+    try:
+        conn = get_db_connection()
+        # Get the most recent profile
+        profile = conn.execute('''
+            SELECT * FROM assessment_profiles ORDER BY updated_at DESC LIMIT 1
+        ''').fetchone()
+        conn.close()
+        
+        if not profile:
+            # Return empty structure if no profile exists
+            return jsonify(None)
+            
+        p = dict(profile)
+        return jsonify({
+            'id': p['id'],
+            'targetLanguage': p['target_language'],
+            'targetContent': p['target_content'],
+            'listeningLevel': p['listening_level'],
+            'subtitleDependence': p['subtitle_dependence'],
+            'difficulties': json.loads(p['difficulties']) if p['difficulties'] else [],
+            'updatedAt': p['updated_at']
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assessment/profile', methods=['POST'])
+def save_assessment_profile():
+    """Create or update assessment profile"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+        
+    try:
+        conn = get_db_connection()
+        
+        profile_id = str(uuid.uuid4())
+        timestamp = int(data.get('completedAt', 0)) or 0
+        if timestamp == 0:
+             import time
+             timestamp = int(time.time() * 1000)
+        
+        conn.execute('''
+            INSERT INTO assessment_profiles 
+            (id, target_language, target_content, listening_level, subtitle_dependence, difficulties, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            profile_id,
+            data.get('targetLanguage', 'en'),
+            data.get('targetContent', 'general'),
+            data.get('listeningLevel', 2),
+            data.get('subtitleDependence', 1),
+            json.dumps(data.get('difficulties', [])),
+            timestamp,
+            timestamp
+        ))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'id': profile_id}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assessment/results', methods=['GET'])
+def get_assessment_results():
+    """Get recent mini-test results"""
+    try:
+        conn = get_db_connection()
+        # Get last 5 test results
+        results = conn.execute('''
+            SELECT * FROM mini_test_results ORDER BY taken_at DESC LIMIT 5
+        ''').fetchall()
+        
+        if not results:
+            conn.close()
+            return jsonify([])
+
+        output_list = []
+        for res in results:
+            r = dict(res)
+            
+            details = conn.execute('''
+                SELECT * FROM mini_test_details WHERE result_id = ? ORDER BY question_index
+            ''', (r['id'],)).fetchall()
+            
+            test_responses = []
+            for d in details:
+                det = dict(d)
+                test_responses.append({
+                    'sentenceId': det['question_index'], # Mapping index to ID for frontend compat
+                    'sentence': det['sentence'],
+                    'understood': bool(det['understood']),
+                    'replays': det['replays'],
+                    'reactionTimeMs': det['reaction_time_ms'],
+                    'markedIndices': json.loads(det['marked_indices']) if det['marked_indices'] else []
+                })
+
+            analysis = json.loads(r['analysis_json']) if r['analysis_json'] else None
+            
+            output_list.append({
+                'id': r['id'],
+                'takenAt': r['taken_at'],
+                'score': r['score'],
+                'totalQuestions': r['total_questions'],
+                'analysis': analysis,
+                'responses': test_responses
+            })
+            
+        conn.close()
+        return jsonify(output_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/assessment/results', methods=['POST'])
+def save_assessment_result():
+    """Save a full test result with details"""
+    data = request.json
+    if not data:
+         return jsonify({'error': 'No data provided'}), 400
+
+    # Data expected: { responses: [...], analysis: {...} }
+    responses = data.get('responses', [])
+    analysis = data.get('analysis', {})
+    
+    if not responses:
+        return jsonify({'error': 'No responses provided'}), 400
+        
+    try:
+        conn = get_db_connection()
+        
+        result_id = str(uuid.uuid4())
+        import time
+        taken_at = int(time.time() * 1000)
+        
+        # Calculate stats
+        total_questions = len(responses)
+        score = sum(1 for r in responses if r.get('understood', False))
+        
+        conn.execute('''
+            INSERT INTO mini_test_results 
+            (id, taken_at, score, total_questions, analysis_json)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            result_id,
+            taken_at,
+            score,
+            total_questions,
+            json.dumps(analysis)
+        ))
+        
+        # Insert details
+        for i, resp in enumerate(responses):
+            conn.execute('''
+                INSERT INTO mini_test_details
+                (id, result_id, question_index, sentence, understood, replays, reaction_time_ms, marked_indices)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                str(uuid.uuid4()),
+                result_id,
+                i, # Use index as order
+                resp.get('sentence', ''),
+                resp.get('understood', False),
+                resp.get('replays', 0),
+                resp.get('reactionTimeMs', 0),
+                json.dumps(resp.get('markedIndices', [])) # Frontend sends 'markedIndices'
+            ))
+            
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'id': result_id}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# --- Segment Learning API (Test-Learn-Watch Flow) ---
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/mastery', methods=['GET'])
+def get_segment_mastery(goal_id, segment_index):
+    """Get mastery status for a segment"""
+    try:
+        conn = get_db_connection()
+        
+        mastery = conn.execute('''
+            SELECT * FROM segment_mastery WHERE goal_id = ? AND segment_index = ?
+        ''', (goal_id, segment_index)).fetchone()
+        
+        conn.close()
+        
+        if mastery:
+            return jsonify({
+                'testAttempts': mastery['test_attempts'],
+                'bestAccuracy': mastery['best_accuracy'],
+                'isMastered': bool(mastery['is_mastered']),
+                'videoWatched': bool(mastery['video_watched']),
+                'lastTestAt': mastery['last_test_at']
+            })
+        else:
+            return jsonify({
+                'testAttempts': 0,
+                'bestAccuracy': 0.0,
+                'isMastered': False,
+                'videoWatched': False,
+                'lastTestAt': None
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/test', methods=['POST'])
+def save_segment_test(goal_id, segment_index):
+    """Save a segment test result with AI-generated sentences and user responses"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    sentences = data.get('sentences', [])  # AI-generated test sentences
+    responses = data.get('responses', [])  # User behavior data
+    analysis = data.get('analysis', {})    # AI feedback
+    
+    if not sentences or not responses:
+        return jsonify({'error': 'Missing sentences or responses'}), 400
+    
+    try:
+        conn = get_db_connection()
+        import time
+        taken_at = int(time.time() * 1000)
+        
+        # Get current attempt number
+        existing = conn.execute('''
+            SELECT MAX(attempt_number) as max_attempt FROM segment_tests 
+            WHERE goal_id = ? AND segment_index = ?
+        ''', (goal_id, segment_index)).fetchone()
+        
+        attempt_number = (existing['max_attempt'] or 0) + 1
+        
+        # Calculate score
+        total_questions = len(responses)
+        score = sum(1 for r in responses if r.get('understood', False))
+        accuracy = score / total_questions if total_questions > 0 else 0.0
+        
+        test_id = str(uuid.uuid4())
+        
+        # Save test
+        conn.execute('''
+            INSERT INTO segment_tests 
+            (id, goal_id, segment_index, attempt_number, sentences_json, taken_at, score, total_questions, accuracy, analysis_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            test_id,
+            goal_id,
+            segment_index,
+            attempt_number,
+            json.dumps(sentences),
+            taken_at,
+            score,
+            total_questions,
+            accuracy,
+            json.dumps(analysis)
+        ))
+        
+        # Save test details (user behavior)
+        for i, resp in enumerate(responses):
+            conn.execute('''
+                INSERT INTO segment_test_details
+                (id, test_id, question_index, sentence, understood, replays, reaction_time_ms, marked_indices)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                str(uuid.uuid4()),
+                test_id,
+                i,
+                resp.get('sentence', ''),
+                resp.get('understood', False),
+                resp.get('replays', 0),
+                resp.get('reactionTimeMs', 0),
+                json.dumps(resp.get('markedIndices', []))
+            ))
+        
+        # Update mastery record
+        conn.execute('''
+            INSERT INTO segment_mastery (goal_id, segment_index, test_attempts, best_accuracy, is_mastered, last_test_at)
+            VALUES (?, ?, 1, ?, ?, ?)
+            ON CONFLICT(goal_id, segment_index) DO UPDATE SET
+                test_attempts = test_attempts + 1,
+                best_accuracy = MAX(best_accuracy, excluded.best_accuracy),
+                is_mastered = CASE WHEN excluded.best_accuracy >= 0.8 THEN TRUE ELSE is_mastered END,
+                last_test_at = excluded.last_test_at
+        ''', (goal_id, segment_index, accuracy, accuracy >= 0.8, taken_at))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'status': 'success',
+            'testId': test_id,
+            'attemptNumber': attempt_number,
+            'score': score,
+            'accuracy': accuracy,
+            'isMastered': accuracy >= 0.8
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/tests', methods=['GET'])
+def get_segment_tests(goal_id, segment_index):
+    """Get all test attempts for a segment"""
+    try:
+        conn = get_db_connection()
+        
+        tests = conn.execute('''
+            SELECT * FROM segment_tests 
+            WHERE goal_id = ? AND segment_index = ?
+            ORDER BY attempt_number DESC
+        ''', (goal_id, segment_index)).fetchall()
+        
+        result = []
+        for test in tests:
+            t = dict(test)
+            
+            # Get details for this test
+            details = conn.execute('''
+                SELECT * FROM segment_test_details WHERE test_id = ? ORDER BY question_index
+            ''', (t['id'],)).fetchall()
+            
+            test_responses = []
+            for d in details:
+                det = dict(d)
+                test_responses.append({
+                    'sentence': det['sentence'],
+                    'understood': bool(det['understood']),
+                    'replays': det['replays'],
+                    'reactionTimeMs': det['reaction_time_ms'],
+                    'markedIndices': json.loads(det['marked_indices']) if det['marked_indices'] else []
+                })
+            
+            result.append({
+                'id': t['id'],
+                'attemptNumber': t['attempt_number'],
+                'takenAt': t['taken_at'],
+                'score': t['score'],
+                'totalQuestions': t['total_questions'],
+                'accuracy': t['accuracy'],
+                'sentences': json.loads(t['sentences_json']) if t['sentences_json'] else [],
+                'analysis': json.loads(t['analysis_json']) if t['analysis_json'] else None,
+                'responses': test_responses
+            })
+        
+        conn.close()
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/lessons', methods=['POST'])
+def save_segment_lessons(goal_id, segment_index):
+    """Save AI-generated lessons based on test mistakes"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    test_id = data.get('testId')
+    lessons = data.get('lessons', [])  # Array of lesson objects
+    
+    if not lessons:
+        return jsonify({'error': 'No lessons provided'}), 400
+    
+    try:
+        conn = get_db_connection()
+        import time
+        created_at = int(time.time() * 1000)
+        
+        lesson_ids = []
+        for lesson in lessons:
+            lesson_id = str(uuid.uuid4())
+            conn.execute('''
+                INSERT INTO segment_lessons 
+                (id, goal_id, segment_index, test_id, lesson_type, content_json, created_at, completed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, FALSE)
+            ''', (
+                lesson_id,
+                goal_id,
+                segment_index,
+                test_id,
+                lesson.get('type', 'general'),
+                json.dumps(lesson.get('content', {})),
+                created_at
+            ))
+            lesson_ids.append(lesson_id)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'status': 'success',
+            'lessonIds': lesson_ids,
+            'count': len(lesson_ids)
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/lessons', methods=['GET'])
+def get_segment_lessons(goal_id, segment_index):
+    """Get all lessons for a segment"""
+    try:
+        conn = get_db_connection()
+        
+        lessons = conn.execute('''
+            SELECT * FROM segment_lessons 
+            WHERE goal_id = ? AND segment_index = ?
+            ORDER BY created_at DESC
+        ''', (goal_id, segment_index)).fetchall()
+        
+        result = []
+        for lesson in lessons:
+            l = dict(lesson)
+            result.append({
+                'id': l['id'],
+                'testId': l['test_id'],
+                'type': l['lesson_type'],
+                'content': json.loads(l['content_json']) if l['content_json'] else {},
+                'createdAt': l['created_at'],
+                'completed': bool(l['completed'])
+            })
+        
+        conn.close()
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/lessons/<lesson_id>/complete', methods=['POST'])
+def complete_segment_lesson(goal_id, segment_index, lesson_id):
+    """Mark a lesson as completed"""
+    try:
+        conn = get_db_connection()
+        
+        conn.execute('''
+            UPDATE segment_lessons SET completed = TRUE WHERE id = ?
+        ''', (lesson_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/segment-learning/<goal_id>/<int:segment_index>/watch', methods=['POST'])
+def mark_segment_watched(goal_id, segment_index):
+    """Mark a segment as watched (video completed)"""
+    try:
+        conn = get_db_connection()
+        import time
+        
+        conn.execute('''
+            INSERT INTO segment_mastery (goal_id, segment_index, video_watched)
+            VALUES (?, ?, TRUE)
+            ON CONFLICT(goal_id, segment_index) DO UPDATE SET video_watched = TRUE
+        ''', (goal_id, segment_index))
+        
+        # Update overall progress in goal_videos
+        mastery_records = conn.execute('''
+            SELECT COUNT(*) as watched FROM segment_mastery 
+            WHERE goal_id = ? AND video_watched = TRUE
+        ''', (goal_id,)).fetchone()
+        
+        goal = conn.execute('''
+            SELECT total_segments FROM goal_videos WHERE id = ?
+        ''', (goal_id,)).fetchone()
+        
+        if goal and goal['total_segments'] > 0:
+            progress = mastery_records['watched'] / goal['total_segments']
+            conn.execute('''
+                UPDATE goal_videos SET 
+                    overall_progress = ?,
+                    completed_segments = ?,
+                    last_studied_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (progress, mastery_records['watched'], goal_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     # init_db() # Run here too to be safe
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 3001))
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 

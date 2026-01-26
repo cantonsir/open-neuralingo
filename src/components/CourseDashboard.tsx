@@ -1,26 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Play, Lock, CheckCircle, Clock, BookOpen, Loader2, Target } from 'lucide-react';
+import { ArrowLeft, Play, Lock, CheckCircle, Clock, BookOpen, Loader2, Target, Headphones } from 'lucide-react';
 import { api, GoalVideoDetail, Segment } from '../db';
 
 interface CourseDashboardProps {
     goalId: string;
     onBack: () => void;
-    onStartLesson: (goalId: string, segmentIndex: number) => void;
+    onStartLesson: (goalId: string, segmentIndex: number, videoId: string, startTime: number, endTime: number) => void;
+    onWatchVideo: (videoId: string) => void;
+    cachedGoal?: GoalVideoDetail;
+    onCacheUpdate?: (goalId: string) => void;
 }
 
-const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onStartLesson }) => {
-    const [goal, setGoal] = useState<GoalVideoDetail | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onStartLesson, onWatchVideo, cachedGoal, onCacheUpdate }) => {
+    const [goal, setGoal] = useState<GoalVideoDetail | null>(cachedGoal || null);
+    const [isLoading, setIsLoading] = useState(!cachedGoal);
 
     useEffect(() => {
-        loadGoal();
-    }, [goalId]);
+        if (!cachedGoal) {
+            loadGoal();
+        } else {
+            // If we have a cache but goalId changed (unlikely given keying, but good practice), or just to be safe:
+            if (goal?.id !== goalId) {
+                setGoal(cachedGoal);
+                setIsLoading(false);
+            }
+        }
+    }, [goalId, cachedGoal]);
 
     const loadGoal = async () => {
         setIsLoading(true);
         const fetchedGoal = await api.fetchGoal(goalId);
         setGoal(fetchedGoal);
         setIsLoading(false);
+        if (fetchedGoal && onCacheUpdate) {
+            onCacheUpdate(goalId);
+        }
     };
 
     const formatTime = (seconds: number): string => {
@@ -51,8 +65,9 @@ const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onSta
         );
     }
 
+    const completedCount = goal.segments.filter(s => s.isUnlocked && s.progress >= 80).length;
     const overallProgress = goal.segments.length > 0
-        ? goal.segments.reduce((sum, s) => sum + (s.isUnlocked ? s.progress : 0), 0) / goal.segments.length
+        ? (completedCount / goal.segments.length) * 100
         : 0;
 
     return (
@@ -95,7 +110,7 @@ const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onSta
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <Target className="w-4 h-4" />
-                                    {Math.round(overallProgress)}% complete
+                                    {completedCount}/{goal.segments.length} completed
                                 </span>
                             </div>
 
@@ -110,9 +125,11 @@ const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onSta
                             </div>
 
                             <button
-                                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-lg hover:from-green-400 hover:to-emerald-400 shadow-lg shadow-green-500/25 transition-all"
+                                onClick={() => goal && onWatchVideo(goal.videoId)}
+                                className="group flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-400 hover:to-purple-500 shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 transition-all hover:-translate-y-0.5"
                             >
-                                🎯 Test on Real Video
+                                <Headphones className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                Practice with Full Video
                             </button>
                         </div>
                     </div>
@@ -134,7 +151,7 @@ const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onSta
                         return (
                             <div
                                 key={segment.index}
-                                onClick={() => isClickable && onStartLesson(goalId, segment.index)}
+                                onClick={() => isClickable && onStartLesson(goalId, segment.index, goal.videoId, segment.startTime, segment.endTime)}
                                 className={`
                                     flex items-center gap-4 p-4 rounded-xl border transition-all
                                     ${isClickable
@@ -178,26 +195,17 @@ const CourseDashboard: React.FC<CourseDashboardProps> = ({ goalId, onBack, onSta
                                 </div>
 
                                 {/* Progress */}
-                                {segment.isUnlocked && (
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-24">
-                                            <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${segment.progress >= 80
-                                                            ? 'bg-green-500'
-                                                            : 'bg-yellow-500'
-                                                        }`}
-                                                    style={{ width: `${Math.min(100, segment.progress)}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                        <span className={`text-sm font-medium w-10 ${segment.progress >= 80
-                                                ? 'text-green-500'
-                                                : 'text-yellow-500'
-                                            }`}>
-                                            {Math.round(segment.progress)}%
-                                        </span>
+                                {segment.isUnlocked && status === 'completed' && (
+                                    <div className="flex items-center gap-2 text-green-500">
+                                        <CheckCircle className="w-5 h-5" />
+                                        <span className="text-sm font-medium">Done</span>
                                     </div>
+                                )}
+
+                                {segment.isUnlocked && status === 'in-progress' && (
+                                    <span className="text-xs text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-500/20 px-2 py-1 rounded font-medium">
+                                        In Progress
+                                    </span>
                                 )}
 
                                 {!segment.isUnlocked && (

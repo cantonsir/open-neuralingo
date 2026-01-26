@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     ChevronRight,
     ChevronLeft,
+    ChevronDown,
     Check,
     Globe,
     Tv,
@@ -37,6 +38,11 @@ interface TestResponse {
 interface SelfAssessmentProps {
     onComplete: () => void;
     onStartTest: () => void;
+    cachedProfile?: AssessmentResult | null;
+    cachedResults?: any[] | null;
+    isLoaded?: boolean;
+    onProfileUpdate?: (profile: AssessmentResult | null) => void;
+    onResultsUpdate?: (results: any[] | null) => void;
 }
 
 // Question data
@@ -82,26 +88,29 @@ const difficulties = [
     { id: 'multi', label: 'Multi-speaker', icon: '👥' },
 ];
 
-export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessmentProps) {
+export default function SelfAssessment({ 
+    onComplete, 
+    onStartTest,
+    cachedProfile,
+    cachedResults,
+    isLoaded = false,
+    onProfileUpdate,
+    onResultsUpdate
+}: SelfAssessmentProps) {
     const [mode, setMode] = useState<'results' | 'assessment'>('results');
-    const [savedAssessment, setSavedAssessment] = useState<AssessmentResult | null>(null);
-    const [savedTestResults, setSavedTestResults] = useState<TestResponse[] | null>(null);
+    const [savedAssessment, setSavedAssessment] = useState<AssessmentResult | null>(cachedProfile || null);
+    const [savedTestResults, setSavedTestResults] = useState<any[] | null>(cachedResults || null);
 
-    // Check for existing results on mount
+    // Use cached data from props - no fetch needed!
     useEffect(() => {
-        const assessment = localStorage.getItem('assessment_result');
-        const testResults = localStorage.getItem('minitest_results');
-
-        if (assessment) {
-            setSavedAssessment(JSON.parse(assessment));
-        } else {
-            setMode('assessment');
+        if (isLoaded) {
+            setSavedAssessment(cachedProfile || null);
+            setSavedTestResults(cachedResults || null);
+            if (!cachedProfile) {
+                setMode('assessment');
+            }
         }
-
-        if (testResults) {
-            setSavedTestResults(JSON.parse(testResults));
-        }
-    }, []);
+    }, [cachedProfile, cachedResults, isLoaded]);
 
     const [step, setStep] = useState(0);
     const [answers, setAnswers] = useState({
@@ -126,8 +135,11 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
     };
 
     const [showComplete, setShowComplete] = useState(false);
+    const [isReviewExpanded, setIsReviewExpanded] = useState(false);
+    const [isAIFeedbackExpanded, setIsAIFeedbackExpanded] = useState(true);
+    const [isDetailedReviewExpanded, setIsDetailedReviewExpanded] = useState(false);
 
-    const handleNext = () => {
+    const handleNext = async () => {
         if (step < totalSteps - 1) {
             setStep(step + 1);
         } else {
@@ -136,8 +148,21 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
                 ...answers,
                 completedAt: Date.now(),
             };
-            localStorage.setItem('assessment_result', JSON.stringify(result));
-            setShowComplete(true);
+
+            try {
+                await fetch('/api/assessment/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(result)
+                });
+
+                setSavedAssessment(result); // Optimistic update
+                onProfileUpdate?.(result); // Update parent cache
+                setShowComplete(true);
+            } catch (error) {
+                console.error("Failed to save profile:", error);
+                // Optionally show error toast
+            }
         }
     };
 
@@ -146,16 +171,35 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
     const getContentLabel = (id: string) => contentTypes.find(c => c.id === id)?.label || id;
     const getDifficultyLabel = (id: string) => difficulties.find(d => d.id === id)?.label || id;
 
+    // Show loading state while data is being fetched at app level
+    if (!isLoaded) {
+        return (
+            <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-gray-50 to-purple-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-purple-900/10">
+                <div className="text-center">
+                    <div className="w-12 h-12 mx-auto mb-4 border-4 border-purple-200 border-t-purple-500 rounded-full animate-spin"></div>
+                    <p className="text-gray-500 dark:text-gray-400">Loading your profile...</p>
+                </div>
+            </div>
+        );
+    }
+
     // Results Dashboard View
     if (mode === 'results' && savedAssessment) {
-        const understoodCount = savedTestResults
-            ? savedTestResults.filter(r => r.understood).length
-            : 0;
-        const totalReplays = savedTestResults
-            ? savedTestResults.reduce((sum, r) => sum + r.replays, 0)
-            : 0;
-        const avgThinkingTime = savedTestResults && savedTestResults.length > 0
-            ? savedTestResults.reduce((sum, r) => sum + r.reactionTimeMs, 0) / savedTestResults.length
+        // Get the latest result if multiple exist
+        const latestResult = savedTestResults && savedTestResults.length > 0
+            ? savedTestResults[0] // API returns ordered by taken_at DESC
+            : null;
+
+        const understoodCount = latestResult?.score || 0;
+
+        // Calculate total replays from responses if available, or just use what we have (API ensures structure)
+        // Since API returns { score, totalQuestions, responses: [...] }, we need to check structure
+        // Let's assume we want to show the latest result stats
+        const latestResponses = latestResult?.responses || [];
+        const totalReplays = latestResponses.reduce((sum: number, r: any) => sum + (r.replays || 0), 0);
+
+        const avgThinkingTime = latestResponses.length > 0
+            ? latestResponses.reduce((sum: number, r: any) => sum + (r.reactionTimeMs || 0), 0) / latestResponses.length
             : 0;
 
         return (
@@ -227,25 +271,163 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
                             <Trophy size={20} className="text-green-500" />
                             Part B: Mini-Test Results
                         </h2>
-                        {savedTestResults ? (
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-purple-600">{understoodCount}/10</div>
-                                    <div className="text-xs text-gray-500">Understood</div>
+                        {latestResult ? (
+                            <>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 text-center">
+                                        <div className="text-3xl font-bold text-purple-600">{understoodCount}/10</div>
+                                        <div className="text-xs text-gray-500">Understood</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 text-center">
+                                        <div className="text-3xl font-bold text-blue-600">{totalReplays}</div>
+                                        <div className="text-xs text-gray-500">Total Replays</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 text-center">
+                                        <div className="text-3xl font-bold text-green-600">{(avgThinkingTime / 1000).toFixed(1)}s</div>
+                                        <div className="text-xs text-gray-500">Avg Thinking Time</div>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 rounded-xl p-4 text-center">
+                                        <div className="text-3xl font-bold text-orange-600">{latestResult.totalQuestions || 10}</div>
+                                        <div className="text-xs text-gray-500">Questions</div>
+                                    </div>
                                 </div>
-                                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-blue-600">{totalReplays}</div>
-                                    <div className="text-xs text-gray-500">Total Replays</div>
-                                </div>
-                                <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-green-600">{(avgThinkingTime / 1000).toFixed(1)}s</div>
-                                    <div className="text-xs text-gray-500">Avg Thinking Time</div>
-                                </div>
-                                <div className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 rounded-xl p-4 text-center">
-                                    <div className="text-3xl font-bold text-orange-600">{savedTestResults.length}</div>
-                                    <div className="text-xs text-gray-500">Questions</div>
-                                </div>
-                            </div>
+
+                                {/* AI Analysis Section */}
+                                {latestResult.analysis && (
+                                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+                                        <button
+                                            onClick={() => setIsAIFeedbackExpanded(!isAIFeedbackExpanded)}
+                                            className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <Sparkles size={18} className="text-purple-500" />
+                                                AI Feedback
+                                            </span>
+                                            <ChevronDown 
+                                                size={20} 
+                                                className={`text-gray-400 transition-transform duration-200 ${isAIFeedbackExpanded ? 'rotate-180' : ''}`} 
+                                            />
+                                        </button>
+
+                                        {isAIFeedbackExpanded && (
+                                            <>
+                                                <div className="bg-purple-50 dark:bg-purple-900/10 rounded-xl p-4 mb-4">
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                                                        "{latestResult.analysis.summary}"
+                                                    </p>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-4">
+                                                        <div className="text-xs font-bold text-green-700 dark:text-green-400 mb-2 uppercase tracking-wide">Strengths</div>
+                                                        <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                            {latestResult.analysis.strengths?.map((s: string, i: number) => (
+                                                                <li key={i} className="flex items-start gap-2">
+                                                                    <span className="mt-1.5 w-1 h-1 rounded-full bg-green-500" />
+                                                                    {s}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                    <div className="bg-orange-50 dark:bg-orange-900/10 rounded-xl p-4">
+                                                        <div className="text-xs font-bold text-orange-700 dark:text-orange-400 mb-2 uppercase tracking-wide">Focus Areas</div>
+                                                        <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                                            {latestResult.analysis.weaknesses?.map((w: string, i: number) => (
+                                                                <li key={i} className="flex items-start gap-2">
+                                                                    <span className="mt-1.5 w-1 h-1 rounded-full bg-orange-500" />
+                                                                    {w}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Detailed Sentence Review */}
+                                {Array.isArray(latestResult.responses) && latestResult.responses.length > 0 && (
+                                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800">
+                                        <button
+                                            onClick={() => setIsDetailedReviewExpanded(!isDetailedReviewExpanded)}
+                                            className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                Detailed Review
+                                                <span className="text-xs font-normal text-gray-400">({latestResult.responses.length} questions)</span>
+                                            </span>
+                                            <ChevronDown 
+                                                size={20} 
+                                                className={`text-gray-400 transition-transform duration-200 ${isDetailedReviewExpanded ? 'rotate-180' : ''}`} 
+                                            />
+                                        </button>
+                                        
+                                        {isDetailedReviewExpanded && (
+                                            <div className="space-y-3">
+                                                {latestResult.responses.map((resp: any, i: number) => (
+                                                    <div key={i} className={`p-4 rounded-xl border ${resp.understood
+                                                        ? 'bg-white dark:bg-gray-800/50 border-gray-100 dark:border-gray-800'
+                                                        : 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/30'
+                                                        }`}>
+                                                        <div className="flex items-start justify-between gap-4 mb-2">
+                                                            <span className="text-xs font-medium text-gray-400">Question {i + 1}</span>
+                                                            {resp.understood ? (
+                                                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Understood</span>
+                                                            ) : (
+                                                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">Missed</span>
+                                                            )}
+                                                        </div>
+
+                                                        <p className="text-gray-800 dark:text-gray-200 text-lg mb-3">
+                                                            {resp.sentence.split(' ').map((word: string, wIdx: number) => {
+                                                                const isMarked = resp.markedIndices?.includes(wIdx) || resp.markedWordIndices?.includes(wIdx);
+                                                                return (
+                                                                    <span key={wIdx} className={isMarked ? "text-red-500 font-bold underline decoration-red-300 underline-offset-4" : ""}>
+                                                                        {word}{" "}
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </p>
+
+                                                        <div className="flex items-center flex-wrap gap-4 text-xs text-gray-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <RotateCcw size={12} /> {resp.replays} Replays
+                                                            </span>
+                                                            <span className="flex items-center gap-1">
+                                                                <Clock size={12} /> {(resp.reactionTimeMs / 1000).toFixed(1)}s Thinking
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Show slider feedback if available */}
+                                                        {!resp.understood && resp.wordBoundaries !== undefined && (
+                                                            <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                                                <div className="text-xs font-medium text-gray-500 mb-2">Self-Assessment:</div>
+                                                                <div className="flex flex-wrap gap-2 text-xs">
+                                                                    <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">
+                                                                        Boundaries: {resp.wordBoundaries}/5
+                                                                    </span>
+                                                                    <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                                                                        Familiarity: {resp.familiarity}/5
+                                                                    </span>
+                                                                    <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded">
+                                                                        Meaning: {resp.meaningClarity}/5
+                                                                    </span>
+                                                                    {resp.wordConfusion !== undefined && (
+                                                                        <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded">
+                                                                            Confusion: {resp.wordConfusion}/5
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         ) : (
                             <div className="text-center py-6">
                                 <p className="text-gray-500 dark:text-gray-400 mb-4">
@@ -258,6 +440,15 @@ export default function SelfAssessment({ onComplete, onStartTest }: SelfAssessme
                                     <Play size={18} />
                                     Take Mini-Test
                                 </button>
+                            </div>
+                        )}
+
+                        {/* History Link / Previous Results could go here */}
+                        {savedTestResults && savedTestResults.length > 1 && (
+                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                <p className="text-xs text-gray-400 text-center">
+                                    Showing latest result. You have {savedTestResults.length} past results.
+                                </p>
                             </div>
                         )}
                     </div>

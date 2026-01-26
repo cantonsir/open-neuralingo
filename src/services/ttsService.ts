@@ -104,8 +104,16 @@ async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
 
     const { text, voiceName = 'Kore' } = options;
 
+    // Sanitize text: Remove markdown characters that might be spoken or confuse TTS
+    const sanitizedText = text
+        .replace(/[*_`~]/g, '') // Remove * _ ` ~
+        .replace(/\[.*?\]/g, '') // Remove [text in brackets]
+        .replace(/\(.*?\)/g, '') // Remove (text in parens) - optional, but good precaution
+        .trim();
+
     // Debug: Log exactly what we're sending to TTS
-    console.log('TTS Request - Text being sent:', text);
+    console.log('TTS Request - Original:', text);
+    console.log('TTS Request - Sanitized:', sanitizedText);
 
     // NOTE: The text is spoken directly. Style prompts like "Say clearly:" 
     // were being spoken aloud as part of the audio, causing mismatch with transcript.
@@ -119,7 +127,7 @@ async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{
-                        parts: [{ text: text }]
+                        parts: [{ text: sanitizedText }]
                     }],
                     generationConfig: {
                         responseModalities: ['AUDIO'],
