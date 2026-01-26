@@ -63,7 +63,8 @@ You need to run **both** the backend and frontend terminals.
 Make sure you are in the root directory of the project.
 ```bash
 python backend/server.py
-C:\Users\Jayden\anaconda3\python.exe backend/server.py
+# If using specific python install/env:
+# /path/to/python backend/server.py
 ```
 *(Runs on http://localhost:5000)*
 
@@ -73,8 +74,9 @@ npm run dev
 ```
 *(Runs on http://localhost:3000)*
 
-**delete port**
-```
+**Troubleshooting: Port 5000 in use**
+If you encounter a "Address already in use" error:
+```bash
 npx kill-port 5000
 ```
 

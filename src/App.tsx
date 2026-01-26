@@ -28,6 +28,7 @@ import ReadingDashboard from './components/reading/ReadingDashboard';
 import SpeakingDashboard from './components/speaking/SpeakingDashboard';
 import WritingDashboard from './components/writing/WritingDashboard';
 import { api, GoalVideo, GoalVideoDetail } from './db';
+import { useDeck } from './hooks/useDeck';
 
 type Theme = 'dark' | 'light';
 
@@ -86,7 +87,7 @@ function App() {
   const [tempSegment, setTempSegment] = useState<{ start: number, end: number } | null>(null);
   const [pendingSegment, setPendingSegment] = useState<{ start: number, end: number } | null>(null);
 
-  const [savedCards, setSavedCards] = useState<Marker[]>([]);
+  const { savedCards, saveCard, deleteCard, updateCard } = useDeck();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Learning Section navigation state
@@ -185,68 +186,28 @@ function App() {
     }
   }, []);
 
-  // Load saved cards on mount
-  useEffect(() => {
-    const loadCards = async () => {
-      // 1. Migration: Check localStorage
-      const local = localStorage.getItem('saved_flashcards');
-      if (local) {
-        try {
-          const localCards: Marker[] = JSON.parse(local);
-          console.log("Migrating cards to DB...", localCards.length);
-          for (const c of localCards) {
-            await api.saveCard(c);
-          }
-          localStorage.removeItem('saved_flashcards');
-        } catch (e) {
-          console.error("Migration failed", e);
-        }
-      }
-
-      // 2. Load from DB
-      const cards = await api.fetchCards();
-      setSavedCards(cards);
-    };
-    loadCards();
-  }, []);
-
-  // Save cards handler
+  // Wrappers to maintain compatibility and add UI feedback (alerts)
   const handleSaveToDeck = async (marker: Marker) => {
-    // Optimistic UI update
-    setSavedCards(prev => {
-      if (prev.some(c => c.id === marker.id)) return prev;
-      return [...prev, marker];
-    });
-
     try {
-      await api.saveCard(marker);
+      await saveCard(marker);
     } catch (e) {
-      console.error("Failed to save card to DB", e);
-      // Revert if failed (optional, but good practice)
-      setSavedCards(prev => prev.filter(c => c.id !== marker.id));
       alert("Failed to save to database");
     }
   };
 
   const handleDeleteFromDeck = async (id: string) => {
-    setSavedCards(prev => prev.filter(c => c.id !== id));
     try {
-      await api.deleteCard(id);
+      await deleteCard(id);
     } catch (e) {
-      console.error("Failed to delete card", e);
       alert("Failed to delete from database");
-      // Revert logic could go here (fetching again)
-      const cards = await api.fetchCards();
-      setSavedCards(cards);
     }
   };
 
   const handleUpdateCard = async (id: string, updates: Partial<Marker>) => {
-    setSavedCards(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
     try {
-      await api.updateCard(id, updates);
+      await updateCard(id, updates);
     } catch (e) {
-      console.error("Failed to update card", e);
+      // console.error handled in hook
     }
   };
 
