@@ -37,43 +37,11 @@ EchoLoop helps language learners improve their skills through interactive exerci
 - **Grammar Correction**: Get detailed corrections and suggestions
 - **Session History**: Review past writing sessions and improvements
 
-## Architecture
+## Architecture Overview
 
-```mermaid
-graph TB
-    subgraph frontend [Frontend - Port 3000]
-        App[App.tsx]
-        subgraph modules [Learning Modules]
-            L[Listening]
-            R[Reading]
-            S[Speaking]
-            W[Writing]
-        end
-        subgraph services [AI Services]
-            GS[Gemini API]
-            TTS[Text-to-Speech]
-            Live[Live Conversation]
-        end
-    end
-    
-    subgraph backend [Backend - Port 3001]
-        Flask[Flask API]
-        subgraph routes [API Routes]
-            Cards[/api/cards]
-            Goals[/api/goals]
-            History[/api/history]
-            Library[/api/library]
-            Assessment[/api/assessment]
-        end
-        DB[(SQLite)]
-    end
-    
-    App --> L & R & S & W
-    modules --> services
-    frontend -->|Proxy /api/*| Flask
-    Flask --> routes
-    routes --> DB
-```
+<div align="center">
+  <img width="600" alt="EchoLoop Architecture" src="docs/architecture.svg" />
+</div>
 
 ## Tech Stack
 
@@ -130,7 +98,7 @@ graph TB
    
    Edit `.env.local`:
    ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
+   VITE_GEMINI_API_KEY=your_gemini_api_key_here
    ```
 
 ### Running the Application
@@ -185,8 +153,8 @@ See [.env.example](.env.example) for all available environment variables.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Google Gemini API key for AI features |
-| `CLOUD_TTS_API_KEY` | No | Google Cloud TTS API key for higher quality voices |
+| `VITE_GEMINI_API_KEY` | Yes | Google Gemini API key for AI features |
+| `VITE_CLOUD_TTS_API_KEY` | No | Google Cloud TTS API key for higher quality voices |
 
 ## Project Structure
 
