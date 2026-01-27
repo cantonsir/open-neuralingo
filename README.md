@@ -154,7 +154,7 @@ See [.env.example](.env.example) for all available environment variables.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_GEMINI_API_KEY` | Yes | Google Gemini API key for AI features |
-| `VITE_CLOUD_TTS_API_KEY` | No | Google Cloud TTS API key for higher quality voices |
+| `VITE_CLOUD_TTS_API_KEY` | Yes | Google Cloud TTS API key for higher quality voices |
 
 ## Project Structure
 
