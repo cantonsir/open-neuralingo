@@ -21,12 +21,7 @@ interface DashboardViewProps {
 }
 
 // Mock stats data (to be replaced with real data later)
-const mockStats = {
-    videosWatched: 12,
-    wordsLearned: 156,
-    practiceHours: 4.5,
-    dayStreak: 7
-};
+// wrapper for future extensions if needed
 
 function formatTimeAgo(timestamp: number): string {
     const now = Date.now();
@@ -50,17 +45,130 @@ export default function DashboardView({
 }: DashboardViewProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({
+        videosWatched: 0,
+        wordsLearned: 0,
+        practiceHours: 0,
+        dayStreak: 0
+    });
 
     useEffect(() => {
-        const loadHistory = async () => {
-            // In a real app, we might check if this component is still mounted
-            setLoading(false);
-            const data = await api.fetchHistory();
-            setHistory(data);
-            setLoading(false);
+        const loadData = async () => {
+            setLoading(true);
+            try {
+                const historyData = await api.fetchHistory();
+                setHistory(historyData);
+
+                // Calculate Stats
+
+                // 1. Practice Hours (Time)
+                // specific duration logic or default to 5 mins per video if missing
+                const totalSeconds = historyData.reduce((acc, item) => {
+                    if (item.duration) {
+                        const parts = item.duration.split(':').map(Number);
+                        let seconds = 0;
+                        if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                        else if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
+                        return acc + seconds;
+                    }
+                    return acc + 300; // fallback 5 mins
+                }, 0);
+                const practiceHours = parseFloat((totalSeconds / 3600).toFixed(1));
+
+                // 2. Streak
+                // Sort by date descending
+                const sortedDates = historyData
+                    .map(item => new Date(item.watchedAt).setHours(0, 0, 0, 0))
+                    .sort((a, b) => b - a);
+
+                // Unique days
+                const uniqueDays = [...new Set(sortedDates)];
+
+                let streak = 0;
+                const today = new Date().setHours(0, 0, 0, 0);
+                const yesterday = today - 86400000;
+
+                if (uniqueDays.length > 0) {
+                    // If played today, start streak from today
+                    // If performed yesterday, start streak from yesterday (to keep it alive if not played today yet?? usually streak implies "current streak")
+                    // Usually if you haven't played today, streak is technically valid if you played yesterday.
+
+                    if (uniqueDays[0] === today) {
+                        streak = 1;
+                        for (let i = 1; i < uniqueDays.length; i++) {
+                            if (uniqueDays[i] === today - (i * 86400000)) {
+                                streak++;
+                            } else {
+                                break;
+                            }
+                        }
+                    } else if (uniqueDays[0] === yesterday) {
+                        streak = 1;
+                        for (let i = 1; i < uniqueDays.length; i++) {
+                            if (uniqueDays[i] === yesterday - (i * 86400000)) {
+                                streak++;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                setStats({
+                    videosWatched: historyData.length,
+                    wordsLearned: 0, // This is passed via props usually (savedCardsCount)
+                    practiceHours,
+                    dayStreak: streak
+                });
+
+                setLoading(false);
+            } catch (error) {
+                console.error("Failed to load dashboard data", error);
+                setLoading(false);
+            }
         };
-        loadHistory();
+        loadData();
     }, []);
+
+    // Helper to generate last 7 days data
+    const getWeeklyData = () => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const data = [];
+        const today = new Date();
+
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dayLabel = days[date.getDay()];
+
+            // Filter history for this day
+            const dayStart = new Date(date.setHours(0, 0, 0, 0)).getTime();
+            const dayEnd = new Date(date.setHours(23, 59, 59, 999)).getTime();
+
+            const dayItems = history.filter(item => {
+                const w = item.watchedAt;
+                return w >= dayStart && w <= dayEnd;
+            });
+
+            // Calculate total duration for this day (in minutes)
+            const durationMinutes = dayItems.reduce((acc, item) => {
+                if (item.duration) {
+                    const parts = item.duration.split(':').map(Number);
+                    let seconds = 0;
+                    if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    else if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
+                    return acc + seconds;
+                }
+                return acc + 300; // 5 min fallback
+            }, 0) / 60;
+
+            data.push({
+                label: dayLabel,
+                value: Math.round(durationMinutes)
+            });
+        }
+        return data;
+    };
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -225,11 +333,12 @@ export default function DashboardView({
             onStartAction={() => onNavigate('compose')}
             startActionLabel="Generate Audio"
             stats={[
-                { icon: <Play size={20} fill="currentColor" />, label: "Videos", value: history.length || mockStats.videosWatched, subtext: "Total practiced", color: "purple" },
-                { icon: <BookOpen size={20} />, label: "Words", value: savedCardsCount || mockStats.wordsLearned, subtext: "Saved to deck", color: "blue" },
-                { icon: <Clock size={20} />, label: "Time", value: `${mockStats.practiceHours}h`, subtext: "This week", color: "green" },
-                { icon: <Flame size={20} />, label: "Streak", value: mockStats.dayStreak, subtext: "Day streak 🔥", color: "orange" },
+                { icon: <Play size={20} fill="currentColor" />, label: "Videos", value: stats.videosWatched, subtext: "Total practiced", color: "purple" },
+                { icon: <BookOpen size={20} />, label: "Words", value: savedCardsCount, subtext: "Saved to deck", color: "blue" },
+                { icon: <Clock size={20} />, label: "Time", value: `${stats.practiceHours}h`, subtext: "Total time", color: "green" },
+                { icon: <Flame size={20} />, label: "Streak", value: stats.dayStreak, subtext: "Day streak 🔥", color: "orange" },
             ]}
+            weeklyData={getWeeklyData()}
             recentItems={recentVideos}
             quickActions={quickActions}
             colorTheme="orange"

@@ -51,7 +51,7 @@ export interface CommonDashboardProps {
     title: string;
     subtitle: string;
     stats: StatCardProps[];
-    weeklyActivity?: boolean[];
+    weeklyData?: { label: string; value: number }[];
     recentItems?: React.ReactNode;
     quickActions?: React.ReactNode;
     onStartAction?: () => void;
@@ -63,14 +63,16 @@ export default function CommonDashboard({
     title,
     subtitle,
     stats,
-    weeklyActivity = [true, true, true, true, true, false, false], // Default mock
+    weeklyData = [], // Default empty
     recentItems,
     quickActions,
     onStartAction,
     startActionLabel = "Start Practice",
     colorTheme = 'orange'
 }: CommonDashboardProps) {
-    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Calculate max value for scaling
+    const maxValue = Math.max(...weeklyData.map(d => d.value), 1); // Avoid div by zero
 
     // Theme configuration
     const gradients = {
@@ -98,6 +100,11 @@ export default function CommonDashboard({
 
     return (
         <div className="flex-1 overflow-y-auto">
+            {/* ... (Welcome Header remains same, omitted here for brevity if replace_file_content supports range, but I'm rewriting the whole component start usually or finding context) */}
+            {/* Actually, I will just provide the full component body related to this change or use broad enough context */}
+            {/* Since I need to replace props destructuring AND the render block, it's safer to replace a large chunk or multiple chunks. */}
+            {/* Wait, the tool is replace_file_content (single block). I will replace from props definition down to the closing of Weekly Activity div. */}
+
             {/* Welcome Header */}
             <div className={`bg-gradient-to-r ${headerGradient} px-8 py-8`}>
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -142,25 +149,34 @@ export default function CommonDashboard({
                         <TrendingUp size={20} className={textColors[colorTheme]} />
                         Weekly Activity
                     </h3>
-                    <div className="flex items-end justify-between gap-2">
-                        {weekDays.map((day, i) => (
-                            <div key={day} className="flex-1 flex flex-col items-center gap-2">
-                                <div
-                                    className={`w-full rounded-lg transition-all ${weeklyActivity[i]
-                                        ? `bg-gradient-to-t ${gradients[colorTheme]}`
-                                        : 'bg-gray-100 dark:bg-gray-800'
-                                        }`}
-                                    style={{ height: weeklyActivity[i] ? `${40 + ((i * 15) % 40)}px` : '20px' }}
-                                />
-                                <span className={`text-xs font-medium ${weeklyActivity[i]
-                                    ? textColors[colorTheme]
-                                    : 'text-gray-400'
-                                    }`}>
-                                    {day}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
+                    {weeklyData.length > 0 ? (
+                        <div className="flex items-end justify-between gap-2 h-32">
+                            {weeklyData.map((data, i) => {
+                                const heightPercentage = (data.value / maxValue) * 100;
+                                const isHighlighted = data.value > 0;
+
+                                return (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                                        <div
+                                            className={`w-full rounded-t-lg transition-all duration-500 ease-out ${isHighlighted
+                                                ? `bg-gradient-to-t ${gradients[colorTheme]}`
+                                                : 'bg-gray-100 dark:bg-gray-800'
+                                                }`}
+                                            style={{ height: isHighlighted ? `${Math.max(heightPercentage, 10)}%` : '4px' }}
+                                        />
+                                        <span className={`text-xs font-medium ${isHighlighted
+                                            ? textColors[colorTheme]
+                                            : 'text-gray-400'
+                                            }`}>
+                                            {data.label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-gray-500">No activity data available</div>
+                    )}
                 </div>
 
                 {/* Main Grid: Recent & Actions */}

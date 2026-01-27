@@ -1,61 +1,83 @@
 import React from 'react';
 
 export interface SliderValues {
-    wordBoundaries: number;  // 1-5: How easy to hear word boundaries
-    familiarity: number;     // 1-5: How familiar the word/phrase felt
-    meaningClarity: number;  // 1-5: How clear the meaning was
-    wordConfusion: number;   // 1-5: Did it sound like a different word (5 = no confusion)
+    wordBoundaries: number | null;  // 1-3 or null if not selected
+    familiarity: number | null;     // 1-3 or null if not selected (severity of unfamiliarity)
+    meaningClarity: number | null;  // 1-3 or null if not selected
+    wordConfusion: number | null;   // 1-3 or null if not selected
 }
 
-interface SliderConfig {
+interface CategoryConfig {
     key: keyof SliderValues;
     label: string;
     tooltip: string;
-    leftLabel: string;
-    rightLabel: string;
+    icon: string;
     defaultValue: number;
 }
 
-const SLIDER_CONFIGS: SliderConfig[] = [
+const CATEGORY_CONFIGS: CategoryConfig[] = [
     {
         key: 'wordBoundaries',
         label: 'Word Boundaries',
-        tooltip: 'How easy was it to hear where one word ends and the next begins?',
-        leftLabel: 'All blended',
-        rightLabel: 'Clear boundaries',
-        defaultValue: 3
+        tooltip: 'Words blend together, hard to tell where one ends',
+        icon: '🔗',
+        defaultValue: 2
     },
     {
         key: 'familiarity',
-        label: 'Familiarity',
-        tooltip: 'How familiar did this word or phrase feel when you heard it?',
-        leftLabel: 'Completely new',
-        rightLabel: 'Very familiar',
-        defaultValue: 3
+        label: 'Unfamiliar Word',
+        tooltip: 'Never heard this word/phrase before',
+        icon: '❓',
+        defaultValue: 2
     },
     {
         key: 'meaningClarity',
-        label: 'Meaning Clarity',
-        tooltip: 'How clear was the meaning at that moment?',
-        leftLabel: 'No idea',
-        rightLabel: 'Fully understood',
-        defaultValue: 3
+        label: 'Unclear Meaning',
+        tooltip: 'Heard it but didn\'t understand the meaning',
+        icon: '💭',
+        defaultValue: 2
     },
     {
         key: 'wordConfusion',
-        label: 'Word Confusion',
-        tooltip: 'Did this sound like a different word to you?',
-        leftLabel: 'Very confused',
-        rightLabel: 'No confusion',
-        defaultValue: 5
+        label: 'Misheard Word',
+        tooltip: 'Thought it was a different word',
+        icon: '🔀',
+        defaultValue: 2
     }
 ];
 
+const LEVEL_TOOLTIPS: Record<keyof SliderValues, string[]> = {
+    wordBoundaries: [
+        '',
+        '1 = Blended (very hard to separate words)',
+        '2 = Unclear (sometimes hard to separate)',
+        '3 = Slightly unclear (mostly separable)'
+    ],
+    familiarity: [
+        '',
+        '1 = Totally unfamiliar (brand new)',
+        '2 = Unfamiliar',
+        '3 = Slightly unfamiliar'
+    ],
+    meaningClarity: [
+        '',
+        '1 = No idea',
+        '2 = Unclear meaning',
+        '3 = Slight meaning (almost understood)'
+    ],
+    wordConfusion: [
+        '',
+        '1 = Very confused (misheard a lot)',
+        '2 = Confused (some mishearing)',
+        '3 = Slight confusion'
+    ],
+};
+
 export const DEFAULT_SLIDER_VALUES: SliderValues = {
-    wordBoundaries: 3,
-    familiarity: 3,
-    meaningClarity: 3,
-    wordConfusion: 5
+    wordBoundaries: null,
+    familiarity: null,
+    meaningClarity: null,
+    wordConfusion: null
 };
 
 interface ListeningFeedbackSlidersProps {
@@ -71,44 +93,109 @@ export default function ListeningFeedbackSliders({
     onSubmit,
     submitLabel = 'Continue'
 }: ListeningFeedbackSlidersProps) {
-    const handleSliderChange = (key: keyof SliderValues, value: number) => {
-        onChange({ ...values, [key]: value });
+    // Toggle category selection
+    const toggleCategory = (key: keyof SliderValues) => {
+        const config = CATEGORY_CONFIGS.find(c => c.key === key);
+        if (!config) return;
+        
+        if (values[key] !== null) {
+            // Deselect
+            onChange({ ...values, [key]: null });
+        } else {
+            // Select with default value
+            onChange({ ...values, [key]: config.defaultValue });
+        }
     };
 
+    // Change level for a selected category
+    const setLevel = (key: keyof SliderValues, level: number) => {
+        onChange({ ...values, [key]: level });
+    };
+
+    // Check if at least one category is selected
+    const hasSelection = Object.values(values).some(v => v !== null);
+
     return (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 mb-4">
-            {SLIDER_CONFIGS.map((config, index) => (
-                <div key={config.key} className={index < SLIDER_CONFIGS.length - 1 ? 'mb-5' : 'mb-6'}>
-                    <div className="flex justify-between items-center mb-2">
-                        <span 
-                            className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-help border-b border-dashed border-gray-400"
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-5 mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 text-center">
+                What made it hard to understand?
+            </p>
+
+            {/* Category Labels Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+                {CATEGORY_CONFIGS.map((config) => {
+                    const isSelected = values[config.key] !== null;
+                    return (
+                        <button
+                            key={config.key}
+                            onClick={() => toggleCategory(config.key)}
                             title={config.tooltip}
+                            className={`relative px-3 py-3 rounded-xl text-sm font-medium transition-all ${
+                                isSelected
+                                    ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-2 border-yellow-400 dark:border-yellow-600 shadow-sm'
+                                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                            }`}
                         >
+                            <span className="mr-1.5">{config.icon}</span>
                             {config.label}
-                        </span>
-                        <span className="text-sm text-yellow-600 dark:text-yellow-400 font-semibold">
-                            {values[config.key]}/5
-                        </span>
-                    </div>
-                    <input
-                        type="range"
-                        min="1"
-                        max="5"
-                        value={values[config.key]}
-                        onChange={(e) => handleSliderChange(config.key, Number(e.target.value))}
-                        className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                    />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>{config.leftLabel}</span>
-                        <span>{config.rightLabel}</span>
-                    </div>
+                            {isSelected && (
+                                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
+                                    ✓
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Level Pickers for Selected Categories */}
+            {hasSelection && (
+                <div className="space-y-3 mb-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                        Adjust severity (optional):
+                    </p>
+                    {CATEGORY_CONFIGS.map((config) => {
+                        const value = values[config.key];
+                        if (value === null) return null;
+                        
+                        return (
+                            <div key={config.key} className="flex items-center gap-3">
+                                <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[120px]">
+                                    {config.label}
+                                </span>
+                                <div className="flex-1">
+                                    <div className="flex gap-1.5 justify-end">
+                                        {[1, 2, 3].map((level) => (
+                                            <button
+                                                key={level}
+                                                onClick={() => setLevel(config.key, level)}
+                                                title={LEVEL_TOOLTIPS[config.key][level]}
+                                                className={`w-8 h-8 rounded-full text-sm font-medium transition-all ${
+                                                    value === level
+                                                        ? 'bg-yellow-500 text-white shadow-md scale-110'
+                                                        : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                                                }`}
+                                            >
+                                                {level}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
-            ))}
+            )}
 
             {/* Submit Button */}
             <button
                 onClick={onSubmit}
-                className="w-full py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all"
+                disabled={!hasSelection}
+                className={`w-full py-3 font-semibold rounded-xl transition-all ${
+                    hasSelection
+                        ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white hover:from-yellow-400 hover:to-orange-400'
+                        : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                }`}
             >
                 {submitLabel}
             </button>

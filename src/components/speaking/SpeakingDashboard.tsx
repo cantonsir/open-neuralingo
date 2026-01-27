@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mic, Layers, TrendingUp, Clock, Flame, MessageSquare } from 'lucide-react';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
+import { api } from '../../db';
 
 interface SpeakingDashboardProps {
     setView: (view: View) => void;
@@ -9,6 +10,96 @@ interface SpeakingDashboardProps {
 }
 
 export default function SpeakingDashboard({ setView, setSpeakingData }: SpeakingDashboardProps) {
+    const [stats, setStats] = useState({
+        chats: 0,
+        spokenTime: 0,
+        dayStreak: 0
+    });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.fetchSpeakingSessions().then(data => {
+            // Calculate Stats
+            const totalDuration = data.reduce((acc: number, session: any) => acc + (session.durationSeconds || 0), 0);
+            const spokenTime = parseFloat((totalDuration / 60).toFixed(1)); // Minutes
+
+            // Calculate Streak
+            const sortedDates = data
+                .map((session: any) => new Date(session.createdAt).setHours(0, 0, 0, 0))
+                .sort((a: number, b: number) => b - a);
+
+            const uniqueDays = [...new Set(sortedDates)];
+            let streak = 0;
+            const today = new Date().setHours(0, 0, 0, 0);
+            const yesterday = today - 86400000;
+
+            if (uniqueDays.length > 0) {
+                if (uniqueDays[0] === today) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === today - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if (uniqueDays[0] === yesterday) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === yesterday - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            setStats({
+                chats: data.length,
+                spokenTime,
+                dayStreak: streak
+            });
+            setSessions(data);
+            setLoading(false);
+        });
+    }, []);
+
+    const [sessions, setSessions] = useState<any[]>([]);
+
+    // Helper to generate last 7 days data
+    const getWeeklyData = () => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const data = [];
+        const today = new Date();
+
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dayLabel = days[date.getDay()];
+
+            // Filter sessions for this day
+            const dayStart = new Date(date.setHours(0, 0, 0, 0)).getTime();
+            const dayEnd = new Date(date.setHours(23, 59, 59, 999)).getTime();
+
+            const dayItems = sessions.filter(session => {
+                const created = new Date(session.createdAt).getTime();
+                return created >= dayStart && created <= dayEnd;
+            });
+
+            // Calculate total duration for this day (minutes)
+            const durationMinutes = dayItems.reduce((acc, session) => {
+                return acc + (session.durationSeconds || 0);
+            }, 0) / 60;
+
+            data.push({
+                label: dayLabel,
+                value: Math.round(durationMinutes)
+            });
+        }
+        return data;
+    };
+
     const quickActions = (
         <>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -56,10 +147,11 @@ export default function SpeakingDashboard({ setView, setSpeakingData }: Speaking
             onStartAction={() => setView('scenario')}
             startActionLabel="New Session"
             stats={[
-                { icon: <MessageSquare size={20} />, label: "Chats", value: 12, subtext: "Total sessions", color: "green" },
-                { icon: <Clock size={20} />, label: "Spoken", value: "45m", subtext: "This week", color: "blue" },
-                { icon: <Flame size={20} />, label: "Streak", value: 2, subtext: "Day streak", color: "orange" },
+                { icon: <MessageSquare size={20} />, label: "Chats", value: stats.chats, subtext: "Total sessions", color: "green" },
+                { icon: <Clock size={20} />, label: "Spoken", value: `${stats.spokenTime}m`, subtext: "Total time", color: "blue" },
+                { icon: <Flame size={20} />, label: "Streak", value: stats.dayStreak, subtext: "Day streak", color: "orange" },
             ]}
+            weeklyData={getWeeklyData()}
             recentItems={<div className="text-center py-8 text-gray-500">Recent conversations will appear here.</div>}
             quickActions={quickActions}
             colorTheme="green"

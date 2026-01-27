@@ -1,13 +1,113 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book, Play, Layers, TrendingUp, BookOpen, Clock, Flame } from 'lucide-react';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
+
+import { api } from '../../db';
 
 interface ReadingDashboardProps {
     onNavigate: (view: View) => void;
 }
 
 export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) {
+    const [stats, setStats] = useState({
+        textsRead: 0,
+        wordsRead: 0,
+        dayStreak: 0
+    });
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.fetchReadingSessions().then(data => {
+            // Calculate Stats
+            const wordsRead = data.reduce((acc: number, session: any) => {
+                const words = session.content ? session.content.trim().split(/\s+/).length : 0;
+                return acc + words;
+            }, 0);
+
+            // Calculate Streak
+            // Assuming reading sessions have createdAt
+            const sortedDates = data
+                .map((session: any) => new Date(session.createdAt).setHours(0, 0, 0, 0))
+                .sort((a: number, b: number) => b - a);
+
+            const uniqueDays = [...new Set(sortedDates)];
+            let streak = 0;
+            const today = new Date().setHours(0, 0, 0, 0);
+            const yesterday = today - 86400000;
+
+            if (uniqueDays.length > 0) {
+                if (uniqueDays[0] === today) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === today - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if (uniqueDays[0] === yesterday) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === yesterday - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            setStats({
+                textsRead: data.length,
+                wordsRead,
+                dayStreak: streak
+            });
+            // Store sessions for weekly data calculation
+            // We need state for sessions if we want to filter them later, or calculate weekly data inside the effect
+            // Actually, getWeeklyData cannot access 'data' variable if defined outside.
+            // Let's store sessions in state.
+            setSessions(data);
+            setLoading(false);
+        });
+    }, []);
+
+    const [sessions, setSessions] = useState<any[]>([]);
+
+    // Helper to generate last 7 days data
+    const getWeeklyData = () => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const data = [];
+        const today = new Date();
+
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dayLabel = days[date.getDay()];
+
+            // Filter sessions for this day
+            const dayStart = new Date(date.setHours(0, 0, 0, 0)).getTime();
+            const dayEnd = new Date(date.setHours(23, 59, 59, 999)).getTime();
+
+            const dayItems = sessions.filter(session => {
+                const created = new Date(session.createdAt).getTime();
+                return created >= dayStart && created <= dayEnd;
+            });
+
+            // Calculate total words for this day
+            const dailyWords = dayItems.reduce((acc, session) => {
+                const words = session.content ? session.content.trim().split(/\s+/).length : 0;
+                return acc + words;
+            }, 0);
+
+            data.push({
+                label: dayLabel,
+                value: dailyWords
+            });
+        }
+        return data;
+    };
+
     const quickActions = (
         <>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -55,10 +155,11 @@ export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) 
             onStartAction={() => onNavigate('compose')}
             startActionLabel="Generate Reading"
             stats={[
-                { icon: <BookOpen size={20} />, label: "Books", value: 5, subtext: "In library", color: "blue" },
-                { icon: <Clock size={20} />, label: "Read", value: "2h", subtext: "This week", color: "green" },
-                { icon: <Flame size={20} />, label: "Streak", value: 3, subtext: "Day streak", color: "orange" },
+                { icon: <BookOpen size={20} />, label: "Read", value: stats.textsRead, subtext: "Texts finished", color: "blue" },
+                { icon: <Clock size={20} />, label: "Words", value: stats.wordsRead, subtext: "Total words", color: "green" },
+                { icon: <Flame size={20} />, label: "Streak", value: stats.dayStreak, subtext: "Day streak", color: "orange" },
             ]}
+            weeklyData={getWeeklyData()}
             recentItems={<div className="text-center py-8 text-gray-500">Recent texts will appear here.</div>}
             quickActions={quickActions}
             colorTheme="blue"

@@ -12,13 +12,98 @@ interface WritingDashboardProps {
 export default function WritingDashboard({ setView, setWritingData }: WritingDashboardProps) {
     const [sessions, setSessions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({
+        totalTexts: 0,
+        totalWords: 0,
+        dayStreak: 0
+    });
 
     useEffect(() => {
         api.fetchWritingSessions().then(data => {
             setSessions(data);
+
+            // Calculate Stats
+            const totalWords = data.reduce((acc: number, session: any) => {
+                const words = session.content ? session.content.trim().split(/\s+/).length : 0;
+                return acc + words;
+            }, 0);
+
+            // Calculate Streak
+            const sortedDates = data
+                .map((session: any) => new Date(session.createdAt || session.updatedAt).setHours(0, 0, 0, 0))
+                .sort((a: number, b: number) => b - a);
+
+            const uniqueDays = [...new Set(sortedDates)];
+            let streak = 0;
+            const today = new Date().setHours(0, 0, 0, 0);
+            const yesterday = today - 86400000;
+
+            if (uniqueDays.length > 0) {
+                if (uniqueDays[0] === today) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === today - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if (uniqueDays[0] === yesterday) {
+                    streak = 1;
+                    for (let i = 1; i < uniqueDays.length; i++) {
+                        if (uniqueDays[i] === yesterday - (i * 86400000)) {
+                            streak++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            setStats({
+                totalTexts: data.length,
+                totalWords,
+                dayStreak: streak
+            });
+
             setLoading(false);
         });
     }, []);
+
+    // Helper to generate last 7 days data
+    const getWeeklyData = () => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const data = [];
+        const today = new Date();
+
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dayLabel = days[date.getDay()];
+
+            // Filter history for this day
+            const dayStart = new Date(date.setHours(0, 0, 0, 0)).getTime();
+            const dayEnd = new Date(date.setHours(23, 59, 59, 999)).getTime();
+
+            const dayItems = sessions.filter(session => {
+                const updated = new Date(session.createdAt || session.updatedAt).getTime();
+                return updated >= dayStart && updated <= dayEnd;
+            });
+
+            // Calculate total words for this day
+            const dailyWords = dayItems.reduce((acc, session) => {
+                const words = session.content ? session.content.trim().split(/\s+/).length : 0;
+                return acc + words;
+            }, 0);
+
+            data.push({
+                label: dayLabel,
+                value: dailyWords
+            });
+        }
+        return data;
+    };
+
 
     const quickActions = (
         <>
@@ -115,10 +200,11 @@ export default function WritingDashboard({ setView, setWritingData }: WritingDas
             onStartAction={() => setView('compose')}
             startActionLabel="Write Now"
             stats={[
-                { icon: <FileText size={20} />, label: "Texts", value: sessions.length, subtext: "Total written", color: "purple" },
-                { icon: <Clock size={20} />, label: "Time", value: "1.5h", subtext: "This week", color: "blue" },
-                { icon: <Flame size={20} />, label: "Streak", value: 0, subtext: "Day streak", color: "orange" },
+                { icon: <FileText size={20} />, label: "Texts", value: stats.totalTexts, subtext: "Total written", color: "purple" },
+                { icon: <Clock size={20} />, label: "Words", value: stats.totalWords, subtext: "Total words", color: "blue" },
+                { icon: <Flame size={20} />, label: "Streak", value: stats.dayStreak, subtext: "Day streak", color: "orange" },
             ]}
+            weeklyData={getWeeklyData()}
             recentItems={recentItems}
             quickActions={quickActions}
             colorTheme="purple"

@@ -161,12 +161,11 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
             replays,
             reactionTimeMs: thinkingTimeSum,
             markedIndices: Array.from(markedIndices),
-            ...(sliderData && {
-                wordBoundaries: sliderData.wordBoundaries,
-                familiarity: sliderData.familiarity,
-                meaningClarity: sliderData.meaningClarity,
-                wordConfusion: sliderData.wordConfusion,
-            }),
+            // Only include non-null slider values (selected categories)
+            ...(sliderData && sliderData.wordBoundaries !== null && { wordBoundaries: sliderData.wordBoundaries }),
+            ...(sliderData && sliderData.familiarity !== null && { familiarity: sliderData.familiarity }),
+            ...(sliderData && sliderData.meaningClarity !== null && { meaningClarity: sliderData.meaningClarity }),
+            ...(sliderData && sliderData.wordConfusion !== null && { wordConfusion: sliderData.wordConfusion }),
         };
 
         const newResponses = [...responses, responseData];
