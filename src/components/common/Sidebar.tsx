@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown } from 'lucide-react';
+import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2 } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
 
 
@@ -252,6 +252,14 @@ export default function Sidebar({
                             isActive={view === 'loop'}
                             collapsed={collapsed}
                             onClick={() => setView('loop')}
+                            activeColorTheme="orange"
+                        />
+                        <NavItem
+                            icon={<Volume2 size={20} />}
+                            label="Audio Generator"
+                            isActive={view === 'compose'}
+                            collapsed={collapsed}
+                            onClick={() => setView('compose')}
                             activeColorTheme="orange"
                         />
 

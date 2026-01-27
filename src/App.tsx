@@ -153,16 +153,17 @@ function App() {
           view === 'learning' ? <ReadingLessons /> :
             view === 'assessment' ? <ReadingAssessmentPage /> :
               view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
-                view === 'library' || view === 'generator' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
-                  view === 'reader' && readingData ? (
-                    <ReadingView
-                      libraryId={readingData.libraryId}
-                      title={readingData.title}
-                      onNavigate={setView}
-                    />
-                  ) : (
-                    <ReadingDashboard onNavigate={setView} />
-                  )
+                view === 'generator' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
+                  view === 'library' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
+                    view === 'reader' && readingData ? (
+                      <ReadingView
+                        libraryId={readingData.libraryId}
+                        title={readingData.title}
+                        onNavigate={setView}
+                      />
+                    ) : (
+                      <ReadingDashboard onNavigate={setView} />
+                    )
         )}
 
         {/* Speaking Module */}
