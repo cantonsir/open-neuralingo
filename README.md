@@ -40,7 +40,7 @@ EchoLoop helps language learners improve their skills through interactive exerci
 ## Architecture Overview
 
 <div align="center">
-  <img width="600" alt="EchoLoop Architecture" src="docs/architecture.svg" />
+  <img width="300" alt="EchoLoop Architecture" src="docs/architecture.svg" />
 </div>
 
 ## Tech Stack
