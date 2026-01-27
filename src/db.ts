@@ -562,5 +562,98 @@ export const api = {
             throw error;
         }
     },
+
+    // --- File Upload API ---
+
+    /**
+     * Upload a file to the library.
+     */
+    async uploadFile(file: File): Promise<{ status: string; id: string }> {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch(`${API_BASE}/upload`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to upload file');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('API uploadFile error:', error);
+            throw error;
+        }
+    },
+
+    // --- Speaking History API ---
+
+    /**
+     * Fetch all past speaking sessions.
+     */
+    async fetchSpeakingSessions(): Promise<any[]> {
+        try {
+            const response = await fetch(`${API_BASE}/speaking/sessions`);
+            if (!response.ok) throw new Error('Failed to fetch speaking sessions');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchSpeakingSessions error:', error);
+            return [];
+        }
+    },
+
+    // --- Writing History API ---
+
+    /**
+     * Fetch all past writing sessions.
+     */
+    async fetchWritingSessions(): Promise<any[]> {
+        try {
+            const response = await fetch(`${API_BASE}/writing/sessions`);
+            if (!response.ok) throw new Error('Failed to fetch writing sessions');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchWritingSessions error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Save a writing session.
+     */
+    async saveWritingSession(session: { id?: string; topic: string; content: string; contextId?: string; createdAt?: number }): Promise<{ status: string; id: string }> {
+        try {
+            const response = await fetch(`${API_BASE}/writing/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(session),
+            });
+            if (!response.ok) throw new Error('Failed to save writing session');
+            return await response.json();
+        } catch (error) {
+            console.error('API saveWritingSession error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Save a completed speaking session.
+     */
+    async saveSpeakingSession(session: { topic: string; transcript: any[]; durationSeconds: number; createdAt: number }): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/speaking/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(session),
+            });
+            if (!response.ok) throw new Error('Failed to save speaking session');
+        } catch (error) {
+            console.error('API saveSpeakingSession error:', error);
+            throw error;
+        }
+    },
 };
 

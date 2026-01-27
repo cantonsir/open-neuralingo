@@ -7,7 +7,9 @@ export interface Subtitle {
 
 export type Module = 'listening' | 'reading' | 'speaking' | 'writing';
 
-export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction';
+export type Theme = 'dark' | 'light';
+
+export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose';
 
 export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary';
 

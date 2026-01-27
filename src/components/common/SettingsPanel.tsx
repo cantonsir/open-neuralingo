@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sun, Moon, Keyboard, Globe } from 'lucide-react';
+import { Theme } from '../../types';
 
 interface SettingsPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    theme: 'dark' | 'light';
+    theme: Theme;
     toggleTheme: () => void;
     targetLanguage: string;
     onLanguageChange: (language: string) => void;

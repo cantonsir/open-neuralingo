@@ -11,7 +11,7 @@ import HomeView from './components/common/HomeView';
 import HistoryView from './components/listening/HistoryView';
 import DashboardView from './components/listening/DashboardView';
 import SettingsPanel from './components/common/SettingsPanel';
-import { Marker, Subtitle, PlayerState, TagType, Module, View } from './types';
+import { Marker, Subtitle, PlayerState, TagType, Module, View, Theme } from './types';
 
 import { parseSubtitles, formatTime } from './utils';
 import VocabularyManager from './components/listening/VocabularyManager';
@@ -25,12 +25,21 @@ import ReadingView from './components/reading/ReadingView';
 import SpeakingView from './components/speaking/SpeakingView';
 import WritingView from './components/writing/WritingView';
 import ReadingDashboard from './components/reading/ReadingDashboard';
+import ReadingLibrary from './components/reading/ReadingLibrary';
+import ReadingLessons from './components/reading/ReadingLessons';
+import ReadingAssessmentPage from './components/reading/ReadingAssessmentPage';
 import SpeakingDashboard from './components/speaking/SpeakingDashboard';
+import SpeakingScenario from './components/speaking/SpeakingScenario';
+import SpeakingLessons from './components/speaking/SpeakingLessons';
+import SpeakingAssessment from './components/speaking/SpeakingAssessment';
 import WritingDashboard from './components/writing/WritingDashboard';
+import WritingCompose from './components/writing/WritingCompose';
+import WritingLessons from './components/writing/WritingLessons';
+import WritingAssessmentPage from './components/writing/WritingAssessmentPage';
 import { api, GoalVideo, GoalVideoDetail } from './db';
 import { useDeck } from './hooks/useDeck';
 
-type Theme = 'dark' | 'light';
+
 
 function App() {
   const [activeModule, setActiveModule] = useState<Module>('listening');
@@ -82,7 +91,7 @@ function App() {
 
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [currentLoop, setCurrentLoop] = useState<Marker | null>(null);
-  const [view, setView] = useState<View>('loop');
+  const [view, setView] = useState<View>('home');
 
   const [tempSegment, setTempSegment] = useState<{ start: number, end: number } | null>(null);
   const [pendingSegment, setPendingSegment] = useState<{ start: number, end: number } | null>(null);
@@ -371,6 +380,12 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isSetupMode) return;
+
+      // Ignore global shortcuts if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) {
+        return;
+      }
 
       // Space bar: Create marker
       if (e.code === 'Space') {
@@ -683,6 +698,18 @@ function App() {
     setView('loop');
   };
 
+
+  const [readingData, setReadingData] = useState<{ libraryId: string, title: string } | null>(null);
+  const [speakingData, setSpeakingData] = useState<{ mode: 'live' | 'tts', topic: string, contextId?: string } | null>(null);
+  const [writingData, setWritingData] = useState<{ topic: string, contextId?: string, content?: string } | null>(null);
+
+  const handleNavigateWithData = (navView: View, data?: any) => {
+    if (navView === 'reader' && data) {
+      setReadingData(data);
+    }
+    setView(navView);
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 overflow-hidden transition-colors">
       {/* Left Sidebar */}
@@ -711,18 +738,58 @@ function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {activeModule === 'reading' && (
-          view === 'home' ? <ReadingDashboard onNavigate={setView} /> :
-            <ReadingView />
+          view === 'learning' ? <ReadingLessons /> :
+            view === 'assessment' ? <ReadingAssessmentPage /> :
+              view === 'library' || view === 'generator' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
+                view === 'reader' && readingData ? (
+                  <ReadingView
+                    libraryId={readingData.libraryId}
+                    title={readingData.title}
+                    onNavigate={setView}
+                  />
+                ) : (
+                  <ReadingDashboard onNavigate={setView} />
+                )
         )}
+
 
         {activeModule === 'speaking' && (
-          view === 'home' ? <SpeakingDashboard onNavigate={setView} /> :
-            <SpeakingView />
+          view === 'learning' ? <SpeakingLessons /> :
+            view === 'assessment' ? <SpeakingAssessment /> :
+              view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
+                view === 'conversation' && speakingData ? (
+                  <SpeakingView
+                    mode={speakingData.mode}
+                    topic={speakingData.topic}
+                    contextId={speakingData.contextId}
+                    onNavigate={setView}
+                  />
+                ) : (
+                  <SpeakingDashboard
+                    setView={setView}
+                    setSpeakingData={setSpeakingData}
+                  />
+                )
         )}
 
+
         {activeModule === 'writing' && (
-          view === 'home' ? <WritingDashboard onNavigate={setView} /> :
-            <WritingView />
+          view === 'learning' ? <WritingLessons /> :
+            view === 'assessment' ? <WritingAssessmentPage /> :
+              view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
+                view === 'writer' && writingData ? (
+                  <WritingView
+                    topic={writingData.topic}
+                    contextId={writingData.contextId}
+                    initialContent={writingData.content}
+                    onBack={setView}
+                  />
+                ) : (
+                  <WritingDashboard
+                    setView={setView}
+                    setWritingData={setWritingData}
+                  />
+                )
         )}
 
         {activeModule === 'listening' && (

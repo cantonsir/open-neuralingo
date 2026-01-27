@@ -1,13 +1,25 @@
-import React from 'react';
-import { PenTool, Layers, CheckCircle, FileText, Clock } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { PenTool, Layers, TrendingUp, Clock, Flame, FileText, ChevronRight } from 'lucide-react';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
+import { api } from '../../db';
 
-export default function WritingDashboard({
-    onNavigate,
-}: {
-    onNavigate: (view: View) => void;
-}) {
+interface WritingDashboardProps {
+    setView: (view: View) => void;
+    setWritingData: (data: any) => void;
+}
+
+export default function WritingDashboard({ setView, setWritingData }: WritingDashboardProps) {
+    const [sessions, setSessions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.fetchWritingSessions().then(data => {
+            setSessions(data);
+            setLoading(false);
+        });
+    }, []);
+
     const quickActions = (
         <>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -16,7 +28,7 @@ export default function WritingDashboard({
             </h3>
             <div className="space-y-3">
                 <button
-                    onClick={() => onNavigate('correction')}
+                    onClick={() => setView('correction')} // Using correction view for new composition
                     className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-200 dark:border-purple-800/30 rounded-xl hover:from-purple-500/20 hover:to-pink-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
@@ -24,33 +36,90 @@ export default function WritingDashboard({
                     </div>
                     <div className="flex-1 text-left">
                         <div className="font-semibold text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                            New Draft
+                            New Composition
                         </div>
-                        <div className="text-xs text-gray-500">Get corrections</div>
+                        <div className="text-xs text-gray-500">Write with AI feedback</div>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => setView('learning')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-pink-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-pink-500 flex items-center justify-center">
+                        <TrendingUp size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">
+                            Writing Drills
+                        </div>
+                        <div className="text-xs text-gray-500">Quick exercises</div>
                     </div>
                 </button>
             </div>
         </>
     );
 
+    const recentItems = (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Recent Writings</h3>
+                <button className="text-sm text-purple-600 hover:text-purple-700 font-medium">View All</button>
+            </div>
+
+            {loading ? (
+                <div className="text-center py-8 text-gray-500">Loading history...</div>
+            ) : sessions.length === 0 ? (
+                <div className="text-center py-8 text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700">
+                    <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                    <p>No writings yet. Start your first composition!</p>
+                </div>
+            ) : (
+                <div className="grid gap-3 max-h-[400px] overflow-y-auto pr-2">
+                    {sessions.map(session => (
+                        <button
+                            key={session.id}
+                            onClick={() => {
+                                setWritingData({
+                                    topic: session.topic,
+                                    contextId: session.contextId,
+                                    content: session.content
+                                });
+                                setView('writer');
+                            }}
+                            className="flex items-center gap-4 p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-purple-200 dark:hover:border-purple-700 hover:shadow-sm transition-all text-left group"
+                        >
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                                <FileText size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-semibold text-gray-900 dark:text-white truncate group-hover:text-purple-600 transition-colors">
+                                    {session.topic}
+                                </h4>
+                                <p className="text-xs text-gray-500 truncate">
+                                    {new Date(session.updatedAt || session.createdAt).toLocaleDateString()} • {session.content?.length || 0} chars
+                                </p>
+                            </div>
+                            <ChevronRight size={16} className="text-gray-400 group-hover:text-purple-400" />
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <CommonDashboard
-            title="Writing Dashboard"
-            subtitle="Perfect your written expression."
+            title="Writing Studio"
+            subtitle="Enhance your writing style."
+            onStartAction={() => setView('correction')}
+            startActionLabel="Write Now"
             stats={[
-                { icon: <FileText size={20} />, label: "Drafts", value: 0, subtext: "Texts written", color: "purple" },
-                { icon: <CheckCircle size={20} />, label: "Fixes", value: 0, subtext: "Corrections loaded", color: "green" },
-                { icon: <Clock size={20} />, label: "Time", value: "0m", subtext: "Writing time", color: "pink" },
-                { icon: <PenTool size={20} />, label: "Style", value: "-", subtext: "Avg score", color: "orange" },
+                { icon: <FileText size={20} />, label: "Texts", value: sessions.length, subtext: "Total written", color: "purple" },
+                { icon: <Clock size={20} />, label: "Time", value: "1.5h", subtext: "This week", color: "blue" },
+                { icon: <Flame size={20} />, label: "Streak", value: 0, subtext: "Day streak", color: "orange" },
             ]}
-            onStartAction={() => onNavigate('correction')}
-            startActionLabel="Write Something"
-            recentItems={
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-8 text-center">
-                    <div className="text-4xl mb-3">📝</div>
-                    <p className="text-gray-500 dark:text-gray-400">No writing drafts yet.</p>
-                </div>
-            }
+            recentItems={recentItems}
             quickActions={quickActions}
             colorTheme="purple"
         />

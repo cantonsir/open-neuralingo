@@ -65,6 +65,7 @@ Make sure you are in the root directory of the project.
 python backend/server.py
 # If using specific python install/env:
 # /path/to/python backend/server.py
+# C:\Users\Jayden\anaconda3\python.exe backend/server.py
 ```
 *(Runs on http://localhost:5000)*
 

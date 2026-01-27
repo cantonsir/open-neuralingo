@@ -40,6 +40,19 @@ const languageLabels: Record<string, string> = {
     de: 'German',
 };
 
+// --- MODEL CONFIGURATION ---
+const TEXT_MODEL = 'gemini-2.0-flash'; // Fallback / Standard 
+// User requested: "gemini-3-flash-preview" for text
+const TEXT_GEN_MODEL = 'gemini-2.0-flash'; // Reverting to known stable for base, but will use user string if they insist. 
+// User specific request:
+const USER_TEXT_MODEL = 'gemini-2.0-flash'; // "gemini-3-flash-preview" might not be valid yet, using 2.0 Flash as the robust implementation of "Flash" capability. 
+// actually, I will use exactly what they asked for in the fetch calls below.
+
+const MODEL_TEXT = 'gemini-2.0-flash'; // Using 2.0 Flash as it's the latest stable preview usually referred to as "Flash". 
+// Wait, the user said "gemini-3-flash-preview". I should try to use it.
+const REQUESTED_TEXT_MODEL = 'gemini-2.0-flash';
+const REQUESTED_LIVE_MODEL = 'gemini-2.0-flash';
+
 function buildPrompt(assessment: AssessmentResult): string {
     const language = languageLabels[assessment.targetLanguage] || 'English';
     const content = contentTypeLabels[assessment.targetContent] || 'general content';
@@ -194,17 +207,17 @@ export async function analyzeListeningResults(results: TestResult[]): Promise<Li
 
     // Calculate slider averages for struggled sentences
     const struggledResults = results.filter(r => !r.understood && r.wordBoundaries !== undefined);
-    const avgWordBoundaries = struggledResults.length > 0 
-        ? struggledResults.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / struggledResults.length 
+    const avgWordBoundaries = struggledResults.length > 0
+        ? struggledResults.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / struggledResults.length
         : null;
-    const avgFamiliarity = struggledResults.length > 0 
-        ? struggledResults.reduce((sum, r) => sum + (r.familiarity || 3), 0) / struggledResults.length 
+    const avgFamiliarity = struggledResults.length > 0
+        ? struggledResults.reduce((sum, r) => sum + (r.familiarity || 3), 0) / struggledResults.length
         : null;
-    const avgMeaningClarity = struggledResults.length > 0 
-        ? struggledResults.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / struggledResults.length 
+    const avgMeaningClarity = struggledResults.length > 0
+        ? struggledResults.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / struggledResults.length
         : null;
-    const avgWordConfusion = struggledResults.length > 0 
-        ? struggledResults.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / struggledResults.length 
+    const avgWordConfusion = struggledResults.length > 0
+        ? struggledResults.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / struggledResults.length
         : null;
 
     // Identify specific difficulty patterns
@@ -239,24 +252,24 @@ ${difficultyPatterns.length > 0 ? `\nIDENTIFIED DIFFICULTY PATTERNS: ${difficult
 
 SENTENCES TESTED (with per-sentence self-assessment where available):
 ${results.map((r, i) => {
-    const markedWordsInSentence = r.markedWordIndices.map(idx => r.sentence.split(' ')[idx]).filter(w => w);
-    let details = `${i + 1}. "${r.sentence}"
+        const markedWordsInSentence = r.markedWordIndices.map(idx => r.sentence.split(' ')[idx]).filter(w => w);
+        let details = `${i + 1}. "${r.sentence}"
    Status: ${r.understood ? '✓ Understood' : '✗ Struggled'} | Replays: ${r.replays}`;
-    if (markedWordsInSentence.length > 0) {
-        details += ` | Missed words: ${markedWordsInSentence.join(', ')}`;
-    }
-    if (!r.understood && r.wordBoundaries !== undefined) {
-        details += `\n   Self-assessment: Boundaries=${r.wordBoundaries}/5, Familiarity=${r.familiarity}/5, Meaning=${r.meaningClarity}/5, Confusion=${r.wordConfusion || 5}/5`;
-        // Interpret the scores for this specific sentence
-        const issues = [];
-        if (r.wordBoundaries && r.wordBoundaries <= 2) issues.push('words blended together');
-        if (r.familiarity && r.familiarity <= 2) issues.push('unfamiliar vocabulary');
-        if (r.meaningClarity && r.meaningClarity <= 2) issues.push('unclear meaning');
-        if (r.wordConfusion && r.wordConfusion <= 2) issues.push('confused with similar word');
-        if (issues.length > 0) details += `\n   Issues: ${issues.join(', ')}`;
-    }
-    return details;
-}).join('\n\n')}
+        if (markedWordsInSentence.length > 0) {
+            details += ` | Missed words: ${markedWordsInSentence.join(', ')}`;
+        }
+        if (!r.understood && r.wordBoundaries !== undefined) {
+            details += `\n   Self-assessment: Boundaries=${r.wordBoundaries}/5, Familiarity=${r.familiarity}/5, Meaning=${r.meaningClarity}/5, Confusion=${r.wordConfusion || 5}/5`;
+            // Interpret the scores for this specific sentence
+            const issues = [];
+            if (r.wordBoundaries && r.wordBoundaries <= 2) issues.push('words blended together');
+            if (r.familiarity && r.familiarity <= 2) issues.push('unfamiliar vocabulary');
+            if (r.meaningClarity && r.meaningClarity <= 2) issues.push('unclear meaning');
+            if (r.wordConfusion && r.wordConfusion <= 2) issues.push('confused with similar word');
+            if (issues.length > 0) details += `\n   Issues: ${issues.join(', ')}`;
+        }
+        return details;
+    }).join('\n\n')}
 
 Based on this data, provide a listening ability analysis. Pay special attention to the self-assessment scores to identify specific areas for improvement:
 - Low word boundaries (1-2) → Focus on connected speech, contractions, linking sounds
@@ -427,7 +440,7 @@ function getSegmentFallbackSentences(segmentSubtitle: string[], numSentences: nu
     // Create simple sentences from segment vocabulary
     const allText = segmentSubtitle.join(' ');
     const words = allText.split(/\s+/).filter(w => w.length > 4).slice(0, 20);
-    
+
     const fallback: SegmentTestSentence[] = [
         { id: 1, sentence: "Can you understand what I'm saying?", difficulty: 'easy', relatedVocab: [] },
         { id: 2, sentence: "Let me explain this more clearly.", difficulty: 'easy', relatedVocab: [] },
@@ -435,7 +448,7 @@ function getSegmentFallbackSentences(segmentSubtitle: string[], numSentences: nu
         { id: 4, sentence: "I'd like to discuss this topic further.", difficulty: 'medium', relatedVocab: [] },
         { id: 5, sentence: "There are several things we need to consider.", difficulty: 'hard', relatedVocab: [] },
     ];
-    
+
     return fallback.slice(0, numSentences);
 }
 
@@ -475,17 +488,17 @@ export async function generateSegmentLessons(
 
     // Analyze slider data for targeted lessons
     const resultsWithSliders = testResults.filter(r => !r.understood && r.wordBoundaries !== undefined);
-    const avgWordBoundaries = resultsWithSliders.length > 0 
-        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / resultsWithSliders.length 
+    const avgWordBoundaries = resultsWithSliders.length > 0
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordBoundaries || 3), 0) / resultsWithSliders.length
         : null;
-    const avgFamiliarity = resultsWithSliders.length > 0 
-        ? resultsWithSliders.reduce((sum, r) => sum + (r.familiarity || 3), 0) / resultsWithSliders.length 
+    const avgFamiliarity = resultsWithSliders.length > 0
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.familiarity || 3), 0) / resultsWithSliders.length
         : null;
-    const avgMeaningClarity = resultsWithSliders.length > 0 
-        ? resultsWithSliders.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / resultsWithSliders.length 
+    const avgMeaningClarity = resultsWithSliders.length > 0
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.meaningClarity || 3), 0) / resultsWithSliders.length
         : null;
-    const avgWordConfusion = resultsWithSliders.length > 0 
-        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / resultsWithSliders.length 
+    const avgWordConfusion = resultsWithSliders.length > 0
+        ? resultsWithSliders.reduce((sum, r) => sum + (r.wordConfusion || 5), 0) / resultsWithSliders.length
         : null;
 
     // Determine priority lesson types based on slider scores
@@ -600,7 +613,7 @@ Return ONLY valid JSON array:
 
 function getDefaultLessons(testResults: TestResult[]): SegmentLessonContent[] {
     const struggledSentences = testResults.filter(r => !r.understood);
-    
+
     return [
         {
             type: 'slow_practice',
@@ -628,3 +641,205 @@ function getDefaultLessons(testResults: TestResult[]): SegmentLessonContent[] {
     ];
 }
 
+
+// ===== READING MODULE: COMPREHENSION QUESTIONS =====
+
+export interface ReadingQuestion {
+    id: number;
+    question: string;
+    options: string[];
+    correctAnswer: number; // index 0-3
+    explanation: string;
+}
+
+export async function generateReadingQuestions(text: string, numQuestions: number = 3): Promise<ReadingQuestion[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return [];
+
+    const prompt = `You are a reading comprehension expert.
+    
+TEXT:
+"${text.slice(0, 2000)}"
+
+Generate ${numQuestions} multiple-choice comprehension questions based on the text above.
+Questions should test understanding of main ideas, details, or inference.
+
+Return ONLY valid JSON array:
+[{
+    "id": 1,
+    "question": "...",
+    "options": ["A", "B", "C", "D"],
+    "correctAnswer": 0, // 0 for A, 1 for B, etc.
+    "explanation": "Why this is correct..."
+}]`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, // USER REQUEST: 3-flash for text
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                }),
+            }
+        );
+        const data = await response.json();
+        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = textRes.match(/\[[\s\S]*\]/);
+        return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    } catch (e) {
+        console.error("Reading AI Error", e);
+        return [];
+    }
+}
+
+// ===== WRITING MODULE: IMPROVEMENT & FEEDBACK =====
+
+export interface WritingFeedback {
+    correctedText: string;
+    score: number; // 0-100
+    strengths: string[];
+    weaknesses: string[];
+    suggestions: string[];
+}
+
+export async function improveWriting(text: string, topic: string): Promise<WritingFeedback> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) throw new Error("No API Key");
+
+    const prompt = `You are a writing tutor.
+    
+TOPIC: ${topic}
+STUDENT TEXT: "${text}"
+
+Analyze the writing. fix grammar, improve flow/vocabulary, and score it.
+Return ONLY valid JSON:
+{
+    "correctedText": "The improved version...",
+    "score": 85,
+    "strengths": ["...", "..."],
+    "weaknesses": ["...", "..."],
+    "suggestions": ["...", "..."]
+}`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, // USER REQUEST: 3-flash for text
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+            }
+        );
+        const data = await response.json();
+        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = textRes.match(/\{[\s\S]*\}/);
+        return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+    } catch (e) {
+        console.error("Writing AI Error", e);
+        throw e;
+    }
+}
+
+// ===== SPEAKING MODULE: CONVERSATION SCRIPTS =====
+
+export interface ScriptLine {
+    role: 'A' | 'B';
+    text: string;
+    explanation?: string; // For learning mode
+}
+
+export async function generateConversationScript(topic: string, context?: string): Promise<ScriptLine[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return [];
+
+    const prompt = `Create a natural, engaging conversation script between two people (A and B) about: "${topic}".
+    ${context ? `Context: ${context}` : ''}
+    
+    The conversation should be about 10-15 lines long. Suitable for intermediate learners.
+    Return ONLY valid JSON array:
+    [{"role": "A", "text": "...", "explanation": "optional note"}]`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, // USER REQUEST: 3-flash for text
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+            }
+        );
+        const data = await response.json();
+        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = textRes.match(/\[[\s\S]*\]/);
+        return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    } catch (e) {
+        console.error("Speaking AI Error", e);
+        return [];
+    }
+}
+
+// ===== REAL-TIME CHAT RESPONSE =====
+
+export async function generateChatResponse(history: { role: string, text: string }[], topic: string): Promise<string> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return "I'm having trouble connecting to the AI.";
+
+    // USER REQUEST: Live Conversation uses gemini-2.5-flash-native-audio-preview-12-2025
+    const LIVE_MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
+
+    const systemInstruction = `You are a helpful language tutor roleplaying about "${topic}".
+    Keep your responses natural, conversational, and concise (1-2 sentences).
+    Do not use markdown formatting.`;
+
+    const contents = history.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+    }));
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${LIVE_MODEL}:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    contents: contents,
+                    generationConfig: {
+                        maxOutputTokens: 100,
+                        temperature: 0.7
+                    }
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            console.warn(`Native audio preview model failed (${response.status}), falling back to 2.0 Flash.`);
+            // Fallback to text model if the specific audio preview model fails or isn't available for text-only
+            // Note: Native audio model might strictly require audio input/output, so fallback is important.
+            const fallbackResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: systemInstruction }] },
+                        contents: contents
+                    }),
+                }
+            );
+            if (!fallbackResponse.ok) throw new Error('Both models failed');
+
+            const data = await fallbackResponse.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "I didn't catch that.";
+        }
+
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "I didn't catch that.";
+    } catch (e) {
+        console.error("Chat AI Error", e);
+        return "I'm sorry, I'm having trouble connecting right now.";
+    }
+}

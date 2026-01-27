@@ -1,121 +1,150 @@
-import React, { useState } from 'react';
-import { PenTool, Check, ArrowRight, Loader2, Sparkles, Wand2 } from 'lucide-react';
-import { correctWriting } from '../../ai';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, BookOpen, Wand2, Loader2, Save } from 'lucide-react';
+import WritingAssessment from './WritingAssessment';
+import { View } from '../../types';
+import { api } from '../../db';
 
-export default function WritingView() {
-    const [text, setText] = useState('');
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [result, setResult] = useState<string | null>(null);
-    const [mode, setMode] = useState<'grammar' | 'polish'>('grammar');
+interface WritingViewProps {
+    topic: string;
+    contextId?: string;
+    initialContent?: string;
+    onBack: (view: View) => void;
+}
 
-    const handleAction = async () => {
+export default function WritingView({ topic, contextId, initialContent, onBack }: WritingViewProps) {
+    const [text, setText] = useState(initialContent || '');
+    const [contextContent, setContextContent] = useState('');
+    const [showContext, setShowContext] = useState(!!contextId);
+    const [showAssessment, setShowAssessment] = useState(false);
+    const [loadingContext, setLoadingContext] = useState(!!contextId);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (contextId) {
+            fetch(`/api/library/${contextId}/content`)
+                .then(res => res.json())
+                .then(data => {
+                    setContextContent(data.content);
+                    setLoadingContext(false);
+                })
+                .catch(err => {
+                    console.error("Failed to load context", err);
+                    setLoadingContext(false);
+                });
+        }
+    }, [contextId]);
+
+    const handleSave = async () => {
         if (!text.trim()) return;
-
-        setIsProcessing(true);
-        setResult(null);
-
         try {
-            const instruction = mode === 'grammar'
-                ? "Fix grammar and spelling errors, maintaining the original meaning"
-                : "Rewrite to sound more native, professional, and fluent";
-
-            const response = await correctWriting(text, instruction);
-            if (response) {
-                setResult(response);
-            }
+            setIsSaving(true);
+            await api.saveWritingSession({
+                topic,
+                content: text,
+                contextId,
+                createdAt: Date.now()
+            });
+            onBack('dashboard' as View); // Return to dashboard
         } catch (error) {
-            console.error(error);
+            console.error("Failed to save", error);
+            alert("Failed to save writing session");
         } finally {
-            setIsProcessing(false);
+            setIsSaving(false);
         }
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-950 h-full">
             {/* Header */}
-            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-6 shadow-sm z-10">
-                <div className="max-w-4xl mx-auto flex flex-col gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
-                            <PenTool size={20} />
-                        </div>
-                        <h1 className="text-xl font-bold text-gray-900 dark:text-white">Writing Assistant</h1>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => onBack('home')}
+                        className="p-2 -ml-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    >
+                        <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 max-w-md truncate">
+                            {topic}
+                        </h2>
                     </div>
-                    <div className="flex gap-2">
+                </div>
+
+                <div className="flex gap-3">
+                    {contextId && (
                         <button
-                            onClick={() => setMode('grammar')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2
-                                ${mode === 'grammar'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                                }
-                            `}
+                            onClick={() => setShowContext(!showContext)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors border ${showContext ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
                         >
-                            <Check size={16} />
-                            Grammar Check
+                            <BookOpen className="w-4 h-4" />
+                            {showContext ? 'Hide Context' : 'Show Context'}
                         </button>
-                        <button
-                            onClick={() => setMode('polish')}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2
-                                ${mode === 'polish'
-                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                                }
-                            `}
-                        >
-                            <Wand2 size={16} />
-                            Polish & Enhance
-                        </button>
-                    </div>
+                    )}
+
+                    <button
+                        onClick={handleSave}
+                        disabled={isSaving || !text.trim()}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg transition-colors font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Save className="w-4 h-4" />
+                        {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+
+                    <button
+                        onClick={() => setShowAssessment(true)}
+                        disabled={text.length < 10}
+                        className={`flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg transition-colors font-medium ${text.length < 10 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'}`}
+                    >
+                        <Wand2 className="w-4 h-4" />
+                        AI Review
+                    </button>
                 </div>
             </div>
 
-            {/* Content Split View */}
-            <div className="flex-1 overflow-hidden">
-                <div className="h-full max-w-6xl mx-auto flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-gray-800">
-
-                    {/* Input Side */}
-                    <div className="flex-1 flex flex-col p-6 min-h-[50%] md:min-h-0">
-                        <label className="text-sm font-medium text-gray-500 mb-2">Original Text</label>
-                        <textarea
-                            value={text}
-                            onChange={(e) => setText(e.target.value)}
-                            placeholder="Type or paste your text here..."
-                            className="flex-1 w-full bg-white dark:bg-gray-800 border-0 rounded-xl p-4 shadow-sm resize-none focus:ring-2 focus:ring-purple-500/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 text-lg leading-relaxed"
-                            autoFocus
-                        />
-                        <div className="mt-4 flex justify-end">
-                            <button
-                                onClick={handleAction}
-                                disabled={isProcessing || !text.trim()}
-                                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/20"
-                            >
-                                {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-                                {mode === 'grammar' ? 'Fix Errors' : 'Improve Writing'}
-                            </button>
-                        </div>
+            <div className="flex-1 flex overflow-hidden">
+                {/* Writing Area */}
+                <div className="flex-1 flex flex-col p-6 md:p-10 relative">
+                    <textarea
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="Start writing here..."
+                        className="flex-1 w-full bg-transparent resize-none border-none outline-none focus:ring-0 text-lg leading-relaxed text-gray-800 dark:text-gray-200 placeholder-gray-400"
+                        spellCheck={false}
+                    />
+                    <div className="absolute bottom-4 right-6 text-gray-400 text-xs">
+                        {text.split(/\s+/).filter(w => w).length} words
                     </div>
+                </div>
 
-                    {/* Output Side */}
-                    <div className="flex-1 flex flex-col p-6 bg-gray-50/50 dark:bg-gray-950/50 min-h-[50%] md:min-h-0">
-                        <label className="text-sm font-medium text-gray-500 mb-2">AI Feedback</label>
-                        {result ? (
-                            <div className="flex-1 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 overflow-y-auto animate-in fade-in duration-500">
-                                <div className="prose dark:prose-invert max-w-none">
-                                    {/* Use a dirty markdown renderer or just pre-wrap */}
-                                    <div className="whitespace-pre-wrap">{result}</div>
-                                </div>
+                {/* Context Panel */}
+                {showContext && contextId && (
+                    <div className="w-1/3 border-l border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 overflow-y-auto p-6 hidden md:block animate-in slide-in-from-right duration-300">
+                        <h3 className="text-sm font-bold uppercase text-gray-500 mb-4 tracking-wider flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" /> Reference Material
+                        </h3>
+                        {loadingContext ? (
+                            <div className="flex justify-center py-10">
+                                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                             </div>
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                                <ArrowRight size={32} className="mb-2 text-gray-300 dark:text-gray-700" />
-                                <p>Results will appear here</p>
+                            <div className="prose prose-sm dark:prose-invert">
+                                {contextContent.split('\n').map((p, i) => (
+                                    <p key={i} className="mb-2 text-gray-600 dark:text-gray-400">{p}</p>
+                                ))}
                             </div>
                         )}
                     </div>
-
-                </div>
+                )}
             </div>
+
+            {showAssessment && (
+                <WritingAssessment
+                    originalText={text}
+                    topic={topic}
+                    onClose={() => setShowAssessment(false)}
+                />
+            )}
         </div>
     );
 }

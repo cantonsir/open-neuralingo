@@ -1,16 +1,13 @@
 import React from 'react';
-import { Book, Layers, Sparkles, BookOpen, Star, Clock } from 'lucide-react';
+import { Book, Play, Layers, TrendingUp, BookOpen, Clock, Flame } from 'lucide-react';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
 
-export default function ReadingDashboard({
-    onNavigate,
-    savedStoriesCount = 0
-}: {
+interface ReadingDashboardProps {
     onNavigate: (view: View) => void;
-    savedStoriesCount?: number;
-}) {
-    // Mock actions
+}
+
+export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) {
     const quickActions = (
         <>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -23,47 +20,46 @@ export default function ReadingDashboard({
                     className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 dark:border-blue-800/30 rounded-xl hover:from-blue-500/20 hover:to-indigo-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
-                        <Sparkles size={20} className="text-white" />
+                        <Book size={20} className="text-white" />
                     </div>
                     <div className="flex-1 text-left">
                         <div className="font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            Generate New Story
+                            Story Generator
                         </div>
-                        <div className="text-xs text-gray-500">AI-powered stories</div>
+                        <div className="text-xs text-gray-500">Create new stories</div>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => onNavigate('learning')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-indigo-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center">
+                        <TrendingUp size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            Lessons
+                        </div>
+                        <div className="text-xs text-gray-500">Grammar & Vocab</div>
                     </div>
                 </button>
             </div>
         </>
     );
 
-    const recentStories = (
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-8 text-center">
-            <div className="text-4xl mb-3">📚</div>
-            <p className="text-gray-500 dark:text-gray-400">No stories read yet. Start generating!</p>
-        </div>
-    );
-
     return (
         <CommonDashboard
-            title="Reading Dashboard"
-            subtitle="Explore new worlds through text."
-            stats={[
-                { icon: <BookOpen size={20} />, label: "Read", value: 0, subtext: "Stories completed", color: "blue" },
-                { icon: <Star size={20} />, label: "Vocab", value: 0, subtext: "New words found", color: "purple" },
-                { icon: <Clock size={20} />, label: "Time", value: "0h", subtext: "Reading time", color: "green" },
-                { icon: <Layers size={20} />, label: "Saved", value: savedStoriesCount, subtext: "In library", color: "orange" },
-            ]}
+            title="Reading Practice"
+            subtitle="Improve your comprehension skills."
             onStartAction={() => onNavigate('generator')}
-            startActionLabel="Generate Story"
-            recentItems={
-                <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-gray-400" />
-                        Recent Stories
-                    </h3>
-                    {recentStories}
-                </div>
-            }
+            startActionLabel="New Story"
+            stats={[
+                { icon: <BookOpen size={20} />, label: "Books", value: 5, subtext: "In library", color: "blue" },
+                { icon: <Clock size={20} />, label: "Read", value: "2h", subtext: "This week", color: "green" },
+                { icon: <Flame size={20} />, label: "Streak", value: 3, subtext: "Day streak", color: "orange" },
+            ]}
+            recentItems={<div className="text-center py-8 text-gray-500">Recent texts will appear here.</div>}
             quickActions={quickActions}
             colorTheme="blue"
         />

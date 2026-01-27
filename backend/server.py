@@ -2,14 +2,25 @@ import sqlite3
 import json
 import os
 import uuid
+import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi
+from werkzeug.utils import secure_filename
+import PyPDF2
+import ebooklib
+from ebooklib import epub
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 CORS(app)
 
 DB_FILE = 'echoloop.db'
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'pdf', 'epub'}
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -213,6 +224,52 @@ def migrate_db():
     conn.close()
 
 migrate_db()
+
+def ensure_new_tables():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS library (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            filename TEXT,
+            file_type TEXT,
+            content_text TEXT,
+            created_at INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS speaking_conversations (
+            id TEXT PRIMARY KEY,
+            topic TEXT,
+            script_json TEXT,
+            audio_paths_json TEXT,
+            created_at INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS speaking_sessions (
+            id TEXT PRIMARY KEY,
+            topic TEXT,
+            transcript_json TEXT, -- List of {role, text}
+            duration_seconds INTEGER,
+            created_at INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS writing_sessions (
+            id TEXT PRIMARY KEY,
+            topic TEXT,
+            content TEXT,
+            context_id TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+ensure_new_tables()
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -754,6 +811,65 @@ def get_goal_videos():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# --- Writing API ---
+
+@app.route('/api/writing/sessions', methods=['GET'])
+def get_writing_sessions():
+    """Get all writing sessions"""
+    try:
+        conn = get_db_connection()
+        sessions = conn.execute('SELECT * FROM writing_sessions ORDER BY updated_at DESC').fetchall()
+        conn.close()
+        
+        session_list = []
+        for s in sessions:
+            sess = dict(s)
+            session_list.append({
+                'id': sess['id'],
+                'topic': sess['topic'],
+                'content': sess['content'],
+                'contextId': sess['context_id'],
+                'createdAt': sess['created_at'],
+                'updatedAt': sess['updated_at']
+            })
+        
+        return jsonify(session_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/writing/sessions', methods=['POST'])
+def save_writing_session():
+    """Save a writing session"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+        
+    try:
+        conn = get_db_connection()
+        
+        # Check if exists to update or insert
+        session_id = data.get('id') or str(uuid.uuid4())
+        
+        conn.execute('''
+            INSERT OR REPLACE INTO writing_sessions (id, topic, content, context_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            session_id,
+            data.get('topic', 'Untitled'),
+            data.get('content', ''),
+            data.get('contextId'),
+            data.get('createdAt', int(time.time() * 1000)),
+            int(time.time() * 1000) # Always update updated_at
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'id': session_id}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/goals', methods=['POST'])
 def create_goal_video():
@@ -1519,6 +1635,207 @@ def mark_segment_watched(goal_id, segment_index):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+# --- Library API ---
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+        
+        # logical text extraction
+        text_content = ""
+        file_type = filename.rsplit('.', 1)[1].lower()
+        
+        try:
+            if file_type == 'pdf':
+                with open(file_path, 'rb') as f:
+                    pdf_reader = PyPDF2.PdfReader(f)
+                    for page in pdf_reader.pages:
+                        extracted = page.extract_text()
+                        if extracted:
+                            text_content += extracted + "\n"
+            elif file_type == 'epub':
+                try:
+                    book = epub.read_epub(file_path)
+                    for item in book.get_items():
+                        if item.get_type() == ebooklib.ITEM_DOCUMENT:
+                             soup = BeautifulSoup(item.get_content(), 'html.parser')
+                             text_content += soup.get_text() + "\n"
+                except Exception as e:
+                     print(f"EPUB Error: {e}")
+                     # Fallback if ebooklib fails or structure is weird
+                     text_content = "Could not extract text from EPUB."
+        except Exception as e:
+            return jsonify({'error': f'Failed to process file: {str(e)}'}), 500
+
+        # Save to DB
+        try:
+            conn = get_db_connection()
+            library_id = str(uuid.uuid4())
+            import time
+            created_at = int(time.time() * 1000)
+            
+            conn.execute('''
+                INSERT INTO library (id, title, filename, file_type, content_text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (library_id, filename, filename, file_type, text_content, created_at))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'status': 'success', 'id': library_id}), 201
+        except Exception as e:
+             return jsonify({'error': str(e)}), 500
+             
+    return jsonify({'error': 'File type not allowed'}), 400
+
+@app.route('/api/library', methods=['GET'])
+def get_library():
+    try:
+        conn = get_db_connection()
+        items = conn.execute('SELECT id, title, filename, file_type, created_at FROM library ORDER BY created_at DESC').fetchall()
+        conn.close()
+        
+        return jsonify([dict(i) for i in items])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/library/import/youtube', methods=['POST'])
+def import_youtube_to_library():
+    data = request.json
+    video_id = data.get('videoId')
+    title = data.get('title')
+    
+    if not video_id:
+        return jsonify({'error': 'Missing videoId'}), 400
+        
+    try:
+        # Fetch transcript
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Try English or first available
+            try:
+                transcript = transcript_list.find_transcript(['en'])
+            except:
+                transcript = transcript_list.find_transcript(['en-US', 'en-GB'])
+        except:
+             # Fallback
+             try:
+                 transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                 # This returns list of dicts, need to convert to text
+                 text_content = "\n".join([t['text'] for t in transcript])
+             except Exception as e:
+                 return jsonify({'error': f"Failed to get transcript: {str(e)}"}), 500
+        else:
+             # transcript object
+             text_content = " ".join([p.text for p in transcript.fetch()])
+
+        if not title:
+            title = f"YouTube Import ({video_id})"
+
+        conn = get_db_connection()
+        library_id = str(uuid.uuid4())
+        import time
+        created_at = int(time.time() * 1000)
+        
+        conn.execute('''
+            INSERT INTO library (id, title, filename, file_type, content_text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (library_id, title, video_id, 'youtube', text_content, created_at))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'id': library_id}), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/library/<library_id>/content', methods=['GET'])
+def get_library_content(library_id):
+    try:
+        conn = get_db_connection()
+        item = conn.execute('SELECT content_text FROM library WHERE id = ?', (library_id,)).fetchone()
+        conn.close()
+        
+        if item:
+            return jsonify({'content': item['content_text']})
+        else:
+            return jsonify({'error': 'Item not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+        
+@app.route('/api/library/<library_id>', methods=['DELETE'])
+def delete_library_item(library_id):
+    try:
+        conn = get_db_connection()
+        conn.execute('DELETE FROM library WHERE id = ?', (library_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'deleted'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# --- Speaking History API ---
+
+@app.route('/api/speaking/sessions', methods=['GET'])
+def get_speaking_sessions():
+    try:
+        conn = get_db_connection()
+        sessions = conn.execute('SELECT * FROM speaking_sessions ORDER BY created_at DESC').fetchall()
+        conn.close()
+        
+        session_list = []
+        for s in sessions:
+            sess = dict(s)
+            session_list.append({
+                'id': sess['id'],
+                'topic': sess['topic'],
+                'transcript': json.loads(sess['transcript_json']) if sess['transcript_json'] else [],
+                'durationSeconds': sess['duration_seconds'],
+                'createdAt': sess['created_at']
+            })
+        
+        return jsonify(session_list)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/speaking/sessions', methods=['POST'])
+def save_speaking_session():
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    try:
+        conn = get_db_connection()
+        session_id = str(uuid.uuid4())
+        
+        conn.execute('''
+            INSERT INTO speaking_sessions (id, topic, transcript_json, duration_seconds, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (
+            session_id,
+            data.get('topic', 'Untitled Session'),
+            json.dumps(data.get('transcript', [])),
+            data.get('durationSeconds', 0),
+            data.get('createdAt', 0) 
+        ))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'status': 'success', 'id': session_id}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     # init_db() # Run here too to be safe

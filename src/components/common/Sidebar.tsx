@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown } from 'lucide-react';
-import { Module } from '../../types';
+import { Module, View, Theme } from '../../types';
 
-type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction';
-type Theme = 'dark' | 'light';
+
+
 
 interface SidebarProps {
     view: View;
@@ -148,7 +148,7 @@ export default function Sidebar({
     const handleModuleSelect = (m: Module) => {
         setActiveModule(m);
         setIsModuleMenuOpen(false);
-        // Reset sub-view if needed, or let App handle default view for module
+        setView('home'); // Reset view to dashboard
     };
 
     return (
@@ -310,6 +310,23 @@ export default function Sidebar({
                             onClick={() => setView('home')}
                             activeColorTheme="blue"
                         />
+                        <SectionHeader label="Learning" collapsed={collapsed} />
+                        <NavItem
+                            icon={<GraduationCap size={20} />}
+                            label="Lessons"
+                            isActive={view === 'learning'}
+                            collapsed={collapsed}
+                            onClick={() => setView('learning')}
+                            activeColorTheme="blue"
+                        />
+                        <NavItem
+                            icon={<ClipboardCheck size={20} />}
+                            label="Assessment"
+                            isActive={view === 'assessment'}
+                            collapsed={collapsed}
+                            onClick={() => setView('assessment')}
+                            activeColorTheme="blue"
+                        />
                         <SectionHeader label="Tools" collapsed={collapsed} />
                         <NavItem
                             icon={<Book size={20} />}
@@ -319,14 +336,12 @@ export default function Sidebar({
                             onClick={() => setView('generator')}
                             activeColorTheme="blue"
                         />
-                        <SectionHeader label="Library" collapsed={collapsed} />
                         <NavItem
                             icon={<Layers size={20} />}
-                            label="Saved Stories"
-                            isActive={false}
-                            comingSoon
+                            label="Library"
+                            isActive={view === 'library'}
                             collapsed={collapsed}
-                            onClick={() => { }}
+                            onClick={() => setView('library')}
                             activeColorTheme="blue"
                         />
                     </>
@@ -342,6 +357,23 @@ export default function Sidebar({
                             onClick={() => setView('home')}
                             activeColorTheme="green"
                         />
+                        <SectionHeader label="Learning" collapsed={collapsed} />
+                        <NavItem
+                            icon={<GraduationCap size={20} />}
+                            label="Lessons"
+                            isActive={view === 'learning'}
+                            collapsed={collapsed}
+                            onClick={() => setView('learning')}
+                            activeColorTheme="green"
+                        />
+                        <NavItem
+                            icon={<ClipboardCheck size={20} />}
+                            label="Assessment"
+                            isActive={view === 'assessment'}
+                            collapsed={collapsed}
+                            onClick={() => setView('assessment')}
+                            activeColorTheme="green"
+                        />
                         <SectionHeader label="Practice" collapsed={collapsed} />
                         <NavItem
                             icon={<Mic size={20} />}
@@ -349,15 +381,6 @@ export default function Sidebar({
                             isActive={view === 'scenario'}
                             collapsed={collapsed}
                             onClick={() => setView('scenario')}
-                            activeColorTheme="green"
-                        />
-                        <NavItem
-                            icon={<Layers size={20} />}
-                            label="History"
-                            isActive={false}
-                            comingSoon
-                            collapsed={collapsed}
-                            onClick={() => { }}
                             activeColorTheme="green"
                         />
                     </>
@@ -373,22 +396,30 @@ export default function Sidebar({
                             onClick={() => setView('home')}
                             activeColorTheme="purple"
                         />
-                        <SectionHeader label="Tools" collapsed={collapsed} />
+                        <SectionHeader label="Learning" collapsed={collapsed} />
                         <NavItem
-                            icon={<PenTool size={20} />}
-                            label="Correction"
-                            isActive={view === 'correction'}
+                            icon={<GraduationCap size={20} />}
+                            label="Lessons"
+                            isActive={view === 'learning'}
                             collapsed={collapsed}
-                            onClick={() => setView('correction')}
+                            onClick={() => setView('learning')}
                             activeColorTheme="purple"
                         />
                         <NavItem
-                            icon={<Layers size={20} />}
-                            label="Saved Drafts"
-                            isActive={false}
-                            comingSoon
+                            icon={<ClipboardCheck size={20} />}
+                            label="Assessment"
+                            isActive={view === 'assessment'}
                             collapsed={collapsed}
-                            onClick={() => { }}
+                            onClick={() => setView('assessment')}
+                            activeColorTheme="purple"
+                        />
+                        <SectionHeader label="Tools" collapsed={collapsed} />
+                        <NavItem
+                            icon={<PenTool size={20} />}
+                            label="Composition"
+                            isActive={view === 'compose' || view === 'correction'}
+                            collapsed={collapsed}
+                            onClick={() => setView('correction')}
                             activeColorTheme="purple"
                         />
                     </>
