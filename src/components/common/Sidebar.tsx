@@ -255,6 +255,14 @@ export default function Sidebar({
                             activeColorTheme="orange"
                         />
                         <NavItem
+                            icon={<Mic size={20} />}
+                            label="Shadowing"
+                            isActive={view === 'shadowing'}
+                            collapsed={collapsed}
+                            onClick={() => setView('shadowing')}
+                            activeColorTheme="orange"
+                        />
+                        <NavItem
                             icon={<Volume2 size={20} />}
                             label="Audio Generator"
                             isActive={view === 'compose'}

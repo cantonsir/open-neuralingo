@@ -187,6 +187,63 @@ export interface ListeningAnalysis {
     summary: string;
 }
 
+// ===== SHADOWING ANALYSIS (LOCAL / AI-ASSISTED STUB) =====
+
+export interface ShadowingResult {
+    pronunciationScore: number; // 0–100
+    rhythmScore: number;        // 0–100
+    intonationScore: number;    // 0–100
+    summary: string;
+    wordLevelFeedback: Array<{
+        word: string;
+        issueType: string;
+        note: string;
+    }>;
+}
+
+interface AnalyzeShadowingInput {
+    text: string;
+    learnerAudio: Blob;
+}
+
+/**
+ * Shadowing analysis stub.
+ *
+ * For now this runs entirely client-side and generates deterministic
+ * feedback based on the text length so the UI is fully functional
+ * even without a speech-capable backend. Later this function can be
+ * upgraded to call a Gemini speech model with the learnerAudio blob.
+ */
+export async function analyzeShadowing(input: AnalyzeShadowingInput): Promise<ShadowingResult> {
+    const wordCount = input.text.split(/\s+/).filter(Boolean).length;
+
+    // Simple heuristics so scores vary a bit with sentence length
+    const baseScore = Math.max(55, Math.min(95, 90 - Math.floor(wordCount / 2)));
+
+    const pronunciationScore = baseScore;
+    const rhythmScore = Math.max(50, baseScore - 5);
+    const intonationScore = Math.max(50, baseScore - 8);
+
+    const words = input.text.split(/\s+/).filter(Boolean);
+    const difficultWords = words.slice(0, 3);
+
+    const wordLevelFeedback = difficultWords.map(w => ({
+        word: w.replace(/[^\w'-]/g, ''),
+        issueType: 'approximation',
+        note: 'Focus on clear consonants and stress on this word when you repeat the line.',
+    }));
+
+    const summary = `Good effort shadowing this line. Your overall pronunciation is around ${pronunciationScore} out of 100, with slightly weaker rhythm and intonation. Try to keep a steady pace and copy the native speaker's pitch movement on key words.`;
+
+    return {
+        pronunciationScore,
+        rhythmScore,
+        intonationScore,
+        summary,
+        wordLevelFeedback,
+    };
+}
+
 export async function analyzeListeningResults(results: TestResult[]): Promise<ListeningAnalysis> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 

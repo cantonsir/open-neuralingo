@@ -15,6 +15,7 @@ import VocabularyManager from './VocabularyManager';
 import SelfAssessment from './SelfAssessment';
 import MiniTest from './MiniTest';
 import ListeningCompose from './ListeningCompose';
+import ShadowingView from './ShadowingView';
 
 interface ListeningModuleProps {
   view: View;
@@ -183,6 +184,22 @@ export default function ListeningModule({
           onSeek={(t) => player?.seekTo(t, true)}
         />
       </div>
+
+      {/* Shadowing View */}
+      {view === 'shadowing' && (
+        <ShadowingView
+          videoId={videoId}
+          player={player}
+          onPlayerReady={setPlayer}
+          state={state}
+          onStateChange={(s) => setState({ ...state, ...s })}
+          currentSubtitle={getCurrentSubtitle()}
+          subtitles={subtitles}
+          onPrevSubtitle={handlePrevSubtitle}
+          onNextSubtitle={handleNextSubtitle}
+          onPlaySegment={handlePlaySegment}
+        />
+      )}
 
       {/* Dashboard View */}
       {view === 'home' && (

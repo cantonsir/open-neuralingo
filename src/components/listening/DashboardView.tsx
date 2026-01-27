@@ -276,6 +276,22 @@ export default function DashboardView({
                 </button>
 
                 <button
+                    onClick={() => onNavigate('shadowing')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-orange-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center">
+                        <PlayCircle size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                            Shadowing Practice
+                        </div>
+                        <div className="text-xs text-gray-500">Repeat lines with AI feedback</div>
+                    </div>
+                    <ArrowRight size={18} className="text-gray-400 group-hover:text-orange-500 transition-colors" />
+                </button>
+
+                <button
                     onClick={() => onNavigate('flashcards')}
                     className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-blue-500/50 hover:shadow-md transition-all group"
                 >
