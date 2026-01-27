@@ -39,6 +39,61 @@ export interface PlayerState {
   playbackRate: number;
 }
 
+// Assessment Types
+export interface AssessmentProfile {
+  id: string;
+  targetLanguage: string;
+  targetContent: string;
+  listeningLevel: number;
+  subtitleDependence: number;
+  difficulties: string[];
+  updatedAt: number;
+}
+
+export interface TestResponse {
+  sentenceId: number;
+  sentence: string;
+  understood: boolean;
+  replays: number;
+  reactionTimeMs: number;
+  markedIndices: number[];
+}
+
+export interface TestAnalysis {
+  overallLevel?: string;
+  strengths?: string[];
+  weaknesses?: string[];
+  recommendations?: string[];
+  summary?: string;
+}
+
+export interface TestResult {
+  id: string;
+  takenAt: number;
+  score: number;
+  totalQuestions: number;
+  analysis: TestAnalysis | null;
+  responses: TestResponse[];
+}
+
+// Speaking & Writing Session Types
+export interface SpeakingSession {
+  id: string;
+  topic: string;
+  transcript: Array<{ role: string; content: string }>;
+  durationSeconds: number;
+  createdAt: number;
+}
+
+export interface WritingSession {
+  id: string;
+  topic: string;
+  content: string;
+  contextId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Google Developers YouTube API Demo Video (Extremely stable for testing)
 export const DEMO_VIDEO_ID = "M7lc1UVf-VE";
 

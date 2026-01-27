@@ -1,4 +1,4 @@
-import { Marker } from './types';
+import { Marker, SpeakingSession, WritingSession } from './types';
 
 const API_BASE = '/api';
 
@@ -594,7 +594,7 @@ export const api = {
     /**
      * Fetch all past speaking sessions.
      */
-    async fetchSpeakingSessions(): Promise<any[]> {
+    async fetchSpeakingSessions(): Promise<SpeakingSession[]> {
         try {
             const response = await fetch(`${API_BASE}/speaking/sessions`);
             if (!response.ok) throw new Error('Failed to fetch speaking sessions');
@@ -610,7 +610,7 @@ export const api = {
     /**
      * Fetch all past writing sessions.
      */
-    async fetchWritingSessions(): Promise<any[]> {
+    async fetchWritingSessions(): Promise<WritingSession[]> {
         try {
             const response = await fetch(`${API_BASE}/writing/sessions`);
             if (!response.ok) throw new Error('Failed to fetch writing sessions');

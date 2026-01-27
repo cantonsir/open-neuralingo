@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, GoalVideo, GoalVideoDetail } from '../db';
+import { AssessmentProfile, TestResult } from '../types';
 
 export function useLearningData() {
   // Assessment data cache
-  const [assessmentProfile, setAssessmentProfile] = useState<any>(null);
-  const [assessmentResults, setAssessmentResults] = useState<any[] | null>(null);
+  const [assessmentProfile, setAssessmentProfile] = useState<AssessmentProfile | null>(null);
+  const [assessmentResults, setAssessmentResults] = useState<TestResult[] | null>(null);
   const [assessmentLoaded, setAssessmentLoaded] = useState(false);
 
   // Learning goals cache

@@ -8,7 +8,7 @@ import time
 import uuid
 from flask import Blueprint, request, jsonify
 
-from app.database import get_db_connection
+from app.database import get_db
 
 
 writing_bp = Blueprint('writing', __name__)
@@ -23,26 +23,25 @@ def get_writing_sessions():
         Array of writing session objects
     """
     try:
-        conn = get_db_connection()
-        sessions = conn.execute('''
-            SELECT * FROM writing_sessions 
-            ORDER BY updated_at DESC
-        ''').fetchall()
-        conn.close()
-        
-        session_list = []
-        for s in sessions:
-            sess = dict(s)
-            session_list.append({
-                'id': sess['id'],
-                'topic': sess['topic'],
-                'content': sess['content'],
-                'contextId': sess['context_id'],
-                'createdAt': sess['created_at'],
-                'updatedAt': sess['updated_at']
-            })
-        
-        return jsonify(session_list)
+        with get_db() as conn:
+            sessions = conn.execute('''
+                SELECT * FROM writing_sessions 
+                ORDER BY updated_at DESC
+            ''').fetchall()
+            
+            session_list = []
+            for s in sessions:
+                sess = dict(s)
+                session_list.append({
+                    'id': sess['id'],
+                    'topic': sess['topic'],
+                    'content': sess['content'],
+                    'contextId': sess['context_id'],
+                    'createdAt': sess['created_at'],
+                    'updatedAt': sess['updated_at']
+                })
+            
+            return jsonify(session_list)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -68,27 +67,25 @@ def save_writing_session():
         return jsonify({'error': 'No data provided'}), 400
         
     try:
-        conn = get_db_connection()
-        
-        session_id = data.get('id') or str(uuid.uuid4())
-        
-        conn.execute('''
-            INSERT OR REPLACE INTO writing_sessions 
-            (id, topic, content, context_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            session_id,
-            data.get('topic', 'Untitled'),
-            data.get('content', ''),
-            data.get('contextId'),
-            data.get('createdAt', int(time.time() * 1000)),
-            int(time.time() * 1000)
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'success', 'id': session_id}), 201
+        with get_db() as conn:
+            session_id = data.get('id') or str(uuid.uuid4())
+            
+            conn.execute('''
+                INSERT OR REPLACE INTO writing_sessions 
+                (id, topic, content, context_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id,
+                data.get('topic', 'Untitled'),
+                data.get('content', ''),
+                data.get('contextId'),
+                data.get('createdAt', int(time.time() * 1000)),
+                int(time.time() * 1000)
+            ))
+            
+            conn.commit()
+            
+            return jsonify({'status': 'success', 'id': session_id}), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

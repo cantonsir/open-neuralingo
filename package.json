@@ -1,8 +1,25 @@
 {
-  "name": "echoloop---deep-listening-trainer",
+  "name": "echoloop",
+  "version": "1.0.0",
+  "description": "A comprehensive language learning platform with AI-powered listening, reading, speaking, and writing modules",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "author": "Jayden (Cantonsir)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cantonsir/deep-listening-trainer.git"
+  },
+  "keywords": [
+    "language-learning",
+    "listening-practice",
+    "youtube",
+    "flashcards",
+    "ai",
+    "gemini",
+    "react",
+    "typescript"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -25,5 +42,8 @@
     "tailwindcss": "^4.1.18",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

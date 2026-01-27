@@ -1,3 +1,13 @@
+/**
+ * AppContext provides global application state for theme, language, navigation, and settings.
+ * 
+ * Usage:
+ * - Import `useApp` hook in child components to access shared state
+ * - The context is wrapped around the App in main.tsx via AppProvider
+ * 
+ * Note: App.tsx currently manages its own state for backwards compatibility.
+ * Child components can progressively adopt useApp() for shared state access.
+ */
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Module, View, Theme } from '../types';
 import { useTheme } from '../hooks/useTheme';

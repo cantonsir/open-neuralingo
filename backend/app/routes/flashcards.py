@@ -7,7 +7,7 @@ Handles CRUD operations for flashcards/markers.
 import json
 from flask import Blueprint, request, jsonify
 
-from app.database import get_db_connection
+from app.database import get_db
 
 
 flashcards_bp = Blueprint('flashcards', __name__)
@@ -49,13 +49,12 @@ def get_cards():
         JSON array of all flashcard markers
     """
     try:
-        conn = get_db_connection()
-        cards = conn.execute(
-            'SELECT * FROM flashcards ORDER BY created_at DESC'
-        ).fetchall()
-        conn.close()
-        
-        return jsonify([_card_to_marker(dict(card)) for card in cards])
+        with get_db() as conn:
+            cards = conn.execute(
+                'SELECT * FROM flashcards ORDER BY created_at DESC'
+            ).fetchall()
+            
+            return jsonify([_card_to_marker(dict(card)) for card in cards])
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -78,29 +77,28 @@ def save_card():
         return jsonify({'error': 'No data provided'}), 400
     
     try:
-        conn = get_db_connection()
-        conn.execute('''
-            INSERT OR REPLACE INTO flashcards 
-            (id, video_id, start_time, end_time, subtitle_text, created_at, 
-             vocab_data, misunderstood_indices, tags, note, press_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            card['id'],
-            card.get('videoId', ''),
-            card['start'],
-            card['end'],
-            card.get('subtitleText', ''),
-            card['createdAt'],
-            json.dumps(card.get('vocabData', {})),
-            json.dumps(card.get('misunderstoodIndices', [])),
-            json.dumps(card.get('tags', [])),
-            card.get('note', ''),
-            card.get('pressCount', 0)
-        ))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'success', 'id': card['id']}), 201
+        with get_db() as conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO flashcards 
+                (id, video_id, start_time, end_time, subtitle_text, created_at, 
+                 vocab_data, misunderstood_indices, tags, note, press_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                card['id'],
+                card.get('videoId', ''),
+                card['start'],
+                card['end'],
+                card.get('subtitleText', ''),
+                card['createdAt'],
+                json.dumps(card.get('vocabData', {})),
+                json.dumps(card.get('misunderstoodIndices', [])),
+                json.dumps(card.get('tags', [])),
+                card.get('note', ''),
+                card.get('pressCount', 0)
+            ))
+            conn.commit()
+            
+            return jsonify({'status': 'success', 'id': card['id']}), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -118,12 +116,11 @@ def delete_card(card_id):
         Deletion status
     """
     try:
-        conn = get_db_connection()
-        conn.execute('DELETE FROM flashcards WHERE id = ?', (card_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'deleted'}), 200
+        with get_db() as conn:
+            conn.execute('DELETE FROM flashcards WHERE id = ?', (card_id,))
+            conn.commit()
+            
+            return jsonify({'status': 'deleted'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -148,35 +145,33 @@ def update_card(card_id):
         return jsonify({'error': 'No data provided'}), 400
 
     try:
-        conn = get_db_connection()
-        
-        # Build dynamic update query
-        fields = []
-        values = []
-        
-        field_mapping = {
-            'vocabData': ('vocab_data', lambda v: json.dumps(v)),
-            'note': ('note', lambda v: v),
-            'pressCount': ('press_count', lambda v: v),
-            'misunderstoodIndices': ('misunderstood_indices', lambda v: json.dumps(v))
-        }
-        
-        for key, (db_field, transform) in field_mapping.items():
-            if key in updates:
-                fields.append(f'{db_field} = ?')
-                values.append(transform(updates[key]))
-        
-        if not fields:
-            return jsonify({'status': 'no changes'}), 200
+        with get_db() as conn:
+            # Build dynamic update query
+            fields = []
+            values = []
+            
+            field_mapping = {
+                'vocabData': ('vocab_data', lambda v: json.dumps(v)),
+                'note': ('note', lambda v: v),
+                'pressCount': ('press_count', lambda v: v),
+                'misunderstoodIndices': ('misunderstood_indices', lambda v: json.dumps(v))
+            }
+            
+            for key, (db_field, transform) in field_mapping.items():
+                if key in updates:
+                    fields.append(f'{db_field} = ?')
+                    values.append(transform(updates[key]))
+            
+            if not fields:
+                return jsonify({'status': 'no changes'}), 200
 
-        values.append(card_id)
-        query = f'UPDATE flashcards SET {", ".join(fields)} WHERE id = ?'
-        
-        conn.execute(query, values)
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'updated'}), 200
+            values.append(card_id)
+            query = f'UPDATE flashcards SET {", ".join(fields)} WHERE id = ?'
+            
+            conn.execute(query, values)
+            conn.commit()
+            
+            return jsonify({'status': 'updated'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -24,7 +24,6 @@ backend/
 │       └── writing.py       # Writing session management
 ├── uploads/                  # Uploaded files (PDF, EPUB)
 ├── run.py                    # Application entry point
-├── server.py                 # Legacy entry point (deprecated)
 ├── requirements.txt          # Python dependencies
 └── README.md                 # This file
 ```

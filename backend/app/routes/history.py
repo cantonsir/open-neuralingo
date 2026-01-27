@@ -6,7 +6,7 @@ Handles CRUD operations for video watch history.
 
 from flask import Blueprint, request, jsonify
 
-from app.database import get_db_connection
+from app.database import get_db
 
 
 history_bp = Blueprint('history', __name__)
@@ -33,13 +33,12 @@ def get_history():
         JSON array of watch history items sorted by watched_at descending
     """
     try:
-        conn = get_db_connection()
-        items = conn.execute(
-            'SELECT * FROM watch_history ORDER BY watched_at DESC'
-        ).fetchall()
-        conn.close()
-        
-        return jsonify([_history_to_dict(dict(item)) for item in items])
+        with get_db() as conn:
+            items = conn.execute(
+                'SELECT * FROM watch_history ORDER BY watched_at DESC'
+            ).fetchall()
+            
+            return jsonify([_history_to_dict(dict(item)) for item in items])
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -61,23 +60,22 @@ def save_history():
         return jsonify({'error': 'No data provided'}), 400
     
     try:
-        conn = get_db_connection()
-        conn.execute('''
-            INSERT OR REPLACE INTO watch_history 
-            (video_id, title, thumbnail, watched_at, duration, words_learned)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            item['videoId'],
-            item.get('title', ''),
-            item.get('thumbnail', ''),
-            item.get('watchedAt', 0),
-            item.get('duration', ''),
-            item.get('wordsLearned', 0)
-        ))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'success'}), 201
+        with get_db() as conn:
+            conn.execute('''
+                INSERT OR REPLACE INTO watch_history 
+                (video_id, title, thumbnail, watched_at, duration, words_learned)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                item['videoId'],
+                item.get('title', ''),
+                item.get('thumbnail', ''),
+                item.get('watchedAt', 0),
+                item.get('duration', ''),
+                item.get('wordsLearned', 0)
+            ))
+            conn.commit()
+            
+            return jsonify({'status': 'success'}), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -95,12 +93,11 @@ def delete_history_item(video_id):
         Deletion status
     """
     try:
-        conn = get_db_connection()
-        conn.execute('DELETE FROM watch_history WHERE video_id = ?', (video_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'deleted'}), 200
+        with get_db() as conn:
+            conn.execute('DELETE FROM watch_history WHERE video_id = ?', (video_id,))
+            conn.commit()
+            
+            return jsonify({'status': 'deleted'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -115,12 +112,11 @@ def clear_history():
         Clear status
     """
     try:
-        conn = get_db_connection()
-        conn.execute('DELETE FROM watch_history')
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'cleared'}), 200
+        with get_db() as conn:
+            conn.execute('DELETE FROM watch_history')
+            conn.commit()
+            
+            return jsonify({'status': 'cleared'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

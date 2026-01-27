@@ -4,7 +4,6 @@ Library Routes
 Handles file uploads, content management, and YouTube imports for the library.
 """
 
-import json
 import os
 import time
 import uuid
@@ -16,7 +15,7 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 from youtube_transcript_api import YouTubeTranscriptApi
 
-from app.database import get_db_connection, ensure_upload_folder
+from app.database import get_db, ensure_upload_folder
 from app.config import Config
 
 
@@ -96,19 +95,18 @@ def upload_file():
 
     # Save to database
     try:
-        conn = get_db_connection()
-        library_id = str(uuid.uuid4())
-        created_at = int(time.time() * 1000)
-        
-        conn.execute('''
-            INSERT INTO library (id, title, filename, file_type, content_text, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (library_id, filename, filename, file_type, text_content, created_at))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'success', 'id': library_id}), 201
+        with get_db() as conn:
+            library_id = str(uuid.uuid4())
+            created_at = int(time.time() * 1000)
+            
+            conn.execute('''
+                INSERT INTO library (id, title, filename, file_type, content_text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (library_id, filename, filename, file_type, text_content, created_at))
+            
+            conn.commit()
+            
+            return jsonify({'status': 'success', 'id': library_id}), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -123,15 +121,14 @@ def get_library():
         Array of library items (without content text)
     """
     try:
-        conn = get_db_connection()
-        items = conn.execute('''
-            SELECT id, title, filename, file_type, created_at 
-            FROM library 
-            ORDER BY created_at DESC
-        ''').fetchall()
-        conn.close()
-        
-        return jsonify([dict(i) for i in items])
+        with get_db() as conn:
+            items = conn.execute('''
+                SELECT id, title, filename, file_type, created_at 
+                FROM library 
+                ORDER BY created_at DESC
+            ''').fetchall()
+            
+            return jsonify([dict(i) for i in items])
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -175,19 +172,18 @@ def import_youtube_to_library():
         if not title:
             title = f"YouTube Import ({video_id})"
 
-        conn = get_db_connection()
-        library_id = str(uuid.uuid4())
-        created_at = int(time.time() * 1000)
-        
-        conn.execute('''
-            INSERT INTO library (id, title, filename, file_type, content_text, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (library_id, title, video_id, 'youtube', text_content, created_at))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'success', 'id': library_id}), 201
+        with get_db() as conn:
+            library_id = str(uuid.uuid4())
+            created_at = int(time.time() * 1000)
+            
+            conn.execute('''
+                INSERT INTO library (id, title, filename, file_type, content_text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (library_id, title, video_id, 'youtube', text_content, created_at))
+            
+            conn.commit()
+            
+            return jsonify({'status': 'success', 'id': library_id}), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -205,16 +201,15 @@ def get_library_content(library_id):
         Content text of the library item
     """
     try:
-        conn = get_db_connection()
-        item = conn.execute(
-            'SELECT content_text FROM library WHERE id = ?', (library_id,)
-        ).fetchone()
-        conn.close()
-        
-        if item:
-            return jsonify({'content': item['content_text']})
-        else:
-            return jsonify({'error': 'Item not found'}), 404
+        with get_db() as conn:
+            item = conn.execute(
+                'SELECT content_text FROM library WHERE id = ?', (library_id,)
+            ).fetchone()
+            
+            if item:
+                return jsonify({'content': item['content_text']})
+            else:
+                return jsonify({'error': 'Item not found'}), 404
             
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -232,12 +227,11 @@ def delete_library_item(library_id):
         Deletion status
     """
     try:
-        conn = get_db_connection()
-        conn.execute('DELETE FROM library WHERE id = ?', (library_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'status': 'deleted'}), 200
+        with get_db() as conn:
+            conn.execute('DELETE FROM library WHERE id = ?', (library_id,))
+            conn.commit()
+            
+            return jsonify({'status': 'deleted'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
