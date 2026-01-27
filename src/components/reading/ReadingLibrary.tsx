@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Plus, Upload, Trash2, FileText, Loader2, Youtube } from 'lucide-react';
+import { Book, Plus, Upload, Trash2, FileText, Loader2, Link2 } from 'lucide-react';
 import { View } from '../../types';
 
 interface LibraryItem {
@@ -16,16 +16,21 @@ interface ReadingLibraryProps {
 
 export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
     const [library, setLibrary] = useState<LibraryItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [showUrlInput, setShowUrlInput] = useState(false);
-    const [youtubeUrl, setYoutubeUrl] = useState('');
+    const [importUrl, setImportUrl] = useState('');
+    const [isImporting, setIsImporting] = useState(false);
 
     useEffect(() => {
         fetchLibrary();
     }, []);
 
     const fetchLibrary = async () => {
+        // Only show loading if library is empty (initial load)
+        if (library.length === 0) {
+            setIsLoading(true);
+        }
         try {
             const res = await fetch('/api/library');
             if (res.ok) {
@@ -66,39 +71,32 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
         }
     };
 
-    const handleYoutubeImport = async () => {
-        if (!youtubeUrl) return;
+    const handleUrlImport = async () => {
+        if (!importUrl.trim()) return;
 
-        // Extract ID
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-        const match = youtubeUrl.match(regExp);
-        const id = (match && match[2].length === 11) ? match[2] : null;
-
-        if (!id) {
-            alert("Invalid YouTube URL");
-            return;
-        }
-
-        setIsUploading(true);
+        setIsImporting(true);
         try {
-            const res = await fetch('/api/library/import/youtube', {
+            const res = await fetch('/api/library/import/url', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoId: id })
+                body: JSON.stringify({ url: importUrl.trim() })
             });
 
             if (res.ok) {
-                setYoutubeUrl('');
+                const data = await res.json();
+                setImportUrl('');
                 setShowUrlInput(false);
                 await fetchLibrary();
+                alert(`Successfully imported: ${data.title || 'Content'}`);
             } else {
-                alert("Failed to import transcript");
+                const error = await res.json();
+                alert(error.error || "Failed to import content");
             }
         } catch (e) {
             console.error(e);
-            alert("Import failed");
+            alert("Import failed. Please check the URL and try again.");
         } finally {
-            setIsUploading(false);
+            setIsImporting(false);
         }
     };
 
@@ -130,30 +128,36 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                     <div className="flex gap-3">
                         <div className="relative">
                             {showUrlInput && (
-                                <div className="absolute right-0 -top-12 md:top-full md:mt-2 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 flex gap-2 w-80 z-20">
-                                    <input
-                                        type="text"
-                                        value={youtubeUrl}
-                                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                                        placeholder="Paste YouTube URL..."
-                                        className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-2 text-sm"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleYoutubeImport()}
-                                    />
-                                    <button
-                                        onClick={handleYoutubeImport}
-                                        disabled={isUploading}
-                                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
-                                    >
-                                        Import
-                                    </button>
+                                <div className="absolute right-0 -top-12 md:top-full md:mt-2 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-96 z-20">
+                                    <div className="flex gap-2 mb-2">
+                                        <input
+                                            type="text"
+                                            value={importUrl}
+                                            onChange={(e) => setImportUrl(e.target.value)}
+                                            placeholder="Paste YouTube or article URL..."
+                                            className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            onKeyDown={(e) => e.key === 'Enter' && handleUrlImport()}
+                                            disabled={isImporting}
+                                        />
+                                        <button
+                                            onClick={handleUrlImport}
+                                            disabled={isImporting}
+                                            className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {isImporting ? 'Importing...' : 'Import'}
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        Supports YouTube videos and news articles
+                                    </p>
                                 </div>
                             )}
                             <button
                                 onClick={() => setShowUrlInput(!showUrlInput)}
-                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                             >
-                                <Youtube className="w-5 h-5" />
-                                <span>YouTube Import</span>
+                                <Link2 className="w-5 h-5" />
+                                <span>URL Import</span>
                             </button>
                         </div>
 

@@ -1,12 +1,14 @@
 """
 Library Routes
 
-Handles file uploads, content management, and YouTube imports for the library.
+Handles file uploads, content management, and YouTube/URL imports for the library.
 """
 
 import os
 import time
 import uuid
+import re
+import requests
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
@@ -232,6 +234,159 @@ def delete_library_item(library_id):
             conn.commit()
             
             return jsonify({'status': 'deleted'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _is_youtube_url(url: str) -> tuple[bool, str | None]:
+    """
+    Check if URL is a YouTube video and extract video ID.
+    
+    Returns:
+        (is_youtube, video_id)
+    """
+    youtube_regex = r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})'
+    match = re.search(youtube_regex, url)
+    if match:
+        return True, match.group(1)
+    return False, None
+
+
+def _extract_article_content(url: str) -> tuple[str, str]:
+    """
+    Extract article content from a website URL.
+    
+    Returns:
+        (title, content)
+    """
+    try:
+        # Fetch the webpage
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        # Parse HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract title
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else url
+        
+        # Remove script and style elements
+        for script in soup(['script', 'style', 'nav', 'header', 'footer', 'aside']):
+            script.decompose()
+        
+        # Try to find article content
+        article = None
+        
+        # Try common article containers
+        for selector in ['article', '.article-content', '.post-content', '.entry-content', 
+                        'main', '.content', '#content']:
+            article = soup.select_one(selector)
+            if article:
+                break
+        
+        if not article:
+            # Fallback to body
+            article = soup.find('body')
+        
+        # Extract text
+        if article:
+            # Get paragraphs
+            paragraphs = article.find_all('p')
+            content = '\n\n'.join([p.get_text().strip() for p in paragraphs if p.get_text().strip()])
+            
+            # If no paragraphs found, get all text
+            if not content:
+                content = article.get_text(separator='\n', strip=True)
+        else:
+            content = soup.get_text(separator='\n', strip=True)
+        
+        # Clean up extra whitespace
+        content = re.sub(r'\n\s*\n', '\n\n', content)
+        content = content.strip()
+        
+        return title_text, content
+        
+    except requests.RequestException as e:
+        raise Exception(f"Failed to fetch URL: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Failed to extract content: {str(e)}")
+
+
+@library_bp.route('/library/import/url', methods=['POST'])
+def import_url_to_library():
+    """
+    Import content from a URL (YouTube video or article) to library.
+    
+    Request Body:
+        url: URL to import (YouTube video or article)
+    
+    Returns:
+        Created library item with ID and title
+    """
+    data = request.json
+    url = data.get('url', '').strip()
+    
+    if not url:
+        return jsonify({'error': 'URL is required'}), 400
+    
+    try:
+        # Check if it's a YouTube URL
+        is_youtube, video_id = _is_youtube_url(url)
+        
+        if is_youtube:
+            # Handle YouTube video
+            try:
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                try:
+                    transcript = transcript_list.find_transcript(['en'])
+                except:
+                    transcript = transcript_list.find_transcript(['en-US', 'en-GB'])
+                text_content = " ".join([p.text for p in transcript.fetch()])
+            except:
+                try:
+                    transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                    text_content = "\n".join([t['text'] for t in transcript])
+                except Exception as e:
+                    return jsonify({'error': f'Failed to fetch YouTube transcript: {str(e)}'}), 500
+            
+            title = f"YouTube: {video_id}"
+            file_type = 'youtube'
+            
+        else:
+            # Handle regular website/article
+            try:
+                title, text_content = _extract_article_content(url)
+                file_type = 'article'
+            except Exception as e:
+                return jsonify({'error': str(e)}), 500
+        
+        # Validate content
+        if not text_content or len(text_content.strip()) < 50:
+            return jsonify({'error': 'Unable to extract sufficient content from URL'}), 400
+        
+        # Save to database
+        with get_db() as conn:
+            library_id = str(uuid.uuid4())
+            created_at = int(time.time() * 1000)
+            
+            conn.execute('''
+                INSERT INTO library (id, title, filename, file_type, content_text, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (library_id, title, url, file_type, text_content, created_at))
+            
+            conn.commit()
+            
+            return jsonify({
+                'status': 'success', 
+                'id': library_id,
+                'title': title,
+                'type': file_type
+            }), 201
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
