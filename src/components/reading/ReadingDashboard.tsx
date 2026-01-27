@@ -16,7 +16,7 @@ export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) 
             </h3>
             <div className="space-y-3">
                 <button
-                    onClick={() => onNavigate('generator')}
+                    onClick={() => onNavigate('compose')}
                     className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-200 dark:border-blue-800/30 rounded-xl hover:from-blue-500/20 hover:to-indigo-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center">
@@ -24,9 +24,9 @@ export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) 
                     </div>
                     <div className="flex-1 text-left">
                         <div className="font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                            Story Generator
+                            Generate Reading
                         </div>
-                        <div className="text-xs text-gray-500">Create new stories</div>
+                        <div className="text-xs text-gray-500">Create reading materials</div>
                     </div>
                 </button>
 
@@ -52,8 +52,8 @@ export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) 
         <CommonDashboard
             title="Reading Practice"
             subtitle="Improve your comprehension skills."
-            onStartAction={() => onNavigate('generator')}
-            startActionLabel="New Story"
+            onStartAction={() => onNavigate('compose')}
+            startActionLabel="Generate Reading"
             stats={[
                 { icon: <BookOpen size={20} />, label: "Books", value: 5, subtext: "In library", color: "blue" },
                 { icon: <Clock size={20} />, label: "Read", value: "2h", subtext: "This week", color: "green" },

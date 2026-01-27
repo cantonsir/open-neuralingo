@@ -42,6 +42,8 @@ def create_app(config_class=Config):
     from app.routes.library import library_bp
     from app.routes.speaking import speaking_bp
     from app.routes.writing import writing_bp
+    from app.routes.listening import listening_bp
+    from app.routes.reading import reading_bp
     
     app.register_blueprint(transcript_bp, url_prefix='/api')
     app.register_blueprint(flashcards_bp, url_prefix='/api')
@@ -53,5 +55,7 @@ def create_app(config_class=Config):
     app.register_blueprint(library_bp, url_prefix='/api')
     app.register_blueprint(speaking_bp, url_prefix='/api')
     app.register_blueprint(writing_bp, url_prefix='/api')
+    app.register_blueprint(listening_bp, url_prefix='/api')
+    app.register_blueprint(reading_bp, url_prefix='/api')
     
     return app

@@ -14,6 +14,7 @@ import LearningSession from './LearningSession';
 import VocabularyManager from './VocabularyManager';
 import SelfAssessment from './SelfAssessment';
 import MiniTest from './MiniTest';
+import ListeningCompose from './ListeningCompose';
 
 interface ListeningModuleProps {
   view: View;
@@ -192,6 +193,13 @@ export default function ListeningModule({
             savedCardsCount={savedCards.length}
             markersCount={markers.length}
           />
+        </div>
+      )}
+
+      {/* Compose View - Generate Audio Discussions */}
+      {view === 'compose' && (
+        <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
+          <ListeningCompose setView={setView} />
         </div>
       )}
 

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { PenTool, Clock, ChevronDown, ChevronUp, Edit } from 'lucide-react';
+import { BookOpen, Clock, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { View } from '../../types';
 import { api } from '../../db';
 import UnifiedInput from '../common/UnifiedInput';
+import { generateReadingMaterial } from '../../services/geminiService';
 
 interface AppState {
     setView: (view: View) => void;
-    setWritingData: (data: any) => void;
+    setReadingData?: (data: any) => void;
 }
 
 interface LibraryItem {
@@ -14,22 +15,22 @@ interface LibraryItem {
     title: string;
 }
 
-interface WritingSession {
+interface ReadingSession {
     id: string;
-    topic: string;
+    prompt: string;
+    title: string;
     content: string;
-    contextId?: string;
     createdAt: number;
-    updatedAt: number;
 }
 
-export default function WritingCompose({ setView, setWritingData }: AppState) {
-    const [topic, setTopic] = useState('');
+export default function ReadingCompose({ setView, setReadingData }: AppState) {
+    const [prompt, setPrompt] = useState('');
     const [contextId, setContextId] = useState('');
     const [library, setLibrary] = useState<LibraryItem[]>([]);
-    const [history, setHistory] = useState<WritingSession[]>([]);
+    const [history, setHistory] = useState<ReadingSession[]>([]);
     const [expandedSession, setExpandedSession] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
         fetch('/api/library')
@@ -42,34 +43,70 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
 
     const loadHistory = async () => {
         try {
-            const sessions = await api.fetchWritingSessions();
+            const sessions = await api.fetchReadingSessions();
             setHistory(sessions);
         } catch (error) {
             console.error('Failed to load history:', error);
         }
     };
 
-    const startWriting = () => {
-        if (!topic && !contextId) {
-            alert("Please enter a topic or select a context.");
+    const generateReading = async () => {
+        if (!prompt && !contextId) {
+            alert("Please enter a prompt or select a context.");
             return;
         }
 
-        setWritingData({
-            topic: topic || "Untitled",
-            contextId,
-            content: ''
-        });
-        setView('writer' as View);
+        setIsGenerating(true);
+        try {
+            // Get context text if contextId is provided
+            let contextText = '';
+            if (contextId) {
+                const item = library.find(l => l.id === contextId);
+                if (item) contextText = item.title;
+            }
+
+            // Generate reading material
+            const material = await generateReadingMaterial(prompt || "General topic", contextText);
+            
+            if (!material.content || material.title === 'Error') {
+                alert('Failed to generate reading material. Please try again.');
+                setIsGenerating(false);
+                return;
+            }
+
+            // Save session
+            const session = {
+                prompt: prompt || "General topic",
+                title: material.title,
+                content: material.content,
+                contextId: contextId || undefined,
+                createdAt: Date.now()
+            };
+
+            await api.saveReadingSession(session);
+            await loadHistory();
+
+            // Clear form
+            setPrompt('');
+            setContextId('');
+            alert('Reading material generated successfully!');
+        } catch (error) {
+            console.error('Failed to generate reading:', error);
+            alert('Failed to generate reading material. Please try again.');
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
-    const openWritingSession = (session: WritingSession) => {
-        setWritingData({
-            topic: session.topic,
-            contextId: session.contextId,
-            content: session.content
-        });
-        setView('writer' as View);
+    const openReadingSession = (session: ReadingSession) => {
+        if (setReadingData) {
+            setReadingData({
+                libraryId: session.id,
+                title: session.title,
+                content: session.content
+            });
+            setView('reader');
+        }
     };
 
     const formatTime = (ms: number) => {
@@ -80,19 +117,19 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
         <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 p-8">
             <div className="max-w-4xl mx-auto space-y-10">
                 <div className="text-center space-y-2">
-                    <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-600 dark:from-purple-400 dark:to-pink-400">
-                        Writing Practice
+                    <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
+                        Reading Practice
                     </h1>
                     <p className="text-lg text-gray-600 dark:text-gray-300">
-                        What would you like to write about today?
+                        Generate engaging reading materials for comprehension practice
                     </p>
                 </div>
 
                 {/* Unified Input */}
                 <div className="relative max-w-3xl mx-auto">
                     <UnifiedInput
-                        value={topic}
-                        onChange={setTopic}
+                        value={prompt}
+                        onChange={setPrompt}
                         contextId={contextId}
                         onClearContext={() => setContextId('')}
                         library={library}
@@ -113,18 +150,19 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                             }
                         }}
                         isUploading={isUploading}
-                        themeColor="purple"
-                        placeholder="What would you like to write about..."
+                        themeColor="blue"
+                        placeholder="What would you like to read about..."
                     />
 
-                    {/* Start Writing Button */}
+                    {/* Generate Button */}
                     <div className="mt-6">
                         <button
-                            onClick={startWriting}
-                            className="w-full p-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-3 font-medium"
+                            onClick={generateReading}
+                            disabled={isGenerating}
+                            className="w-full p-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-3 font-medium"
                         >
-                            <PenTool className="w-5 h-5" />
-                            Start Writing
+                            <BookOpen className="w-5 h-5" />
+                            {isGenerating ? 'Generating Content...' : 'Generate Reading Material'}
                         </button>
                     </div>
                 </div>
@@ -137,7 +175,7 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                     </h2>
 
                     {history.length === 0 ? (
-                        <p className="text-gray-500 italic">No history yet. Start your first composition!</p>
+                        <p className="text-gray-500 italic">No history yet. Generate your first reading material!</p>
                     ) : (
                         <div className="space-y-4">
                             {history.map(session => (
@@ -147,21 +185,21 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                                         className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
                                     >
                                         <div className="flex-1">
-                                            <h3 className="font-bold text-gray-900 dark:text-white">{session.topic}</h3>
+                                            <h3 className="font-bold text-gray-900 dark:text-white">{session.title}</h3>
                                             <p className="text-xs text-gray-500 mt-1">
-                                                {formatTime(session.updatedAt || session.createdAt)} • {session.content?.length || 0} characters
+                                                {formatTime(session.createdAt)} • From: "{session.prompt}"
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    openWritingSession(session);
+                                                    openReadingSession(session);
                                                 }}
-                                                className="p-2 text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-full transition-colors"
-                                                title="Edit"
+                                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                                                title="Read full text"
                                             >
-                                                <Edit className="w-5 h-5" />
+                                                <Eye className="w-5 h-5" />
                                             </button>
                                             <div className="text-gray-400">
                                                 {expandedSession === session.id ? <ChevronUp /> : <ChevronDown />}
@@ -172,16 +210,16 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                                     {expandedSession === session.id && (
                                         <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                                             <h4 className="text-xs uppercase tracking-wider font-bold text-gray-400 mb-3">Preview</h4>
-                                            <div className="text-sm text-gray-800 dark:text-gray-200 max-h-64 overflow-y-auto pr-2 leading-relaxed whitespace-pre-wrap">
-                                                {session.content?.substring(0, 500) || '(Empty)'}
-                                                {(session.content?.length || 0) > 500 && '...'}
+                                            <div className="text-sm text-gray-800 dark:text-gray-200 max-h-64 overflow-y-auto pr-2 leading-relaxed">
+                                                {session.content.substring(0, 500)}
+                                                {session.content.length > 500 && '...'}
                                             </div>
                                             <button
-                                                onClick={() => openWritingSession(session)}
-                                                className="mt-4 text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 font-medium flex items-center gap-1"
+                                                onClick={() => openReadingSession(session)}
+                                                className="mt-4 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium flex items-center gap-1"
                                             >
-                                                <Edit className="w-4 h-4" />
-                                                Continue Writing
+                                                <Eye className="w-4 h-4" />
+                                                Read Full Text
                                             </button>
                                         </div>
                                     )}

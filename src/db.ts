@@ -1,4 +1,4 @@
-import { Marker, SpeakingSession, WritingSession } from './types';
+import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession } from './types';
 
 const API_BASE = '/api';
 
@@ -652,6 +652,74 @@ export const api = {
             if (!response.ok) throw new Error('Failed to save speaking session');
         } catch (error) {
             console.error('API saveSpeakingSession error:', error);
+            throw error;
+        }
+    },
+
+    // --- Listening History API ---
+
+    /**
+     * Fetch all past listening sessions.
+     */
+    async fetchListeningSessions(): Promise<ListeningSession[]> {
+        try {
+            const response = await fetch(`${API_BASE}/listening/sessions`);
+            if (!response.ok) throw new Error('Failed to fetch listening sessions');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchListeningSessions error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Save a listening session.
+     */
+    async saveListeningSession(session: { prompt: string; audioUrl: string; transcript: any[]; durationSeconds: number; contextId?: string; createdAt: number }): Promise<{ status: string; id: string }> {
+        try {
+            const response = await fetch(`${API_BASE}/listening/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(session),
+            });
+            if (!response.ok) throw new Error('Failed to save listening session');
+            return await response.json();
+        } catch (error) {
+            console.error('API saveListeningSession error:', error);
+            throw error;
+        }
+    },
+
+    // --- Reading History API ---
+
+    /**
+     * Fetch all past reading sessions.
+     */
+    async fetchReadingSessions(): Promise<ReadingSession[]> {
+        try {
+            const response = await fetch(`${API_BASE}/reading/sessions`);
+            if (!response.ok) throw new Error('Failed to fetch reading sessions');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchReadingSessions error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Save a reading session.
+     */
+    async saveReadingSession(session: { prompt: string; title: string; content: string; contextId?: string; createdAt: number }): Promise<{ status: string; id: string }> {
+        try {
+            const response = await fetch(`${API_BASE}/reading/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(session),
+            });
+            if (!response.ok) throw new Error('Failed to save reading session');
+            return await response.json();
+        } catch (error) {
+            console.error('API saveReadingSession error:', error);
             throw error;
         }
     },

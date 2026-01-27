@@ -843,3 +843,117 @@ export async function generateChatResponse(history: { role: string, text: string
         return "I'm sorry, I'm having trouble connecting right now.";
     }
 }
+
+// ===== LISTENING MODULE: MULTI-PERSON DISCUSSION GENERATION =====
+
+export interface DiscussionLine {
+    speaker: string;
+    text: string;
+}
+
+/**
+ * Generate a multi-person discussion script for listening practice.
+ * Creates a natural conversation between 2-3 people (~1 minute duration, 10-15 exchanges).
+ */
+export async function generateListeningDiscussion(prompt: string, context?: string): Promise<DiscussionLine[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return [];
+
+    const systemPrompt = `Create a natural, engaging conversation between 2-3 people about: "${prompt}".
+    ${context ? `Context: ${context}` : ''}
+    
+    The conversation should be:
+    - About 10-15 exchanges (roughly 1 minute when spoken)
+    - Natural and conversational (not scripted or formal)
+    - Suitable for intermediate language learners
+    - Include natural speech patterns (fillers, reactions, questions)
+    
+    Return ONLY valid JSON array in this exact format:
+    [{"speaker": "Person A", "text": "...dialogue..."}, {"speaker": "Person B", "text": "...dialogue..."}]
+    
+    Use speaker names like "Person A", "Person B", "Person C" consistently throughout.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    contents: [{ parts: [{ text: systemPrompt }] }],
+                    generationConfig: {
+                        temperature: 0.9,
+                        topP: 0.95,
+                    }
+                }),
+            }
+        );
+        const data = await response.json();
+        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = textRes.match(/\[[\s\S]*\]/);
+        return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    } catch (e) {
+        console.error("Listening Discussion Generation Error", e);
+        return [];
+    }
+}
+
+// ===== READING MODULE: MATERIAL GENERATION =====
+
+export interface ReadingMaterial {
+    title: string;
+    content: string;
+}
+
+/**
+ * Generate reading comprehension material based on a prompt.
+ * Creates engaging text suitable for language learning.
+ */
+export async function generateReadingMaterial(prompt: string, context?: string): Promise<ReadingMaterial> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return { title: 'Error', content: 'API key not configured.' };
+
+    const systemPrompt = `Create an engaging reading passage about: "${prompt}".
+    ${context ? `Context: ${context}` : ''}
+    
+    Requirements:
+    - Length: 300-500 words
+    - Level: Intermediate (B1-B2)
+    - Style: Clear, engaging, and educational
+    - Include natural vocabulary and varied sentence structures
+    - Make it interesting and culturally relevant
+    
+    Return ONLY valid JSON in this exact format:
+    {"title": "An Engaging Title", "content": "The full text of the passage..."}`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    contents: [{ parts: [{ text: systemPrompt }] }],
+                    generationConfig: {
+                        temperature: 0.8,
+                        topP: 0.9,
+                    }
+                }),
+            }
+        );
+        const data = await response.json();
+        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = textRes.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return {
+                title: parsed.title || 'Untitled',
+                content: parsed.content || 'No content generated.'
+            };
+        }
+        return { title: 'Error', content: 'Failed to parse response.' };
+    } catch (e) {
+        console.error("Reading Material Generation Error", e);
+        return { title: 'Error', content: 'Failed to generate content.' };
+    }
+}

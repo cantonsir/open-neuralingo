@@ -273,6 +273,31 @@ def init_db():
         )
     ''')
     
+    # Listening table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS listening_sessions (
+            id TEXT PRIMARY KEY,
+            prompt TEXT,
+            audio_url TEXT,
+            transcript_json TEXT,
+            duration_seconds INTEGER,
+            context_id TEXT,
+            created_at INTEGER
+        )
+    ''')
+    
+    # Reading table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reading_sessions (
+            id TEXT PRIMARY KEY,
+            prompt TEXT,
+            title TEXT,
+            content TEXT,
+            context_id TEXT,
+            created_at INTEGER
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 

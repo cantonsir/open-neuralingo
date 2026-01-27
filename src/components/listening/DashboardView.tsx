@@ -136,7 +136,7 @@ export default function DashboardView({
             </h3>
             <div className="space-y-3">
                 <button
-                    onClick={() => onNavigate('loop')}
+                    onClick={() => onNavigate('compose')}
                     className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-200 dark:border-yellow-800/30 rounded-xl hover:from-yellow-500/20 hover:to-orange-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-lg bg-yellow-500 flex items-center justify-center">
@@ -144,7 +144,23 @@ export default function DashboardView({
                     </div>
                     <div className="flex-1 text-left">
                         <div className="font-semibold text-gray-900 dark:text-white group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
-                            New Practice Session
+                            Generate Audio
+                        </div>
+                        <div className="text-xs text-gray-500">AI-generated discussions</div>
+                    </div>
+                    <ArrowRight size={18} className="text-gray-400 group-hover:text-yellow-500 transition-colors" />
+                </button>
+
+                <button
+                    onClick={() => onNavigate('loop')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-yellow-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
+                        <PlayCircle size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-yellow-600 dark:group-hover:text-yellow-400 transition-colors">
+                            YouTube Practice
                         </div>
                         <div className="text-xs text-gray-500">Load a YouTube video</div>
                     </div>
@@ -206,8 +222,8 @@ export default function DashboardView({
         <CommonDashboard
             title={`${getGreeting()}! 👋`}
             subtitle="Ready to sharpen your listening skills today?"
-            onStartAction={() => onNavigate('loop')}
-            startActionLabel="Start Practice"
+            onStartAction={() => onNavigate('compose')}
+            startActionLabel="Generate Audio"
             stats={[
                 { icon: <Play size={20} fill="currentColor" />, label: "Videos", value: history.length || mockStats.videosWatched, subtext: "Total practiced", color: "purple" },
                 { icon: <BookOpen size={20} />, label: "Words", value: savedCardsCount || mockStats.wordsLearned, subtext: "Saved to deck", color: "blue" },

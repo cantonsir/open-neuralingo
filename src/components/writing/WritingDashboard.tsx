@@ -28,7 +28,7 @@ export default function WritingDashboard({ setView, setWritingData }: WritingDas
             </h3>
             <div className="space-y-3">
                 <button
-                    onClick={() => setView('correction')} // Using correction view for new composition
+                    onClick={() => setView('compose')}
                     className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-200 dark:border-purple-800/30 rounded-xl hover:from-purple-500/20 hover:to-pink-500/20 transition-all group"
                 >
                     <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
@@ -112,7 +112,7 @@ export default function WritingDashboard({ setView, setWritingData }: WritingDas
         <CommonDashboard
             title="Writing Studio"
             subtitle="Enhance your writing style."
-            onStartAction={() => setView('correction')}
+            onStartAction={() => setView('compose')}
             startActionLabel="Write Now"
             stats={[
                 { icon: <FileText size={20} />, label: "Texts", value: sessions.length, subtext: "Total written", color: "purple" },

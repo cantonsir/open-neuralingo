@@ -12,6 +12,7 @@ import ReadingDashboard from './components/reading/ReadingDashboard';
 import ReadingLibrary from './components/reading/ReadingLibrary';
 import ReadingLessons from './components/reading/ReadingLessons';
 import ReadingAssessmentPage from './components/reading/ReadingAssessmentPage';
+import ReadingCompose from './components/reading/ReadingCompose';
 import SpeakingDashboard from './components/speaking/SpeakingDashboard';
 import SpeakingScenario from './components/speaking/SpeakingScenario';
 import SpeakingLessons from './components/speaking/SpeakingLessons';
@@ -151,16 +152,17 @@ function App() {
         {activeModule === 'reading' && (
           view === 'learning' ? <ReadingLessons /> :
             view === 'assessment' ? <ReadingAssessmentPage /> :
-              view === 'library' || view === 'generator' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
-                view === 'reader' && readingData ? (
-                  <ReadingView
-                    libraryId={readingData.libraryId}
-                    title={readingData.title}
-                    onNavigate={setView}
-                  />
-                ) : (
-                  <ReadingDashboard onNavigate={setView} />
-                )
+              view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
+                view === 'library' || view === 'generator' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
+                  view === 'reader' && readingData ? (
+                    <ReadingView
+                      libraryId={readingData.libraryId}
+                      title={readingData.title}
+                      onNavigate={setView}
+                    />
+                  ) : (
+                    <ReadingDashboard onNavigate={setView} />
+                  )
         )}
 
         {/* Speaking Module */}

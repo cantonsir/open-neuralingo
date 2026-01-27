@@ -94,6 +94,25 @@ export interface WritingSession {
   updatedAt: number;
 }
 
+export interface ListeningSession {
+  id: string;
+  prompt: string;
+  audioUrl: string;
+  transcript: Array<{ speaker: string; text: string }>;
+  durationSeconds: number;
+  contextId?: string;
+  createdAt: number;
+}
+
+export interface ReadingSession {
+  id: string;
+  prompt: string;
+  title: string;
+  content: string;
+  contextId?: string;
+  createdAt: number;
+}
+
 // Google Developers YouTube API Demo Video (Extremely stable for testing)
 export const DEMO_VIDEO_ID = "M7lc1UVf-VE";
 
