@@ -41,7 +41,7 @@ export const generateStory = async (topic: string, level: string = "intermediate
     if (!genAI) return null;
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const prompt = `Write a short, engaging story (approx. 150-200 words) for an English learner at usage level: ${level}.
         Topic: "${topic}".
@@ -71,7 +71,7 @@ export const getChatResponse = async (history: { role: 'user' | 'model'; parts: 
     if (!genAI) return null;
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const chat = model.startChat({
             history: [
@@ -112,7 +112,7 @@ export const correctWriting = async (text: string, instruction: string = "Fix gr
     if (!genAI) return null;
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
         const prompt = `Act as an expert English teacher.
         Task: ${instruction} for the following text.
