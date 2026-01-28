@@ -17,8 +17,9 @@ import {
     X
 } from 'lucide-react';
 import ListeningFeedbackSliders, { SliderValues, DEFAULT_SLIDER_VALUES } from './ListeningFeedbackSliders';
+import LessonPracticeGenerator from './LessonPracticeGenerator';
 import { useAudioPlayer } from '../../hooks/useAudioPlayer';
-import { api, SegmentMastery, SegmentTestResult, SegmentLesson } from '../../db';
+import { api, SegmentMastery, SegmentTestResult, SegmentLesson, PracticeSession } from '../../db';
 import {
     generateSegmentTestSentences,
     SegmentTestSentence,
@@ -40,7 +41,7 @@ interface LearningSessionProps {
     onComplete: () => void;
 }
 
-type Phase = 'loading' | 'test' | 'analyzing' | 'results' | 'learning' | 'watch' | 'summary';
+type Phase = 'loading' | 'test' | 'analyzing' | 'results' | 'learning' | 'practice' | 'watch' | 'summary';
 
 interface TestResponseData {
     sentence: string;
@@ -94,6 +95,9 @@ export default function LearningSession({
     // Summary state (for viewing completed lessons)
     const [savedTests, setSavedTests] = useState<SegmentTestResult[]>([]);
     const [savedLessons, setSavedLessons] = useState<SegmentLesson[]>([]);
+
+    // Practice state
+    const [savedPracticeSessions, setSavedPracticeSessions] = useState<PracticeSession[]>([]);
 
     // Use the shared audio player hook
     const audioPlayer = useAudioPlayer({ voiceName: 'Kore' });
@@ -681,17 +685,43 @@ export default function LearningSession({
                                 </button>
                             ) : (
                                 <button
-                                    onClick={retakeTest}
+                                    onClick={() => setPhase('practice')}
                                     className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
                                 >
-                                    <RefreshCw size={20} />
-                                    Take Test Again
+                                    <Play size={20} />
+                                    Practice with AI Dialogue
                                 </button>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
+        );
+    }
+
+    // Practice phase
+    if (phase === 'practice') {
+        // Extract vocabulary from lessons
+        const extractedVocabulary = lessons
+            .filter(l => l.content.words)
+            .flatMap(l => l.content.words?.map(w => w.word) || []);
+
+        // Extract patterns from lessons
+        const extractedPatterns = lessons
+            .filter(l => l.content.patterns)
+            .flatMap(l => l.content.patterns?.map(p => p.pattern) || []);
+
+        return (
+            <LessonPracticeGenerator
+                goalId={goalId}
+                segmentIndex={segmentIndex}
+                vocabulary={extractedVocabulary}
+                patterns={extractedPatterns}
+                segmentContext={segmentSubtitle.join(' ')}
+                onComplete={() => setPhase('watch')}
+                onBack={() => setPhase('learning')}
+                onExit={handleExit}
+            />
         );
     }
 

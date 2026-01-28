@@ -349,7 +349,26 @@ def init_db():
             FOREIGN KEY (goal_id) REFERENCES goal_videos(id)
         )
     ''')
-    
+
+    # Practice Sessions table for AI-generated practice dialogues
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS practice_sessions (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            segment_index INTEGER NOT NULL,
+            prompt TEXT NOT NULL,
+            model_used TEXT NOT NULL,
+            attached_contexts TEXT,
+            transcript_json TEXT NOT NULL,
+            audio_urls TEXT,
+            duration_seconds INTEGER,
+            command_used TEXT,
+            created_at INTEGER NOT NULL,
+            is_favorite BOOLEAN DEFAULT 0,
+            FOREIGN KEY (goal_id) REFERENCES goal_videos(id)
+        )
+    ''')
+
     # Library table
     c.execute('''
         CREATE TABLE IF NOT EXISTS library (

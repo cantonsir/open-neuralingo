@@ -128,6 +128,22 @@ export interface SegmentLesson {
     completed: boolean;
 }
 
+// Practice Session Types (AI-generated practice dialogues)
+export interface PracticeSession {
+    id: string;
+    goalId: string;
+    segmentIndex: number;
+    prompt: string;
+    modelUsed: string;
+    attachedContexts?: { type: string; url?: string; name?: string }[];
+    transcript: { speaker: string; text: string }[];
+    audioUrls?: string[];
+    durationSeconds?: number;
+    commandUsed?: string;
+    createdAt: number;
+    isFavorite: boolean;
+}
+
 export const api = {
     /**
      * Fetch all saved flashcards from the persistent database.
@@ -1008,6 +1024,97 @@ export const api = {
         } catch (error) {
             console.error('API fetchAllAssessmentResults error:', error);
             return [];
+        }
+    },
+
+    // --- Practice Sessions API (AI-generated practice dialogues) ---
+
+    /**
+     * Save a practice session for a segment.
+     */
+    async savePracticeSession(
+        goalId: string,
+        segmentIndex: number,
+        data: {
+            prompt: string;
+            modelUsed: string;
+            transcriptJson: { speaker: string; text: string }[];
+            attachedContexts?: object[];
+            audioUrls?: string[];
+            durationSeconds?: number;
+            commandUsed?: string;
+        }
+    ): Promise<{ status: string; sessionId: string }> {
+        try {
+            const response = await fetch(`${API_BASE}/practice-sessions/${goalId}/${segmentIndex}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error('Failed to save practice session');
+            return await response.json();
+        } catch (error) {
+            console.error('API savePracticeSession error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get all practice sessions for a segment.
+     */
+    async getPracticeSessions(goalId: string, segmentIndex: number): Promise<PracticeSession[]> {
+        try {
+            const response = await fetch(`${API_BASE}/practice-sessions/${goalId}/${segmentIndex}`);
+            if (!response.ok) throw new Error('Failed to fetch practice sessions');
+            return await response.json();
+        } catch (error) {
+            console.error('API getPracticeSessions error:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Get a specific practice session by ID.
+     */
+    async getPracticeSession(sessionId: string): Promise<PracticeSession | null> {
+        try {
+            const response = await fetch(`${API_BASE}/practice-sessions/${sessionId}`);
+            if (!response.ok) throw new Error('Failed to fetch practice session');
+            return await response.json();
+        } catch (error) {
+            console.error('API getPracticeSession error:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Toggle favorite status of a practice session.
+     */
+    async togglePracticeFavorite(sessionId: string): Promise<{ status: string; isFavorite: boolean }> {
+        try {
+            const response = await fetch(`${API_BASE}/practice-sessions/${sessionId}/favorite`, {
+                method: 'PUT',
+            });
+            if (!response.ok) throw new Error('Failed to toggle favorite');
+            return await response.json();
+        } catch (error) {
+            console.error('API togglePracticeFavorite error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Delete a practice session.
+     */
+    async deletePracticeSession(sessionId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/practice-sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete practice session');
+        } catch (error) {
+            console.error('API deletePracticeSession error:', error);
+            throw error;
         }
     },
 };
