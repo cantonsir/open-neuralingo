@@ -295,3 +295,17 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
 };
 
 export default FlashcardPractice;
+
+// Tailwind Safelist for dynamic classes
+// text-yellow-500 text-blue-500 text-green-500 text-purple-500
+// text-yellow-800 text-blue-800 text-green-800 text-purple-800
+// bg-yellow-50 bg-blue-50 bg-green-50 bg-purple-50
+// bg-yellow-300 bg-blue-300 bg-green-300 bg-purple-300
+// bg-yellow-400 bg-blue-400 bg-green-400 bg-purple-400
+// bg-yellow-500/10 bg-blue-500/10 bg-green-500/10 bg-purple-500/10
+// border-yellow-500 border-blue-500 border-green-500 border-purple-500
+// shadow-yellow-500/20 shadow-blue-500/20 shadow-green-500/20 shadow-purple-500/20
+// hover:bg-yellow-300 hover:bg-blue-300 hover:bg-green-300 hover:bg-purple-300
+// dark:bg-yellow-500/10 dark:bg-blue-500/10 dark:bg-green-500/10 dark:bg-purple-500/10
+// dark:text-yellow-500 dark:text-blue-500 dark:text-green-500 dark:text-purple-500
+// dark:border-yellow-500/30 dark:border-blue-500/30 dark:border-green-500/30 dark:border-purple-500/30

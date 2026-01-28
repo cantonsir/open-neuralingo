@@ -597,3 +597,29 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 };
 
 export default VocabularyManager;
+
+// Tailwind Safelist for dynamic classes
+// text-yellow-500 text-blue-500 text-green-500 text-purple-500
+// text-yellow-600 text-blue-600 text-green-600 text-purple-600
+// text-yellow-700 text-blue-700 text-green-700 text-purple-700
+// bg-yellow-50 bg-blue-50 bg-green-50 bg-purple-50
+// bg-yellow-100 bg-blue-100 bg-green-100 bg-purple-100
+// bg-yellow-400 bg-blue-400 bg-green-400 bg-purple-400
+// bg-yellow-500 bg-blue-500 bg-green-500 bg-purple-500
+// border-yellow-100 border-blue-100 border-green-100 border-purple-100
+// border-yellow-200 border-blue-200 border-green-200 border-purple-200
+// border-yellow-500 border-blue-500 border-green-500 border-purple-500
+// shadow-yellow-500/20 shadow-blue-500/20 shadow-green-500/20 shadow-purple-500/20
+// hover:bg-yellow-400 hover:bg-blue-400 hover:bg-green-400 hover:bg-purple-400
+// dark:bg-yellow-900/10 dark:bg-blue-900/10 dark:bg-green-900/10 dark:bg-purple-900/10
+// dark:bg-yellow-900/30 dark:bg-blue-900/30 dark:bg-green-900/30 dark:bg-purple-900/30
+// dark:bg-yellow-900/20 dark:bg-blue-900/20 dark:bg-green-900/20 dark:bg-purple-900/20
+// dark:bg-yellow-900/40 dark:bg-blue-900/40 dark:bg-green-900/40 dark:bg-purple-900/40
+// dark:bg-yellow-500/20 dark:bg-blue-500/20 dark:bg-green-500/20 dark:bg-purple-500/20
+// dark:text-yellow-100 dark:text-blue-100 dark:text-green-100 dark:text-purple-100
+// dark:text-yellow-300 dark:text-blue-300 dark:text-green-300 dark:text-purple-300
+// dark:text-yellow-400 dark:text-blue-400 dark:text-green-400 dark:text-purple-400
+// dark:text-yellow-500 dark:text-blue-500 dark:text-green-500 dark:text-purple-500
+// dark:border-yellow-900/50 dark:border-blue-900/50 dark:border-green-900/50 dark:border-purple-900/50
+// dark:border-yellow-900/30 dark:border-blue-900/30 dark:border-green-900/30 dark:border-purple-900/30
+// dark:border-yellow-500/30 dark:border-blue-500/30 dark:border-green-500/30 dark:border-purple-500/30
