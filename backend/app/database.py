@@ -276,6 +276,19 @@ def init_db():
             FOREIGN KEY (result_id) REFERENCES mini_test_results(id)
         )
     ''')
+
+    # Assessment Analytics table for cached statistics
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS assessment_analytics (
+            id TEXT PRIMARY KEY,
+            computed_at INTEGER NOT NULL,
+            time_window TEXT NOT NULL,
+            total_tests INTEGER,
+            score_data_json TEXT,
+            weakness_data_json TEXT,
+            stats_json TEXT
+        )
+    ''')
     
     # Segment Learning: Test-Learn-Watch Flow
     c.execute('''

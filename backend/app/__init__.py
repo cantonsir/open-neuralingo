@@ -38,19 +38,21 @@ def create_app(config_class=Config):
     from app.routes.lessons import lessons_bp
     from app.routes.goals import goals_bp
     from app.routes.assessment import assessment_bp
+    from app.routes.assessment_stats import assessment_stats_bp
     from app.routes.segment_learning import segment_learning_bp
     from app.routes.library import library_bp
     from app.routes.speaking import speaking_bp
     from app.routes.writing import writing_bp
     from app.routes.listening import listening_bp
     from app.routes.reading import reading_bp
-    
+
     app.register_blueprint(transcript_bp, url_prefix='/api')
     app.register_blueprint(flashcards_bp, url_prefix='/api')
     app.register_blueprint(history_bp, url_prefix='/api')
     app.register_blueprint(lessons_bp, url_prefix='/api')
     app.register_blueprint(goals_bp, url_prefix='/api')
     app.register_blueprint(assessment_bp, url_prefix='/api')
+    app.register_blueprint(assessment_stats_bp, url_prefix='/api')
     app.register_blueprint(segment_learning_bp, url_prefix='/api')
     app.register_blueprint(library_bp, url_prefix='/api')
     app.register_blueprint(speaking_bp, url_prefix='/api')

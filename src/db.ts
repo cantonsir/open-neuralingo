@@ -970,5 +970,45 @@ export const api = {
             return [];
         }
     },
+
+    // --- Assessment Statistics API ---
+
+    /**
+     * Fetch assessment statistics with learning curve data.
+     * @param window Time window for statistics: 'last_10', 'last_30', or 'all_time'
+     */
+    async fetchAssessmentStatistics(window: 'last_10' | 'last_30' | 'all_time' = 'last_10'): Promise<any> {
+        try {
+            const response = await fetch(`${API_BASE}/assessment/statistics?window=${window}`);
+            if (!response.ok) throw new Error('Failed to fetch assessment statistics');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchAssessmentStatistics error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Fetch all assessment results with optional pagination.
+     * @param limit Number of results to fetch (omit for all)
+     * @param offset Number of results to skip
+     */
+    async fetchAllAssessmentResults(limit?: number, offset?: number): Promise<any[]> {
+        try {
+            const params = new URLSearchParams();
+            if (limit !== undefined) params.set('limit', limit.toString());
+            if (offset !== undefined) params.set('offset', offset.toString());
+
+            const queryString = params.toString();
+            const url = `${API_BASE}/assessment/results${queryString ? '?' + queryString : ''}`;
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Failed to fetch assessment results');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchAllAssessmentResults error:', error);
+            return [];
+        }
+    },
 };
 

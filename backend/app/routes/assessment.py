@@ -96,17 +96,33 @@ def save_assessment_profile():
 @assessment_bp.route('/assessment/results', methods=['GET'])
 def get_assessment_results():
     """
-    Get recent mini-test results.
-    
+    Get mini-test results with optional pagination.
+
+    Query Parameters:
+        limit: Number of results to return (default: 5 for backward compatibility)
+        offset: Number of results to skip (default: 0)
+
     Returns:
-        Array of last 5 test results with details
+        Array of test results with details
     """
     try:
+        # Get pagination parameters
+        limit = request.args.get('limit', type=int)
+        offset = request.args.get('offset', default=0, type=int)
+
         with get_db() as conn:
-            results = conn.execute('''
-                SELECT * FROM mini_test_results 
-                ORDER BY taken_at DESC LIMIT 5
-            ''').fetchall()
+            # Build query with optional limit
+            query = 'SELECT * FROM mini_test_results ORDER BY taken_at DESC'
+            params = []
+
+            if limit is not None:
+                query += ' LIMIT ? OFFSET ?'
+                params.extend([limit, offset])
+            else:
+                # Default behavior for backward compatibility
+                query += ' LIMIT 5'
+
+            results = conn.execute(query, params if params else None).fetchall()
             
             if not results:
                 return jsonify([])

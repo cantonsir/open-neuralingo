@@ -16,6 +16,8 @@ import {
     Target,
     Clock
 } from 'lucide-react';
+import AssessmentStatistics from './AssessmentStatistics';
+import AssessmentHistory from './AssessmentHistory';
 
 interface AssessmentResult {
     targetLanguage: string;
@@ -138,6 +140,7 @@ export default function SelfAssessment({
     const [isReviewExpanded, setIsReviewExpanded] = useState(false);
     const [isAIFeedbackExpanded, setIsAIFeedbackExpanded] = useState(true);
     const [isDetailedReviewExpanded, setIsDetailedReviewExpanded] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
 
     const handleNext = async () => {
         if (step < totalSteps - 1) {
@@ -443,15 +446,26 @@ export default function SelfAssessment({
                             </div>
                         )}
 
-                        {/* History Link / Previous Results could go here */}
-                        {savedTestResults && savedTestResults.length > 1 && (
-                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                                <p className="text-xs text-gray-400 text-center">
-                                    Showing latest result. You have {savedTestResults.length} past results.
-                                </p>
+                        {/* View Full History Button */}
+                        {savedTestResults && savedTestResults.length > 0 && (
+                            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 text-center">
+                                <button
+                                    onClick={() => setShowHistory(true)}
+                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                    <Clock size={16} />
+                                    View Full History ({savedTestResults.length} results)
+                                </button>
                             </div>
                         )}
                     </div>
+
+                    {/* Learning Progress & Statistics */}
+                    {savedTestResults && savedTestResults.length > 0 && (
+                        <div className="mb-6">
+                            <AssessmentStatistics />
+                        </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex flex-col sm:flex-row gap-3">
@@ -475,6 +489,11 @@ export default function SelfAssessment({
                             </button>
                         )}
                     </div>
+
+                    {/* Assessment History Modal */}
+                    {showHistory && (
+                        <AssessmentHistory onClose={() => setShowHistory(false)} />
+                    )}
                 </div>
             </div>
         );
