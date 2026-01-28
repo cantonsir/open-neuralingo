@@ -22,6 +22,15 @@ export type PracticeMode = 'loop' | 'shadow';
 
 export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary' | 'shadow';
 
+// Anki-style card states
+export type CardState = 'new' | 'learning' | 'review' | 'relearning';
+
+// Sort options for flashcard review
+export type SortOption = 'due_first' | 'random' | 'newest' | 'oldest';
+
+// Rating options for review
+export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
+
 export interface Marker {
   id: string;
   videoId?: string;
@@ -35,6 +44,97 @@ export interface Marker {
   misunderstoodIndices?: number[];
   vocabData?: Record<number, VocabData>;
   source?: 'loop' | 'shadow';
+  // SM-2 SRS fields
+  easeFactor?: number;
+  interval?: number;
+  repetitions?: number;
+  nextReviewDate?: string;
+  lastReviewedAt?: number;
+  customTags?: string[];
+  // Anki-style card state fields
+  cardState?: CardState;
+  learningStep?: number;
+  dueTimestamp?: number;
+  // Preview intervals (populated by API)
+  previewIntervals?: IntervalsPreview;
+}
+
+export interface SrsStats {
+  total: number;
+  new: number;
+  learning: number;
+  review: number;
+  dueToday: number;
+  mastered: number;
+  averageEaseFactor: number;
+}
+
+export interface IntervalPreview {
+  days?: number;
+  seconds?: number;
+  display: string;
+}
+
+export interface IntervalsPreview {
+  again: IntervalPreview;
+  hard: IntervalPreview;
+  good: IntervalPreview;
+  easy: IntervalPreview;
+}
+
+// Learning status for pending learning/relearning cards
+export interface LearningStatus {
+  learningCount: number;
+  relearningCount: number;
+  pendingCount: number;
+  dueNowCount: number;
+  nextDueIn: number | null;  // seconds until next due
+  nextDueTimestamp: number | null;  // Unix ms timestamp
+}
+
+export interface ForecastDay {
+  date: string;
+  dayOffset: number;
+  dueCount: number;
+  newCount: number;
+  reviewCount: number;
+}
+
+export interface ForecastResponse {
+  forecast: ForecastDay[];
+  totalDue: number;
+  daysAhead: number;
+}
+
+export interface StudyStats {
+  today: {
+    again: number;
+    hard: number;
+    good: number;
+    easy: number;
+    total: number;
+  };
+  retention: number;
+  streak: number;
+  totalReviewsInPeriod: number;
+  history: Array<{
+    date: string;
+    total: number;
+    again: number;
+    passed: number;
+  }>;
+}
+
+export interface ReviewLogEntry {
+  reviewedAt: number;
+  rating: ReviewRating;
+  stateBefore: CardState;
+  stateAfter: CardState;
+  intervalBefore: number;
+  intervalAfter: number;
+  easeBefore: number;
+  easeAfter: number;
+  timeTakenMs?: number;
 }
 
 export interface VocabData {

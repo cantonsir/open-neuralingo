@@ -1,4 +1,4 @@
-import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession } from './types';
+import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession, SrsStats, IntervalsPreview, LearningStatus, SortOption, ReviewRating } from './types';
 
 const API_BASE = '/api';
 
@@ -253,6 +253,141 @@ export const api = {
             if (!response.ok) throw new Error(`Failed to update ${module} card`);
         } catch (error) {
             console.error(`API updateModuleCard (${module}) error:`, error);
+            throw error;
+        }
+    },
+
+    // --- SM-2 Spaced Repetition API ---
+
+    /**
+     * Fetch all flashcards due for review.
+     * Includes learning/relearning cards due NOW, review cards due today, and optionally new cards.
+     * 
+     * @param module - The module to fetch cards for
+     * @param includeNew - Whether to include new cards (default: true)
+     * @param sort - Sort order: 'due_first', 'random', 'newest', 'oldest' (default: 'due_first')
+     * @param newLimit - Maximum number of new cards to include (optional)
+     * @param includePending - Include learning cards even if not due yet (default: false)
+     */
+    async fetchDueCards(
+        module: FlashcardModule, 
+        includeNew: boolean = true,
+        sort: SortOption = 'due_first',
+        newLimit?: number,
+        includePending: boolean = false
+    ): Promise<Marker[]> {
+        try {
+            const params = new URLSearchParams({
+                include_new: String(includeNew),
+                sort: sort,
+                include_pending: String(includePending),
+            });
+            if (newLimit !== undefined) {
+                params.append('new_limit', String(newLimit));
+            }
+            const response = await fetch(`${API_BASE}/${module}/cards/due?${params}`);
+            if (!response.ok) throw new Error(`Failed to fetch due ${module} cards`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchDueCards (${module}) error:`, error);
+            return [];
+        }
+    },
+
+    /**
+     * Submit a review result for a flashcard using Anki-style state machine.
+     * @param rating - One of 'again', 'hard', 'good', 'easy'
+     */
+    async submitReview(module: FlashcardModule, cardId: string, rating: ReviewRating): Promise<Marker | null> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/${cardId}/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rating }),
+            });
+            if (!response.ok) throw new Error(`Failed to submit review for ${module} card`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API submitReview (${module}) error:`, error);
+            return null;
+        }
+    },
+
+    /**
+     * Get learning status (pending learning/relearning cards).
+     */
+    async fetchLearningStatus(module: FlashcardModule): Promise<LearningStatus> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/learning-status`);
+            if (!response.ok) throw new Error(`Failed to fetch ${module} learning status`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchLearningStatus (${module}) error:`, error);
+            return {
+                learningCount: 0,
+                relearningCount: 0,
+                pendingCount: 0,
+                dueNowCount: 0,
+                nextDueIn: null,
+                nextDueTimestamp: null,
+            };
+        }
+    },
+
+    /**
+     * Get SRS statistics for a module.
+     */
+    async fetchSrsStats(module: FlashcardModule): Promise<SrsStats> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/stats`);
+            if (!response.ok) throw new Error(`Failed to fetch ${module} SRS stats`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchSrsStats (${module}) error:`, error);
+            return {
+                total: 0,
+                new: 0,
+                learning: 0,
+                review: 0,
+                dueToday: 0,
+                mastered: 0,
+                averageEaseFactor: 2.5
+            };
+        }
+    },
+
+    /**
+     * Preview what intervals would be for each quality rating.
+     */
+    async previewIntervals(module: FlashcardModule, cardId: string): Promise<IntervalsPreview | null> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/preview-intervals`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ card_id: cardId }),
+            });
+            if (!response.ok) throw new Error(`Failed to preview intervals for ${module} card`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API previewIntervals (${module}) error:`, error);
+            return null;
+        }
+    },
+
+    /**
+     * Export all flashcards for a module.
+     */
+    async exportCards(module: FlashcardModule, format: 'json' | 'csv' = 'json'): Promise<any> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/export?format=${format}`);
+            if (!response.ok) throw new Error(`Failed to export ${module} cards`);
+            
+            if (format === 'csv') {
+                return await response.text();
+            }
+            return await response.json();
+        } catch (error) {
+            console.error(`API exportCards (${module}) error:`, error);
             throw error;
         }
     },
@@ -789,6 +924,50 @@ export const api = {
         } catch (error) {
             console.error('API saveReadingSession error:', error);
             throw error;
+        }
+    },
+
+    // --- Statistics & Forecast API ---
+
+    /**
+     * Get upcoming card review forecast.
+     */
+    async fetchForecast(module: FlashcardModule, days: number = 30): Promise<{ forecast: any[], totalDue: number, daysAhead: number } | null> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/forecast?days=${days}`);
+            if (!response.ok) throw new Error(`Failed to fetch ${module} forecast`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchForecast (${module}) error:`, error);
+            return null;
+        }
+    },
+
+    /**
+     * Get study statistics.
+     */
+    async fetchStudyStats(module: FlashcardModule, days: number = 30): Promise<any | null> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/study-stats?days=${days}`);
+            if (!response.ok) throw new Error(`Failed to fetch ${module} study stats`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchStudyStats (${module}) error:`, error);
+            return null;
+        }
+    },
+
+    /**
+     * Get review history for a specific card.
+     */
+    async fetchCardHistory(module: FlashcardModule, cardId: string): Promise<any[]> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/${cardId}/history`);
+            if (!response.ok) throw new Error(`Failed to fetch card history`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchCardHistory (${module}) error:`, error);
+            return [];
         }
     },
 };

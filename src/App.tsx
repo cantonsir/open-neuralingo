@@ -28,6 +28,7 @@ import WritingAssessmentPage from './components/writing/WritingAssessmentPage';
 // Hooks
 import { useTheme } from './hooks/useTheme';
 import { useTargetLanguage } from './hooks/useTargetLanguage';
+import { useFirstLanguage } from './hooks/useFirstLanguage';
 import { useSubtitles } from './hooks/useSubtitles';
 import { useVideoPlayer } from './hooks/useVideoPlayer';
 import { useMarkers } from './hooks/useMarkers';
@@ -44,6 +45,7 @@ function App() {
   // --- Theme & Language ---
   const { theme, toggleTheme } = useTheme();
   const { targetLanguage, setTargetLanguage } = useTargetLanguage();
+  const { firstLanguage, setFirstLanguage } = useFirstLanguage();
 
   // --- Subtitles ---
   const { subtitles, setSubtitles } = useSubtitles();
@@ -114,6 +116,7 @@ function App() {
 
   // --- Reading/Speaking/Writing Data ---
   const [readingData, setReadingData] = useState<{ libraryId: string; title: string } | null>(null);
+  const [readingMarkers, setReadingMarkers] = useState<Marker[]>([]);
   const [speakingData, setSpeakingData] = useState<{ mode: 'live' | 'tts'; topic: string; contextId?: string } | null>(null);
   const [writingData, setWritingData] = useState<{ topic: string; contextId?: string; content?: string } | null>(null);
 
@@ -147,6 +150,8 @@ function App() {
         toggleTheme={toggleTheme}
         targetLanguage={targetLanguage}
         onLanguageChange={setTargetLanguage}
+        firstLanguage={firstLanguage}
+        onFirstLanguageChange={setFirstLanguage}
       />
 
       {/* Main Content Area */}
@@ -159,7 +164,7 @@ function App() {
                 <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                   <VocabularyManager
                     module="reading"
-                    markers={[]}
+                    markers={readingMarkers}
                     savedCards={savedCards}
                     onRemoveWord={() => { }}
                     onUpdateVocabData={() => { }}
@@ -188,6 +193,8 @@ function App() {
                         libraryId={readingData.libraryId}
                         title={readingData.title}
                         onNavigate={setView}
+                        onMarkersUpdate={setReadingMarkers}
+                        firstLanguage={firstLanguage}
                       />
                     ) : (
                       <ReadingDashboard onNavigate={setView} />

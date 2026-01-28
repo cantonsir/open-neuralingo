@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { Marker } from '../../types';
-import { FlashcardModule } from '../../db';
-import { BookOpen, Activity, Play, Trash2, Save, Flag, Volume2, Sparkles, CheckCircle2, Circle, Eye } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { Marker, SrsStats } from '../../types';
+import { FlashcardModule, api } from '../../db';
+import { BookOpen, Activity, Play, Save, Flag, Volume2, Sparkles, CheckCircle2, Circle, Eye, Search, Filter, Download, BarChart3, Calendar, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
 import { formatTime } from '../../utils';
 import { generateDefinition } from '../../ai';
 import Toast from './Toast';
@@ -21,6 +21,9 @@ interface VocabularyManagerProps {
     onDiscardSessionMarker?: (id: string) => void; // Prop for session discard
 }
 
+type SortOption = 'newest' | 'oldest' | 'most-practiced' | 'due-first';
+type FilterSource = 'all' | 'loop' | 'shadow';
+
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     module,
     markers,
@@ -33,10 +36,20 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     onUpdateCard,
     onDiscardSessionMarker
 }) => {
-    const [viewMode, setViewMode] = useState<'session' | 'database'>('session');
+    const [viewMode, setViewMode] = useState<'session' | 'collection'>('session');
     const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isPreviewing, setIsPreviewing] = useState(false);
+
+    // Search and Filter State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<SortOption>('newest');
+    const [filterSource, setFilterSource] = useState<FilterSource>('all');
+    const [showFilters, setShowFilters] = useState(false);
+    const [showStats, setShowStats] = useState(true);
+
+    // Stats State
+    const [srsStats, setSrsStats] = useState<SrsStats | null>(null);
 
     // Bulk Items State
     const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -44,6 +57,13 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     // UI State
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error', actionLabel?: string, onAction?: () => void } | null>(null);
     const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+    // Load SRS stats when in collection mode
+    useEffect(() => {
+        if (viewMode === 'collection') {
+            api.fetchSrsStats(module).then(setSrsStats);
+        }
+    }, [viewMode, module, savedCards]);
 
     // Module specific colors
     const getModuleColor = () => {
@@ -72,10 +92,10 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
     // HELPER: Select All
     const handleSelectAll = () => {
-        if (checkedIds.size === activeMarkers.length) {
+        if (checkedIds.size === filteredMarkers.length) {
             setCheckedIds(new Set());
         } else {
-            setCheckedIds(new Set(activeMarkers.map(m => m.id)));
+            setCheckedIds(new Set(filteredMarkers.map(m => m.id)));
         }
     };
 
@@ -87,7 +107,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                 checkedIds.forEach(id => onDiscardSessionMarker(id));
             }
         } else {
-            // Database Mode: Delete !
+            // Collection Mode: Delete !
             if (onDeleteCard) {
                 checkedIds.forEach(id => onDeleteCard(id));
             }
@@ -109,39 +129,94 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
     // HELPER: Bulk Save
     const handleBulkSave = () => {
-        const markersToSave = activeMarkers.filter(m => checkedIds.has(m.id));
+        const markersToSave = filteredMarkers.filter(m => checkedIds.has(m.id));
         markersToSave.forEach(m => onSaveToDeck(m));
-        setToast({ message: `${markersToSave.length} cards saved to deck`, type: 'success', actionLabel: 'Undo', onAction: () => { } });
+        setToast({ message: `${markersToSave.length} cards saved to collection`, type: 'success', actionLabel: 'Undo', onAction: () => { } });
         setCheckedIds(new Set()); // Clear selection after save
     };
 
-    // 1. Get List based on View Mode
+    // HELPER: Export cards
+    const handleExport = async () => {
+        try {
+            const data = await api.exportCards(module, 'json');
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${module}-vocabulary-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setToast({ message: 'Vocabulary exported successfully', type: 'success' });
+        } catch (error) {
+            setToast({ message: 'Failed to export vocabulary', type: 'error' });
+        }
+    };
+
+    // 1. Get List based on View Mode with Search and Filtering
     const activeMarkers = useMemo(() => {
         const source = viewMode === 'session' ? markers : savedCards;
-        return source.filter(m => m.misunderstoodIndices && m.misunderstoodIndices.length > 0)
-            .sort((a, b) => b.createdAt - a.createdAt); // Newest first for better UX
+        return source.filter(m => m.misunderstoodIndices && m.misunderstoodIndices.length > 0);
     }, [markers, savedCards, viewMode]);
 
-    // Select first marker by default if none selected
-    if (!selectedMarkerId && activeMarkers.length > 0) {
-        // Only auto-select if we haven't selected one yet OR the current selection is no longer valid
-        // But for simplicity, let's just default to first if null.
-        // We'll handle "current selection invalid" in the render or useEffect if needed, 
-        // but finding it every render is safer.
-    }
-    
+    // 2. Apply search, filter, and sort
+    const filteredMarkers = useMemo(() => {
+        let result = [...activeMarkers];
+
+        // Search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(m => {
+                const text = m.subtitleText?.toLowerCase() || '';
+                const vocabText = Object.values(m.vocabData || {})
+                    .map(v => v.definition?.toLowerCase() || '')
+                    .join(' ');
+                return text.includes(query) || vocabText.includes(query);
+            });
+        }
+
+        // Source filter
+        if (filterSource !== 'all') {
+            result = result.filter(m => m.source === filterSource);
+        }
+
+        // Sort
+        switch (sortBy) {
+            case 'oldest':
+                result.sort((a, b) => a.createdAt - b.createdAt);
+                break;
+            case 'most-practiced':
+                result.sort((a, b) => (b.pressCount || 0) - (a.pressCount || 0));
+                break;
+            case 'due-first':
+                result.sort((a, b) => {
+                    const dateA = a.nextReviewDate || '9999';
+                    const dateB = b.nextReviewDate || '9999';
+                    return dateA.localeCompare(dateB);
+                });
+                break;
+            case 'newest':
+            default:
+                result.sort((a, b) => b.createdAt - a.createdAt);
+                break;
+        }
+
+        return result;
+    }, [activeMarkers, searchQuery, filterSource, sortBy]);
+
     // Derived state for the currently selected marker object
-    const selectedMarker = activeMarkers.find(m => m.id === selectedMarkerId) || (activeMarkers.length > 0 ? activeMarkers[0] : undefined);
-    
+    const selectedMarker = filteredMarkers.find(m => m.id === selectedMarkerId) || (filteredMarkers.length > 0 ? filteredMarkers[0] : undefined);
+
     // Effect to sync ID if we defaulted
-    if (!selectedMarkerId && selectedMarker) {
-         setSelectedMarkerId(selectedMarker.id);
-    }
+    useEffect(() => {
+        if (!selectedMarkerId && selectedMarker) {
+            setSelectedMarkerId(selectedMarker.id);
+        }
+    }, [selectedMarkerId, selectedMarker]);
 
 
     const renderSidebarItem = (marker: Marker) => {
         const isSelected = selectedMarkerId === marker.id;
-        const subtitleSnippet = marker.subtitleText ? (marker.subtitleText.length > 45 ? marker.subtitleText.substr(0, 45) + '...' : marker.subtitleText) : "No text";
+        const subtitleSnippet = marker.subtitleText ? (marker.subtitleText.length > 40 ? marker.subtitleText.substr(0, 40) + '...' : marker.subtitleText) : "No text";
 
         const misunderstoodIndices = marker.misunderstoodIndices || [];
 
@@ -165,9 +240,15 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         const hasPhrase = groups.some(g => g.length > 1);
         const pressCount = marker.pressCount || 1;
 
-        let dotColor = "text-gray-500";
-        if (pressCount > 3) dotColor = `text-${moduleColor}-500`;
-        if (pressCount > 6) dotColor = "text-red-500";
+        // SRS status indicator
+        const isNew = !marker.lastReviewedAt;
+        const isLearning = marker.lastReviewedAt && (marker.interval || 0) < 7;
+        const isMature = (marker.interval || 0) >= 21;
+
+        let statusColor = 'bg-gray-300 dark:bg-gray-600';
+        if (isNew) statusColor = 'bg-blue-500';
+        else if (isLearning) statusColor = 'bg-orange-500';
+        else if (isMature) statusColor = 'bg-green-500';
 
         const badgeColorClass = hasPhrase
             ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-300 border-green-200 dark:border-green-900/50"
@@ -177,43 +258,50 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
             <div
                 key={marker.id}
                 onClick={() => setSelectedMarkerId(marker.id)}
-                className={`p-4 cursor-pointer border-l-4 transition-all group relative ${isSelected
+                className={`p-3 cursor-pointer border-l-4 transition-all group relative ${isSelected
                     ? `bg-${moduleColor}-50 dark:bg-${moduleColor}-900/10 border-${moduleColor}-500`
                     : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
             >
                 {/* Hover Checkbox */}
                 <div
-                    className={`absolute left-2 top-4 z-20 transition-opacity duration-200 ${checkedIds.has(marker.id) || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                    className={`absolute left-2 top-3 z-20 transition-opacity duration-200 ${checkedIds.has(marker.id) || isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                     onClick={(e) => toggleCheck(marker.id, e)}
                 >
                     {checkedIds.has(marker.id) ? (
-                        <CheckCircle2 size={16} className="text-blue-500 fill-blue-50 dark:fill-blue-900" />
+                        <CheckCircle2 size={14} className="text-blue-500 fill-blue-50 dark:fill-blue-900" />
                     ) : (
-                        <Circle size={16} className="text-gray-300 hover:text-gray-400" />
+                        <Circle size={14} className="text-gray-300 hover:text-gray-400" />
                     )}
                 </div>
 
-                <div className={`flex justify-between items-start mb-1 pl-6`}>
-                    <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">#{marker.id.substr(0, 4)}</span>
+                <div className={`flex justify-between items-start mb-1 pl-5`}>
+                    <div className="flex items-center gap-2">
+                        {viewMode === 'collection' && (
+                            <div className={`w-2 h-2 rounded-full ${statusColor}`} title={isNew ? 'New' : isLearning ? 'Learning' : isMature ? 'Mastered' : 'Review'} />
+                        )}
+                        <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">#{marker.id.substr(0, 4)}</span>
+                    </div>
                     <div className="flex gap-1" title={`${pressCount} attempts`}>
                         {[...Array(Math.min(3, pressCount))].map((_, i) => (
-                            <div key={i} className={`w-1.5 h-1.5 rounded-full bg-current ${dotColor}`} />
+                            <div key={i} className={`w-1 h-1 rounded-full bg-current text-gray-400`} />
                         ))}
                     </div>
                 </div>
-                <p className={`text-sm leading-snug pl-6 ${isSelected ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+                <p className={`text-sm leading-snug pl-5 ${isSelected ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
                     {subtitleSnippet}
                 </p>
-                <div className="mt-2 flex items-center gap-2 pl-6">
+                <div className="mt-2 flex items-center gap-2 pl-5 flex-wrap">
                     {conceptualCount > 0 && (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badgeColorClass}`}>
                             {conceptualCount} Marked
                         </span>
                     )}
-                    <span className="text-[10px] text-gray-500 dark:text-gray-600 font-mono">
-                        {formatTime(marker.start)} - {formatTime(marker.end)}
-                    </span>
+                    {marker.source && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                            {marker.source}
+                        </span>
+                    )}
                 </div>
             </div>
         );
@@ -228,7 +316,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                 onUpdateVocabData(markerId, index, 'definition', def);
             } else {
                 // Database update
-                const marker = activeMarkers.find(m => m.id === markerId);
+                const marker = filteredMarkers.find(m => m.id === markerId);
                 if (marker) {
                     const currentVocab = marker.vocabData || {};
                     const currentItem = currentVocab[index] || { definition: '', notes: '' };
@@ -244,6 +332,47 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         }
     };
 
+    const renderStatsPanel = () => {
+        if (!srsStats || viewMode !== 'collection') return null;
+
+        return (
+            <div className={`bg-gradient-to-r from-${moduleColor}-50 to-${moduleColor}-100/50 dark:from-${moduleColor}-900/20 dark:to-${moduleColor}-900/10 border-b border-${moduleColor}-200 dark:border-${moduleColor}-900/30 p-4 transition-all ${showStats ? '' : 'hidden'}`}>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                        <BarChart3 size={14} /> Collection Overview
+                    </h3>
+                    <button onClick={() => setShowStats(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <X size={14} />
+                    </button>
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                    <div className="bg-white dark:bg-gray-900/50 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-gray-800 dark:text-white">{srsStats.total}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Total</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900/50 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-blue-500">{srsStats.new}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">New</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900/50 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-orange-500">{srsStats.learning}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Learning</div>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900/50 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-green-500">{srsStats.mastered}</div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Mastered</div>
+                    </div>
+                </div>
+                {srsStats.dueToday > 0 && (
+                    <div className={`mt-3 flex items-center justify-center gap-2 bg-${moduleColor}-500/20 text-${moduleColor}-700 dark:text-${moduleColor}-300 px-3 py-2 rounded-lg text-sm font-medium`}>
+                        <Calendar size={14} />
+                        {srsStats.dueToday} cards due for review today
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const renderWorkbench = () => {
         if (!selectedMarker && checkedIds.size <= 1) return (
             <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -256,9 +385,6 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
         const isBulkMode = checkedIds.size > 1;
 
-        // If we are in bulk mode, selectedMarker might be undefined if we unchecked the last one or something, 
-        // but usually we just show the bulk UI.
-
         return (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-gray-950 transition-colors relative">
                 {/* Header (Hidden in Bulk Mode) */}
@@ -266,8 +392,12 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                     <div className="h-16 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-8 shrink-0 transition-colors">
                         <div className="flex items-center gap-3">
                             <BookOpen className={`text-${moduleColor}-500`} size={20} />
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sentence Workbench</h2>
-                            <span className="bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded text-xs font-mono">ID: {selectedMarker.id}</span>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Vocabulary Editor</h2>
+                            {selectedMarker.nextReviewDate && viewMode === 'collection' && (
+                                <span className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-xs">
+                                    <Clock size={10} /> Next: {selectedMarker.nextReviewDate}
+                                </span>
+                            )}
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -290,7 +420,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                             {checkedIds.size} Cards Selected
                         </h2>
                         <p className="text-gray-400 dark:text-gray-500 max-w-md">
-                            You can save these directly to your deck or discard them in bulk.
+                            You can save these directly to your collection or discard them in bulk.
                         </p>
                     </div>
                 ) : (
@@ -389,23 +519,25 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                                 {/* Card Body */}
                                                 <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
                                                     {/* Audio Playback Control */}
-                                                    <div className={`col-span-1 lg:col-span-2 bg-${moduleColor}-50 dark:bg-${moduleColor}-900/10 p-4 rounded-xl border border-${moduleColor}-100 dark:border-${moduleColor}-900/30 flex items-center justify-between`}>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 bg-${moduleColor}-100 dark:bg-${moduleColor}-900/20 rounded-full flex items-center justify-center text-${moduleColor}-600 dark:text-${moduleColor}-500`}>
-                                                                <Volume2 size={20} />
+                                                    {module !== 'reading' && (
+                                                        <div className={`col-span-1 lg:col-span-2 bg-${moduleColor}-50 dark:bg-${moduleColor}-900/10 p-4 rounded-xl border border-${moduleColor}-100 dark:border-${moduleColor}-900/30 flex items-center justify-between`}>
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-10 h-10 bg-${moduleColor}-100 dark:bg-${moduleColor}-900/20 rounded-full flex items-center justify-center text-${moduleColor}-600 dark:text-${moduleColor}-500`}>
+                                                                    <Volume2 size={20} />
+                                                                </div>
+                                                                <div>
+                                                                    <span className={`text-[10px] font-bold text-${moduleColor}-600 dark:text-${moduleColor}-500 uppercase tracking-wider`}>Front (Question)</span>
+                                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</p>
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <span className={`text-[10px] font-bold text-${moduleColor}-600 dark:text-${moduleColor}-500 uppercase tracking-wider`}>Front (Question)</span>
-                                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</p>
-                                                            </div>
+                                                            <button
+                                                                onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end, selectedMarker.videoId)}
+                                                                className={`bg-${moduleColor}-500 hover:bg-${moduleColor}-400 text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors`}
+                                                            >
+                                                                <Play size={14} fill="currentColor" /> Play
+                                                            </button>
                                                         </div>
-                                                        <button
-                                                            onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end, selectedMarker.videoId)}
-                                                            className={`bg-${moduleColor}-500 hover:bg-${moduleColor}-400 text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors`}
-                                                        >
-                                                            <Play size={14} fill="currentColor" /> Play
-                                                        </button>
-                                                    </div>
+                                                    )}
 
                                                     {/* Back: Answer Fields */}
                                                     <div className="col-span-1 lg:col-span-2 border-t border-gray-100 dark:border-gray-800 pt-6 mt-2">
@@ -481,7 +613,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                         }}
                         className="px-6 py-2 rounded-lg text-sm font-bold text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                     >
-                        {viewMode === 'database' ? (checkedIds.size > 0 ? `Delete Selected (${checkedIds.size})` : 'Delete') : (checkedIds.size > 0 ? `Discard Selected (${checkedIds.size})` : 'Discard')}
+                        {viewMode === 'collection' ? (checkedIds.size > 0 ? `Delete Selected (${checkedIds.size})` : 'Delete') : (checkedIds.size > 0 ? `Discard Selected (${checkedIds.size})` : 'Discard')}
                     </button>
 
                     {viewMode === 'session' && (
@@ -491,13 +623,13 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                     handleBulkSave();
                                 } else if (selectedMarker) {
                                     onSaveToDeck(selectedMarker);
-                                    setToast({ message: "Card saved to deck", type: 'success', actionLabel: 'Undo', onAction: () => { } });
+                                    setToast({ message: "Card saved to collection", type: 'success', actionLabel: 'Undo', onAction: () => { } });
                                 }
                             }}
                             className={`px-6 py-2 rounded-lg text-sm font-bold bg-${moduleColor}-500 text-black hover:bg-${moduleColor}-400 shadow-lg shadow-${moduleColor}-500/20 transition-all flex items-center gap-2`}
                         >
                             <Save size={16} />
-                            {checkedIds.size > 0 ? `Save Selected (${checkedIds.size})` : 'Save to Deck'}
+                            {checkedIds.size > 0 ? `Save Selected (${checkedIds.size})` : 'Save to Collection'}
                         </button>
                     )}
                 </div>
@@ -507,8 +639,8 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                 <Modal
                     isOpen={showDiscardModal}
                     title={checkedIds.size > 0 ? `Delete ${checkedIds.size} Cards?` : (selectedMarker ? "Delete Card?" : "Delete")}
-                    description={`This will permanently remove this item from your ${viewMode === 'database' ? 'saved database' : 'session queue'}. This action cannot be undone.`}
-                    confirmLabel="Discard"
+                    description={`This will permanently remove this item from your ${viewMode === 'collection' ? 'saved collection' : 'session queue'}. This action cannot be undone.`}
+                    confirmLabel="Delete"
                     isDestructive
                     onConfirm={handleBulkDiscard}
                     onCancel={() => setShowDiscardModal(false)}
@@ -535,57 +667,139 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
             {/* Left Sidebar: Review Queue */}
             <div className="w-80 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 transition-colors">
                 {/* Sidebar Header */}
-                <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex flex-col gap-4 bg-white dark:bg-gray-900 sticky top-0 z-10 transition-colors">
+                <div className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10 transition-colors">
+                    {/* Mode Toggle Switch */}
+                    <div className="p-3">
+                        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                            <button
+                                onClick={() => setViewMode('session')}
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${viewMode === 'session'
+                                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                Session
+                            </button>
+                            <button
+                                onClick={() => setViewMode('collection')}
+                                className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${viewMode === 'collection'
+                                    ? `bg-white dark:bg-gray-700 text-${moduleColor}-600 dark:text-${moduleColor}-400 shadow-sm`
+                                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                My Collection
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Stats Panel (Collection mode only) */}
+                    {renderStatsPanel()}
+
+                    {/* Search and Filter */}
+                    <div className="p-3 space-y-2">
+                        {/* Search */}
+                        <div className="relative">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search vocabulary..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-gray-100 dark:bg-gray-800 border-0 rounded-lg py-2 pl-9 pr-3 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            {searchQuery && (
+                                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Filter/Sort Row */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`flex-1 flex items-center justify-center gap-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${showFilters
+                                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400'
+                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                                    }`}
+                            >
+                                <Filter size={12} /> Filter
+                            </button>
+                            <div className="flex-1 relative">
+                                <select
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                                    className="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-1.5 px-3 pr-8 text-xs font-medium text-gray-600 dark:text-gray-400 focus:outline-none focus:border-blue-500"
+                                >
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="most-practiced">Most Practiced</option>
+                                    {viewMode === 'collection' && <option value="due-first">Due First</option>}
+                                </select>
+                                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        </div>
+
+                        {/* Expanded Filters */}
+                        {showFilters && (
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Source</label>
+                                    <div className="flex gap-1">
+                                        {(['all', 'loop', 'shadow'] as FilterSource[]).map(source => (
+                                            <button
+                                                key={source}
+                                                onClick={() => setFilterSource(source)}
+                                                className={`flex-1 py-1 text-[10px] font-medium rounded transition-colors ${filterSource === source
+                                                    ? `bg-${moduleColor}-500 text-black`
+                                                    : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                                    }`}
+                                            >
+                                                {source.charAt(0).toUpperCase() + source.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Header Controls */}
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                    <div className="px-3 pb-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={handleSelectAll}
                                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                                 title="Select All"
                             >
-                                {checkedIds.size === activeMarkers.length && activeMarkers.length > 0 ? (
-                                    <CheckCircle2 size={18} className="text-blue-500" />
+                                {checkedIds.size === filteredMarkers.length && filteredMarkers.length > 0 ? (
+                                    <CheckCircle2 size={16} className="text-blue-500" />
                                 ) : (
-                                    <Circle size={18} />
+                                    <Circle size={16} />
                                 )}
                             </button>
-                            <h2 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                                {viewMode === 'session' ? 'Session Queue' : 'Saved Database'} ({activeMarkers.length})
-                            </h2>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {filteredMarkers.length} items
+                            </span>
                         </div>
-                        <Flag size={14} className="text-gray-300" />
-                    </div>
-
-                    {/* Mode Toggle Switch */}
-                    <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
-                        <button
-                            onClick={() => setViewMode('session')}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'session'
-                                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Session
-                        </button>
-                        <button
-                            onClick={() => setViewMode('database')}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'database'
-                                ? `bg-white dark:bg-gray-700 text-${moduleColor}-600 dark:text-${moduleColor}-400 shadow-sm`
-                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            Database
-                        </button>
+                        {viewMode === 'collection' && (
+                            <button
+                                onClick={handleExport}
+                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                title="Export vocabulary"
+                            >
+                                <Download size={12} /> Export
+                            </button>
+                        )}
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {activeMarkers.length === 0 ? (
+                    {filteredMarkers.length === 0 ? (
                         <div className="p-8 text-center text-gray-500 dark:text-gray-600 text-sm">
-                            No items in queue.
+                            {searchQuery ? 'No matching items found.' : 'No items in queue.'}
                         </div>
                     ) : (
-                        activeMarkers.map(renderSidebarItem)
+                        filteredMarkers.map(renderSidebarItem)
                     )}
                 </div>
             </div>
@@ -606,11 +820,16 @@ export default VocabularyManager;
 // bg-yellow-100 bg-blue-100 bg-green-100 bg-purple-100
 // bg-yellow-400 bg-blue-400 bg-green-400 bg-purple-400
 // bg-yellow-500 bg-blue-500 bg-green-500 bg-purple-500
+// bg-yellow-500/20 bg-blue-500/20 bg-green-500/20 bg-purple-500/20
 // border-yellow-100 border-blue-100 border-green-100 border-purple-100
 // border-yellow-200 border-blue-200 border-green-200 border-purple-200
 // border-yellow-500 border-blue-500 border-green-500 border-purple-500
 // shadow-yellow-500/20 shadow-blue-500/20 shadow-green-500/20 shadow-purple-500/20
 // hover:bg-yellow-400 hover:bg-blue-400 hover:bg-green-400 hover:bg-purple-400
+// from-yellow-50 from-blue-50 from-green-50 from-purple-50
+// to-yellow-100/50 to-blue-100/50 to-green-100/50 to-purple-100/50
+// dark:from-yellow-900/20 dark:from-blue-900/20 dark:from-green-900/20 dark:from-purple-900/20
+// dark:to-yellow-900/10 dark:to-blue-900/10 dark:to-green-900/10 dark:to-purple-900/10
 // dark:bg-yellow-900/10 dark:bg-blue-900/10 dark:bg-green-900/10 dark:bg-purple-900/10
 // dark:bg-yellow-900/30 dark:bg-blue-900/30 dark:bg-green-900/30 dark:bg-purple-900/30
 // dark:bg-yellow-900/20 dark:bg-blue-900/20 dark:bg-green-900/20 dark:bg-purple-900/20

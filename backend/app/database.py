@@ -79,7 +79,16 @@ def init_db():
             tags TEXT,
             note TEXT,
             press_count INTEGER,
-            source TEXT DEFAULT 'loop'
+            source TEXT DEFAULT 'loop',
+            ease_factor REAL DEFAULT 2.5,
+            interval_days INTEGER DEFAULT 0,
+            repetitions INTEGER DEFAULT 0,
+            next_review_date TEXT,
+            last_reviewed_at INTEGER,
+            custom_tags TEXT,
+            card_state TEXT DEFAULT 'new',
+            learning_step INTEGER DEFAULT 0,
+            due_timestamp INTEGER
         )
     ''')
     
@@ -97,7 +106,16 @@ def init_db():
             tags TEXT,
             note TEXT,
             press_count INTEGER,
-            source TEXT
+            source TEXT,
+            ease_factor REAL DEFAULT 2.5,
+            interval_days INTEGER DEFAULT 0,
+            repetitions INTEGER DEFAULT 0,
+            next_review_date TEXT,
+            last_reviewed_at INTEGER,
+            custom_tags TEXT,
+            card_state TEXT DEFAULT 'new',
+            learning_step INTEGER DEFAULT 0,
+            due_timestamp INTEGER
         )
     ''')
     
@@ -115,7 +133,16 @@ def init_db():
             tags TEXT,
             note TEXT,
             press_count INTEGER,
-            source TEXT
+            source TEXT,
+            ease_factor REAL DEFAULT 2.5,
+            interval_days INTEGER DEFAULT 0,
+            repetitions INTEGER DEFAULT 0,
+            next_review_date TEXT,
+            last_reviewed_at INTEGER,
+            custom_tags TEXT,
+            card_state TEXT DEFAULT 'new',
+            learning_step INTEGER DEFAULT 0,
+            due_timestamp INTEGER
         )
     ''')
     
@@ -133,7 +160,16 @@ def init_db():
             tags TEXT,
             note TEXT,
             press_count INTEGER,
-            source TEXT
+            source TEXT,
+            ease_factor REAL DEFAULT 2.5,
+            interval_days INTEGER DEFAULT 0,
+            repetitions INTEGER DEFAULT 0,
+            next_review_date TEXT,
+            last_reviewed_at INTEGER,
+            custom_tags TEXT,
+            card_state TEXT DEFAULT 'new',
+            learning_step INTEGER DEFAULT 0,
+            due_timestamp INTEGER
         )
     ''')
     
@@ -384,6 +420,35 @@ def init_db():
         )
     ''')
     
+    # Review log table (Anki-style) - tracks every single review
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS review_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_id TEXT NOT NULL,
+            module TEXT NOT NULL,
+            reviewed_at INTEGER NOT NULL,
+            rating TEXT NOT NULL,
+            card_state_before TEXT,
+            card_state_after TEXT,
+            interval_before INTEGER,
+            interval_after INTEGER,
+            ease_factor_before REAL,
+            ease_factor_after REAL,
+            time_taken_ms INTEGER
+        )
+    ''')
+    
+    # Index for efficient queries on review_log
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_review_log_card_id ON review_log(card_id)
+    ''')
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_review_log_reviewed_at ON review_log(reviewed_at)
+    ''')
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_review_log_module ON review_log(module)
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -392,6 +457,8 @@ def migrate_db():
     """
     Run database migrations to add new columns to existing tables.
     """
+    from datetime import date
+    
     conn = sqlite3.connect(Config.DB_FILE)
     c = conn.cursor()
     
@@ -434,6 +501,58 @@ def migrate_db():
             print(f"Migration complete: {old_count} cards copied.")
     except sqlite3.OperationalError as e:
         print(f"Migration skipped (tables may not exist yet): {e}")
+    
+    # Migration: Add SM-2 SRS columns to all flashcard tables
+    flashcard_tables = ['listening_flashcards', 'speaking_flashcards', 'reading_flashcards', 'writing_flashcards']
+    srs_columns = [
+        ('ease_factor', 'REAL DEFAULT 2.5'),
+        ('interval_days', 'INTEGER DEFAULT 0'),
+        ('repetitions', 'INTEGER DEFAULT 0'),
+        ('next_review_date', 'TEXT'),
+        ('last_reviewed_at', 'INTEGER'),
+        ('custom_tags', 'TEXT'),
+        # Learning queue columns (Anki-style)
+        ('card_state', "TEXT DEFAULT 'new'"),
+        ('learning_step', 'INTEGER DEFAULT 0'),
+        ('due_timestamp', 'INTEGER')
+    ]
+    
+    today = date.today().isoformat()
+    
+    for table in flashcard_tables:
+        for col_name, col_type in srs_columns:
+            try:
+                c.execute(f"SELECT {col_name} FROM {table} LIMIT 1")
+            except sqlite3.OperationalError:
+                print(f"Migrating: Adding '{col_name}' column to {table} table...")
+                c.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+                conn.commit()
+                print(f"Migration complete: Added {col_name} to {table}.")
+        
+        # Set next_review_date to today for existing cards that don't have it
+        try:
+            c.execute(f"UPDATE {table} SET next_review_date = ? WHERE next_review_date IS NULL", (today,))
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"Could not set default next_review_date for {table}: {e}")
+        
+        # Set card_state for existing cards based on their review history
+        try:
+            # Cards never reviewed = 'new'
+            # Cards with interval >= 1 day = 'review'
+            # Cards with interval < 1 day but reviewed = 'learning'
+            c.execute(f"""
+                UPDATE {table} SET card_state = 
+                    CASE 
+                        WHEN last_reviewed_at IS NULL THEN 'new'
+                        WHEN interval_days >= 1 THEN 'review'
+                        ELSE 'learning'
+                    END
+                WHERE card_state IS NULL OR card_state = ''
+            """)
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            print(f"Could not set card_state for {table}: {e}")
     
     conn.close()
 

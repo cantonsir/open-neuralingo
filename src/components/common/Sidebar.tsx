@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2 } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
+import { api, FlashcardModule } from '../../db';
 
 
 
@@ -135,6 +136,25 @@ export default function Sidebar({
 }: SidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [isModuleMenuOpen, setIsModuleMenuOpen] = useState(false);
+    const [dueCount, setDueCount] = useState(0);
+
+    // Fetch due count for flashcards
+    useEffect(() => {
+        const fetchDueCount = async () => {
+            try {
+                const stats = await api.fetchSrsStats(activeModule as FlashcardModule);
+                setDueCount(stats.dueToday);
+            } catch (error) {
+                console.error('Failed to fetch due count:', error);
+                setDueCount(0);
+            }
+        };
+
+        fetchDueCount();
+        // Refresh every minute to keep count accurate
+        const interval = setInterval(fetchDueCount, 60000);
+        return () => clearInterval(interval);
+    }, [activeModule, savedCardsCount]);
 
     const modules: { id: Module; label: string; icon: React.ReactNode }[] = [
         { id: 'listening', label: 'Listening Trainer', icon: <Zap size={18} /> },
@@ -300,7 +320,7 @@ export default function Sidebar({
                             icon={<Layers size={20} />}
                             label="Flashcards"
                             isActive={view === 'flashcards'}
-                            badge={savedCardsCount}
+                            badge={dueCount}
                             collapsed={collapsed}
                             onClick={() => setView('flashcards')}
                             activeColorTheme="orange"
@@ -350,6 +370,26 @@ export default function Sidebar({
                             isActive={view === 'library'}
                             collapsed={collapsed}
                             onClick={() => setView('library')}
+                            activeColorTheme="blue"
+                        />
+                        <SectionHeader label="DATABASE" collapsed={collapsed} />
+                        <NavItem
+                            icon={<BookOpen size={20} />}
+                            label="My Words"
+                            isActive={view === 'vocab'}
+                            collapsed={collapsed}
+                            onClick={() => setView('vocab')}
+                            badge={savedCardsCount}
+                            activeColorTheme="blue"
+                        />
+                        <SectionHeader label="REVIEW" collapsed={collapsed} />
+                        <NavItem
+                            icon={<Layers size={20} />}
+                            label="Flashcards"
+                            isActive={view === 'flashcards'}
+                            collapsed={collapsed}
+                            onClick={() => setView('flashcards')}
+                            badge={dueCount}
                             activeColorTheme="blue"
                         />
                     </>

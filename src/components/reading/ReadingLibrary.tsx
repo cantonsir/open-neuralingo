@@ -23,26 +23,23 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
     const [isImporting, setIsImporting] = useState(false);
 
     useEffect(() => {
-        fetchLibrary();
-    }, []);
-
-    const fetchLibrary = async () => {
-        // Only show loading if library is empty (initial load)
-        if (library.length === 0) {
+        const loadLibrary = async () => {
             setIsLoading(true);
-        }
-        try {
-            const res = await fetch('/api/library');
-            if (res.ok) {
-                const data = await res.json();
-                setLibrary(data);
+            try {
+                const res = await fetch('/api/library');
+                if (res.ok) {
+                    const data = await res.json();
+                    setLibrary(data);
+                }
+            } catch (error) {
+                console.error('Failed to fetch library:', error);
+            } finally {
+                setIsLoading(false);
             }
-        } catch (error) {
-            console.error('Failed to fetch library:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+        };
+
+        loadLibrary();
+    }, []); // No dependencies, function is local to effect
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];

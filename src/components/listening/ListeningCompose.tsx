@@ -77,17 +77,26 @@ export default function ListeningCompose({ setView }: AppState) {
                 return;
             }
 
-            // Generate audio for each line with alternating voices
-            const voices = ['Puck', 'Charon', 'Kore']; // Rotate through voices
+            // Generate audio for each line with proper voice assignment
+            const availableVoices = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Aoede'];
+            const speakerVoiceMap: { [speaker: string]: string } = {};
+            let nextVoiceIndex = 0;
+
             const audioUrls: string[] = [];
             let totalDuration = 0;
 
             for (let i = 0; i < discussion.length; i++) {
                 const line = discussion[i];
-                const voiceIndex = i % voices.length;
-                const voice = voices[voiceIndex];
                 
-                const audioUrl = await generateSpeech(line.text, voice);
+                // Assign voice to speaker if not already assigned
+                if (!speakerVoiceMap[line.speaker]) {
+                    speakerVoiceMap[line.speaker] = availableVoices[nextVoiceIndex % availableVoices.length];
+                    nextVoiceIndex++;
+                }
+                
+                const voice = speakerVoiceMap[line.speaker];
+                
+                const audioUrl = await generateSpeech({ text: line.text, voiceName: voice });
                 if (audioUrl) {
                     audioUrls.push(audioUrl);
                     // Estimate duration (rough: ~150 words per minute)
@@ -166,7 +175,7 @@ export default function ListeningCompose({ setView }: AppState) {
                         Listening Practice
                     </h1>
                     <p className="text-lg text-gray-600 dark:text-gray-300">
-                        Generate multi-person discussions for listening practice
+                        Generate audio discussions, stories, or monologues for listening practice
                     </p>
                 </div>
 

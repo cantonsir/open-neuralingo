@@ -12,16 +12,37 @@ const getGenAI = () => {
     return new GoogleGenerativeAI(apiKey);
 };
 
-export const generateDefinition = async (text: string, context: string = ""): Promise<string | null> => {
+// Normalize language codes for backward compatibility
+const normalizeLanguageCode = (code: string): string => {
+    // Handle legacy 'zh' code -> default to Simplified Chinese
+    if (code === 'zh') return 'zh-CN';
+    return code;
+};
+
+export const generateDefinition = async (
+    text: string,
+    context: string = "",
+    targetLanguage: string = "en"
+): Promise<string | null> => {
     const genAI = getGenAI();
     if (!genAI) return null;
 
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-        let prompt = `Provide a concise, dictionary-like definition for the English word or phrase: "${text}". 
+        const languageNames: Record<string, string> = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'ja': 'Japanese', 'ko': 'Korean', 'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese',
+            'yue': 'Cantonese', 'pt': 'Portuguese', 'ru': 'Russian', 'it': 'Italian',
+            'ar': 'Arabic', 'hi': 'Hindi'
+        };
+
+        const normalizedLang = normalizeLanguageCode(targetLanguage);
+
+        let prompt = `Provide a concise, dictionary-like definition for the English word or phrase: "${text}".
         If it's a phrase, explain its idiomatic meaning.
-        Keep it short (1-2 sentences).`;
+        Keep it short (1-2 sentences).
+        Respond in ${languageNames[normalizedLang] || 'English'}.`;
 
         if (context) {
             prompt += `\nContext: "${context}"`;
@@ -32,6 +53,79 @@ export const generateDefinition = async (text: string, context: string = ""): Pr
         return response.text();
     } catch (error) {
         console.error("Error generating definition:", error);
+        return null;
+    }
+};
+
+export const generateSentenceMeaning = async (
+    sentence: string,
+    targetLanguage: string = "en"
+): Promise<string | null> => {
+    const genAI = getGenAI();
+    if (!genAI) return null;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+        const languageNames: Record<string, string> = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'ja': 'Japanese', 'ko': 'Korean', 'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese',
+            'yue': 'Cantonese', 'pt': 'Portuguese', 'ru': 'Russian', 'it': 'Italian',
+            'ar': 'Arabic', 'hi': 'Hindi'
+        };
+
+        const prompt = `Translate this English sentence to ${languageNames[targetLanguage] || 'English'}. Provide a clear, natural translation.
+
+Sentence: "${sentence}"
+
+Keep it concise (1-2 sentences). If the sentence contains idioms or complex grammar, preserve the meaning in the translation.`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error generating sentence meaning:", error);
+        return null;
+    }
+};
+
+export const generateBilingualDefinition = async (
+    text: string,
+    context: string = "",
+    nativeLanguage: string = "en"
+): Promise<string | null> => {
+    const genAI = getGenAI();
+    if (!genAI) return null;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+        const languageNames: Record<string, string> = {
+            'en': 'English', 'es': 'Spanish', 'fr': 'French', 'de': 'German',
+            'ja': 'Japanese', 'ko': 'Korean', 'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese',
+            'yue': 'Cantonese', 'pt': 'Portuguese', 'ru': 'Russian', 'it': 'Italian',
+            'ar': 'Arabic', 'hi': 'Hindi'
+        };
+
+        const nativeLangName = languageNames[nativeLanguage] || 'English';
+
+        let prompt = `Provide a bilingual definition for the English word or phrase: "${text}".
+
+Format your response as a JSON object with these keys:
+- "english": A brief English explanation (1 sentence)
+- "native": The ${nativeLangName} translation and explanation
+
+Return ONLY valid JSON. No markdown formatting.`;
+
+        if (context) {
+            prompt += `\n\nContext sentence: "${context}"`;
+        }
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error generating bilingual definition:", error);
         return null;
     }
 };

@@ -916,19 +916,23 @@ export async function generateListeningDiscussion(prompt: string, context?: stri
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) return [];
 
-    const systemPrompt = `Create a natural, engaging conversation between 2-3 people about: "${prompt}".
+    const systemPrompt = `Generate a script for an audio listening practice segment based on: "${prompt}".
     ${context ? `Context: ${context}` : ''}
     
-    The conversation should be:
-    - About 10-15 exchanges (roughly 1 minute when spoken)
-    - Natural and conversational (not scripted or formal)
-    - Suitable for intermediate language learners
-    - Include natural speech patterns (fillers, reactions, questions)
+    The content can be:
+    - A conversation between 2-3 people (if the prompt suggests discussion)
+    - A monologue/story/news report (if the prompt suggests it)
+    - Educational content
+    
+    Requirements:
+    - Length: About 10-15 segments/exchanges (roughly 1 minute total)
+    - Natural and suitable for intermediate learners
     
     Return ONLY valid JSON array in this exact format:
-    [{"speaker": "Person A", "text": "...dialogue..."}, {"speaker": "Person B", "text": "...dialogue..."}]
+    [{"speaker": "Speaker Name", "text": "...text segment..."}]
     
-    Use speaker names like "Person A", "Person B", "Person C" consistently throughout.`;
+    For monologues, use the same speaker name (e.g., "Narrator") for all segments.
+    For conversations, use distinct speaker names (e.g., "Person A", "Person B") consistently.`;
 
     try {
         const response = await fetch(

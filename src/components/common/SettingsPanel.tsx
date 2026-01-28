@@ -9,6 +9,8 @@ interface SettingsPanelProps {
     toggleTheme: () => void;
     targetLanguage: string;
     onLanguageChange: (language: string) => void;
+    firstLanguage?: string;
+    onFirstLanguageChange?: (language: string) => void;
 }
 
 const shortcuts = [
@@ -27,7 +29,9 @@ const SUPPORTED_LANGUAGES = [
     { code: 'de', name: 'German', flag: '🇩🇪' },
     { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
     { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-    { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
+    { code: 'zh-CN', name: 'Simplified Chinese', flag: '🇨🇳' },
+    { code: 'zh-TW', name: 'Traditional Chinese', flag: '🇹🇼' },
+    { code: 'yue', name: 'Cantonese', flag: '🇭🇰' },
     { code: 'pt', name: 'Portuguese', flag: '🇧🇷' },
     { code: 'ru', name: 'Russian', flag: '🇷🇺' },
     { code: 'it', name: 'Italian', flag: '🇮🇹' },
@@ -41,7 +45,9 @@ export default function SettingsPanel({
     theme,
     toggleTheme,
     targetLanguage,
-    onLanguageChange
+    onLanguageChange,
+    firstLanguage = 'en',
+    onFirstLanguageChange
 }: SettingsPanelProps) {
     const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>('general');
 
@@ -112,12 +118,37 @@ export default function SettingsPanel({
                                 >
                                     {SUPPORTED_LANGUAGES.map(lang => (
                                         <option key={lang.code} value={lang.code}>
-                                            {lang.flag} {lang.name}
+                                            {lang.name}
                                         </option>
                                     ))}
                                 </select>
                                 <p className="text-xs text-gray-400 mt-2">
                                     Videos will fetch subtitles in this language when available
+                                </p>
+                            </div>
+
+                            {/* User's First Language */}
+                            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <Globe size={20} className="text-green-500" />
+                                    <div>
+                                        <div className="font-medium text-gray-900 dark:text-white">Your Native Language</div>
+                                        <div className="text-sm text-gray-500">Used for translations and definitions</div>
+                                    </div>
+                                </div>
+                                <select
+                                    value={firstLanguage}
+                                    onChange={(e) => onFirstLanguageChange?.(e.target.value)}
+                                    className="w-full px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                                >
+                                    {SUPPORTED_LANGUAGES.map(lang => (
+                                        <option key={lang.code} value={lang.code}>
+                                            {lang.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    Vocabulary definitions and sentence translations will be shown in this language
                                 </p>
                             </div>
 

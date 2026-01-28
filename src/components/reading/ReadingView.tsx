@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BookOpen, Loader2, BrainCircuit } from 'lucide-react';
-import { View } from '../../types';
-import ReadingAssessment from './ReadingAssessment';
+import { ArrowLeft, BookOpen, Loader2 } from 'lucide-react';
+import { View, Marker, VocabData } from '../../types';
+import ReadingVocabPanel from './ReadingVocabPanel';
 
 interface ReadingViewProps {
     libraryId: string;
     title: string;
     onNavigate: (view: View) => void;
+    onMarkersUpdate?: (markers: Marker[]) => void;
+    firstLanguage?: string;
 }
 
-export default function ReadingView({ libraryId, title, onNavigate }: ReadingViewProps) {
+export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpdate, firstLanguage = 'en' }: ReadingViewProps) {
     const [content, setContent] = useState<string>('');
     const [isLoading, setIsLoading] = useState(true);
-    const [showAssessment, setShowAssessment] = useState(false);
+    const [selectedText, setSelectedText] = useState<string>('');
+    const [selectionRange, setSelectionRange] = useState<{
+        paragraphIndex: number;
+        sentenceText: string;
+        selectedWords: string;
+    } | null>(null);
+    const [sessionMarkers, setSessionMarkers] = useState<Marker[]>([]);
+    const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('readingPanelCollapsed') === 'true';
+    });
 
     useEffect(() => {
         const fetchContent = async () => {
@@ -34,9 +46,134 @@ export default function ReadingView({ libraryId, title, onNavigate }: ReadingVie
         }
     }, [libraryId]);
 
+    // Extract complete sentence(s) containing the selected text
+    const extractSentence = (paragraph: string, selectedText: string): string => {
+        // Split into sentences (handle ., !, ?, but avoid abbreviations like "Mr.", "Dr.")
+        const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
+
+        // Find sentence(s) containing the selected text
+        const relevantSentences = sentences.filter(s => s.includes(selectedText));
+
+        // Return joined sentences or first sentence if not found
+        return relevantSentences.join(' ').trim() || sentences[0];
+    };
+
+    // Handle text selection
+    const handleTextSelection = () => {
+        const selection = window.getSelection();
+        if (!selection || selection.toString().trim() === '') {
+            setSelectedText('');
+            setSelectionRange(null);
+            return;
+        }
+
+        const text = selection.toString().trim();
+        setSelectedText(text);
+
+        // Find which paragraph contains the selection
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+        const paragraphElement = container.nodeType === Node.TEXT_NODE
+            ? container.parentElement?.closest('p')
+            : (container as Element).closest('p');
+
+        if (paragraphElement) {
+            const paragraphIndex = parseInt(paragraphElement.getAttribute('data-paragraph-index') || '0');
+            const fullParagraph = paragraphElement.textContent || '';
+
+            // Extract sentence containing selected text
+            const sentenceText = extractSentence(fullParagraph, text);
+
+            setSelectionRange({
+                paragraphIndex,
+                sentenceText,
+                selectedWords: text,
+            });
+        }
+    };
+
+    // Handle saving words to session markers
+    const handleSaveWords = () => {
+        if (!selectionRange) return;
+
+        const { sentenceText, selectedWords, paragraphIndex } = selectionRange;
+
+        // Create word indices within sentence
+        const sentenceWords = sentenceText.split(/\s+/);
+        const selectedWordList = selectedWords.split(/\s+/);
+        const indices: number[] = [];
+
+        sentenceWords.forEach((word, idx) => {
+            if (selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase()))) {
+                indices.push(idx);
+            }
+        });
+
+        const marker: Marker = {
+            id: `reading-${Date.now()}-${Math.random()}`,
+            start: paragraphIndex,
+            end: paragraphIndex,
+            subtitleText: sentenceText,
+            misunderstoodIndices: indices,
+            vocabData: {},
+            tags: ['vocabulary'],
+            createdAt: Date.now(),
+            pressCount: 1,
+        };
+
+        const updatedMarkers = [...sessionMarkers, marker];
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+        setSelectedText('');
+        setSelectionRange(null);
+
+        // Clear browser selection
+        window.getSelection()?.removeAllRanges();
+    };
+
+    // Attach text selection listener
+    useEffect(() => {
+        document.addEventListener('mouseup', handleTextSelection);
+        return () => document.removeEventListener('mouseup', handleTextSelection);
+    }, [content]);
+
+    // Persist collapse state
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('readingPanelCollapsed', String(isPanelCollapsed));
+        }
+    }, [isPanelCollapsed]);
+
+    // Handler for removing markers
+    const handleRemoveMarker = (markerId: string) => {
+        const updatedMarkers = sessionMarkers.filter(m => m.id !== markerId);
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+    };
+
+    // Handler for updating vocab data
+    const handleUpdateVocabData = (markerId: string, index: number, data: VocabData) => {
+        const updatedMarkers = sessionMarkers.map(m => {
+            if (m.id === markerId) {
+                return {
+                    ...m,
+                    vocabData: {
+                        ...m.vocabData,
+                        [index]: data
+                    }
+                };
+            }
+            return m;
+        });
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+    };
+
     return (
-        <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-950 relative">
-            {/* Header */}
+        <div className="flex-1 flex overflow-hidden bg-white dark:bg-gray-950">
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Header */}
             <div className="flex items-center gap-4 px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10 transition-colors">
                 <button
                     onClick={() => onNavigate('library')}
@@ -50,13 +187,6 @@ export default function ReadingView({ libraryId, title, onNavigate }: ReadingVie
                         {title}
                     </h2>
                 </div>
-                <button
-                    onClick={() => setShowAssessment(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 rounded-lg transition-colors font-medium text-sm"
-                >
-                    <BrainCircuit className="w-4 h-4" />
-                    Take Quiz
-                </button>
             </div>
 
             {/* Content - Scrollable Area */}
@@ -73,9 +203,13 @@ export default function ReadingView({ libraryId, title, onNavigate }: ReadingVie
                                     {content.split('\n').map((paragraph, idx) => {
                                         // Skip empty paragraphs
                                         if (!paragraph.trim()) return null;
-                                        
+
                                         return (
-                                            <p key={idx} className="whitespace-pre-wrap">
+                                            <p
+                                                key={idx}
+                                                data-paragraph-index={idx}
+                                                className="whitespace-pre-wrap"
+                                            >
                                                 {paragraph}
                                             </p>
                                         );
@@ -88,13 +222,27 @@ export default function ReadingView({ libraryId, title, onNavigate }: ReadingVie
                     )}
                 </div>
             </div>
+            </div>
 
-            {showAssessment && (
-                <ReadingAssessment
-                    text={content}
-                    onClose={() => setShowAssessment(false)}
-                />
-            )}
+            {/* Right Vocabulary Panel */}
+            <ReadingVocabPanel
+                selectedText={selectedText}
+                selectedSentence={selectionRange?.sentenceText || null}
+                selectionIndices={selectionRange ? (() => {
+                    const sentenceWords = selectionRange.sentenceText.split(/\s+/);
+                    const selectedWordList = selectionRange.selectedWords.split(/\s+/);
+                    return sentenceWords.map((word, idx) =>
+                        selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
+                    ).filter(i => i >= 0);
+                })() : null}
+                sessionMarkers={sessionMarkers}
+                isCollapsed={isPanelCollapsed}
+                onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+                onSaveSelection={handleSaveWords}
+                onRemoveMarker={handleRemoveMarker}
+                onUpdateVocabData={handleUpdateVocabData}
+                firstLanguage={firstLanguage}
+            />
         </div>
     );
 }
