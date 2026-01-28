@@ -1,6 +1,6 @@
 import React from 'react';
 import { FocusedSegment, Marker, TagType } from '../../types';
-import { Play, Repeat, Trash2, Tag as TagIcon, Mic } from 'lucide-react';
+import { Play, Repeat, Trash2, Tag as TagIcon } from 'lucide-react';
 import { formatTime } from '../../utils';
 import VocabularyBreakdown from './VocabularyBreakdown';
 
@@ -16,7 +16,6 @@ interface MarkerListProps {
   onToggleRange: (id: string, start: number, end: number) => void;
   onPlayOnce: (start: number, end: number) => void;
   onFocusSegment: (segment: FocusedSegment | null) => void;
-  onShadowSegment: (segment: FocusedSegment) => void;
 }
 
 const TAG_CONFIG: Record<TagType, { label: string; color: string }> = {
@@ -25,6 +24,7 @@ const TAG_CONFIG: Record<TagType, { label: string; color: string }> = {
   'accent': { label: 'Accent', color: 'bg-purple-900 text-purple-200 border-purple-700' },
   'grammar': { label: 'Grammar', color: 'bg-blue-900 text-blue-200 border-blue-700' },
   'vocabulary': { label: 'Vocab', color: 'bg-green-900 text-green-200 border-green-700' },
+  'shadow': { label: 'Shadow', color: 'bg-pink-900 text-pink-200 border-pink-700' },
 };
 
 const MarkerList: React.FC<MarkerListProps> = ({
@@ -39,7 +39,6 @@ const MarkerList: React.FC<MarkerListProps> = ({
   onToggleRange,
   onPlayOnce,
   onFocusSegment,
-  onShadowSegment,
 }) => {
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -75,8 +74,10 @@ const MarkerList: React.FC<MarkerListProps> = ({
     };
   };
 
-  if (markers.length === 0) {
-    // ... same empty check ...
+  // Sort from oldest to newest (ascending)
+  const sortedMarkers = [...markers].sort((a, b) => a.createdAt - b.createdAt);
+
+  if (sortedMarkers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-500 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl mt-4">
         <p className="text-lg font-medium">No confusion points yet</p>
@@ -84,10 +85,6 @@ const MarkerList: React.FC<MarkerListProps> = ({
       </div>
     );
   }
-
-  // OLD: const sortedMarkers = [...markers].sort((a, b) => b.createdAt - a.createdAt);
-  // NEW: Sort from oldest to newest (ascending)
-  const sortedMarkers = [...markers].sort((a, b) => a.createdAt - b.createdAt);
 
   return (
     <div
@@ -99,7 +96,6 @@ const MarkerList: React.FC<MarkerListProps> = ({
         const isRevealed = revealedIds.has(marker.id);
         const hasSubtitle = !!marker.subtitleText;
         const focusSegment = buildFocusedSegment(marker);
-        const canShadow = !!focusSegment;
 
         return (
           <div
@@ -244,24 +240,6 @@ const MarkerList: React.FC<MarkerListProps> = ({
                 title={isLooping ? "Stop Looping" : "Loop Segment"}
               >
                 <Repeat size={16} className={isLooping ? "animate-spin-slow" : ""} />
-              </button>
-
-              {/* Shadow Action */}
-              <button
-                onClick={() => {
-                  if (!focusSegment) return;
-                  onShadowSegment(focusSegment);
-                }}
-                disabled={!canShadow}
-                className={`
-                  px-3 flex items-center justify-center rounded-lg transition-all border shadow-sm
-                  ${canShadow
-                    ? 'bg-white dark:bg-gray-800 text-gray-400 hover:text-orange-500 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    : 'bg-gray-100 dark:bg-gray-900 text-gray-300 border-gray-200 dark:border-gray-800 cursor-not-allowed'}
-                `}
-                title="Shadow this line"
-              >
-                <Mic size={16} />
               </button>
             </div>
           </div>

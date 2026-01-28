@@ -16,9 +16,11 @@ export type Module = 'listening' | 'reading' | 'speaking' | 'writing';
 
 export type Theme = 'dark' | 'light';
 
-export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose' | 'feedback';
+export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose';
 
-export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary';
+export type PracticeMode = 'loop' | 'shadow';
+
+export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary' | 'shadow';
 
 export interface Marker {
   id: string;
@@ -32,6 +34,7 @@ export interface Marker {
   pressCount?: number;
   misunderstoodIndices?: number[];
   vocabData?: Record<number, VocabData>;
+  source?: 'loop' | 'shadow';
 }
 
 export interface VocabData {
@@ -107,16 +110,6 @@ export interface ListeningSession {
   audioUrl: string;
   transcript: Array<{ speaker: string; text: string }>;
   durationSeconds: number;
-  contextId?: string;
-  createdAt: number;
-}
-
-export interface ListeningFeedbackSession {
-  id: string;
-  videoId: string;
-  videoTitle: string;
-  markers: Marker[];
-  feedback?: any;
   contextId?: string;
   createdAt: number;
 }

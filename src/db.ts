@@ -1,4 +1,4 @@
-import { Marker, SpeakingSession, WritingSession, ListeningSession, ListeningFeedbackSession, ReadingSession } from './types';
+import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession } from './types';
 
 const API_BASE = '/api';
 
@@ -686,40 +686,6 @@ export const api = {
             return await response.json();
         } catch (error) {
             console.error('API saveListeningSession error:', error);
-            throw error;
-        }
-    },
-
-    // --- Listening Feedback API ---
-
-    /**
-     * Fetch all listening feedback sessions.
-     */
-    async fetchListeningFeedbackSessions(): Promise<ListeningFeedbackSession[]> {
-        try {
-            const response = await fetch(`${API_BASE}/listening/feedback`);
-            if (!response.ok) throw new Error('Failed to fetch listening feedback sessions');
-            return await response.json();
-        } catch (error) {
-            console.error('API fetchListeningFeedbackSessions error:', error);
-            return [];
-        }
-    },
-
-    /**
-     * Save a listening feedback session.
-     */
-    async saveListeningFeedbackSession(session: { videoId: string; videoTitle: string; markers: Marker[]; feedback?: any; contextId?: string; createdAt: number }): Promise<{ status: string; id: string }> {
-        try {
-            const response = await fetch(`${API_BASE}/listening/feedback`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(session),
-            });
-            if (!response.ok) throw new Error('Failed to save listening feedback session');
-            return await response.json();
-        } catch (error) {
-            console.error('API saveListeningFeedbackSession error:', error);
             throw error;
         }
     },

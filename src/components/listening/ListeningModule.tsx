@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { FocusedSegment, ListeningFeedbackSession, Marker, Subtitle, PlayerState, TagType, View } from '../../types';
+import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, View } from '../../types';
 import { GoalVideo, GoalVideoDetail, api } from '../../db';
-import { formatTime } from '../../utils';
 
 // Views
 import LoopView from './LoopView';
@@ -16,212 +15,6 @@ import VocabularyManager from './VocabularyManager';
 import SelfAssessment from './SelfAssessment';
 import MiniTest from './MiniTest';
 import ListeningCompose from './ListeningCompose';
-
-function formatDateTime(ts: number): string {
-  const date = new Date(ts);
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-}
-
-const TAG_LABELS: Record<TagType, string> = {
-  'too-fast': 'Too Fast',
-  unclear: 'Unclear',
-  accent: 'Accent',
-  grammar: 'Grammar',
-  vocabulary: 'Vocab',
-};
-
-const TAG_STYLES: Record<TagType, string> = {
-  'too-fast': 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800',
-  unclear: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-200 dark:border-orange-800',
-  accent: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-200 dark:border-purple-800',
-  grammar: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-800',
-  vocabulary: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-200 dark:border-green-800',
-};
-
-function getTagCounts(markers: Marker[]): Record<TagType, number> {
-  return markers.reduce((acc, marker) => {
-    marker.tags.forEach(tag => {
-      acc[tag] = (acc[tag] || 0) + 1;
-    });
-    return acc;
-  }, {} as Record<TagType, number>);
-}
-
-function getMisunderstoodWords(markers: Marker[]): string[] {
-  const words = new Set<string>();
-
-  markers.forEach(marker => {
-    if (!marker.subtitleText || !marker.misunderstoodIndices?.length) return;
-    const parts = marker.subtitleText.trim().split(/\s+/);
-    marker.misunderstoodIndices.forEach(idx => {
-      const word = parts[idx];
-      if (!word) return;
-      const cleaned = word.replace(/[^\w'-]/g, '');
-      if (cleaned) words.add(cleaned);
-    });
-  });
-
-  return Array.from(words);
-}
-
-function getHotSpots(markers: Marker[]): Marker[] {
-  return markers
-    .filter(m => (m.pressCount || 1) > 1)
-    .sort((a, b) => (b.pressCount || 1) - (a.pressCount || 1))
-    .slice(0, 3);
-}
-
-function FeedbackHistoryView() {
-  const [sessions, setSessions] = useState<ListeningFeedbackSession[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  React.useEffect(() => {
-    const loadSessions = async () => {
-      setLoading(true);
-      const data = await api.fetchListeningFeedbackSessions();
-      setSessions(data);
-      setLoading(false);
-    };
-
-    loadSessions();
-  }, []);
-
-  const totalMarkers = useMemo(
-    () => sessions.reduce((sum, s) => sum + (s.markers?.length || 0), 0),
-    [sessions]
-  );
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-gray-500">Loading feedback history...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950 p-6">
-      <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Feedback History</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Saved feedback sessions based on your Review Points
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-            <span>{sessions.length} sessions</span>
-            <span>{totalMarkers} markers</span>
-          </div>
-        </div>
-
-        {sessions.length === 0 ? (
-          <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl p-8 text-center text-gray-500">
-            No feedback sessions yet. Generate feedback from Review Points to build history.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {sessions.map(session => {
-              const isExpanded = expandedId === session.id;
-              const tagCounts = getTagCounts(session.markers || []);
-              const misunderstoodWords = getMisunderstoodWords(session.markers || []);
-              const hotSpots = getHotSpots(session.markers || []);
-              const sortedTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
-
-              return (
-                <div key={session.id} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : session.id)}
-                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <div className="text-left">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {session.videoTitle || session.videoId}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatDateTime(session.createdAt)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                      <span>{session.markers.length} markers</span>
-                      <span>{isExpanded ? 'Hide' : 'Show'}</span>
-                    </div>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="border-t border-gray-200 dark:border-gray-800 p-4 space-y-4">
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
-                          Tag distribution
-                        </div>
-                        {sortedTags.length === 0 ? (
-                          <div className="text-xs text-gray-500">No tags applied.</div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {sortedTags.map(([tag, count]) => (
-                              <span
-                                key={tag}
-                                className={`text-[11px] px-2 py-1 rounded-full border ${TAG_STYLES[tag as TagType]}`}
-                              >
-                                {TAG_LABELS[tag as TagType]}: {count}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">
-                          Repeated segments
-                        </div>
-                        {hotSpots.length === 0 ? (
-                          <div className="text-xs text-gray-500">No repeated segments yet.</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {hotSpots.map(marker => (
-                              <div key={marker.id} className="text-xs text-gray-600 dark:text-gray-300">
-                                {formatTime(marker.start)} - {formatTime(marker.end)} (x{marker.pressCount || 1})
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Misunderstood words</div>
-                        {misunderstoodWords.length === 0 ? (
-                          <div className="text-xs text-gray-500">No word-level marks yet.</div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {misunderstoodWords.slice(0, 12).map(word => (
-                              <span
-                                key={word}
-                                className="text-[11px] px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
-                              >
-                                {word}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {session.feedback?.summary && (
-                        <div className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                          {session.feedback.summary}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 interface ListeningModuleProps {
   view: View;
@@ -401,7 +194,6 @@ export default function ListeningModule({
           onChangePlaybackRate={changePlaybackRate}
           onSeek={(t) => player?.seekTo(t, true)}
           onFocusSegment={setFocusedSegment}
-          onShadowSegment={setFocusedSegment}
           onToggleSegmentWord={handleToggleWordForSegment}
           onToggleSegmentRange={handleToggleRangeForSegment}
         />
@@ -435,11 +227,6 @@ export default function ListeningModule({
             markersCount={markers.length}
           />
         </div>
-      )}
-
-      {/* Feedback History View */}
-      {view === 'feedback' && (
-        <FeedbackHistoryView />
       )}
 
       {/* Flashcards View */}

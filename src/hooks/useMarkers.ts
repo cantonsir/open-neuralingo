@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { YouTubePlayer } from 'react-youtube';
 import { FocusedSegment, Marker, Subtitle, TagType } from '../types';
 
@@ -11,6 +11,11 @@ interface UseMarkersOptions {
 export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
   const [markers, setMarkers] = useState<Marker[]>([]);
 
+  // Clear markers when videoId changes (new video loaded)
+  useEffect(() => {
+    setMarkers([]);
+  }, [videoId]);
+
   const findMarkerForSegment = (segment: FocusedSegment, list: Marker[]) => {
     if (segment.subtitleId) {
       const direct = list.find(m => m.id === segment.subtitleId);
@@ -20,7 +25,7 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
     return list.find(m => Math.abs(m.start - segment.start) < 0.1 && Math.abs(m.end - segment.end) < 0.1);
   };
 
-  const addMarker = useCallback(async () => {
+  const addMarker = useCallback(async (source: 'loop' | 'shadow' = 'loop') => {
     if (!player) return;
 
     const t = await player.getCurrentTime();
@@ -71,7 +76,8 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         end,
         createdAt: now,
         subtitleText,
-        tags: []
+        tags: source === 'shadow' ? ['shadow'] : [],
+        source,
       };
 
       return [...prevMarkers, newMarker];
@@ -112,7 +118,11 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
     }));
   };
 
-  const handleToggleWordForSegment = (segment: FocusedSegment | null, wordIndex: number) => {
+  const handleToggleWordForSegment = (
+    segment: FocusedSegment | null,
+    wordIndex: number,
+    source: 'loop' | 'shadow' = 'loop'
+  ) => {
     if (!segment || !segment.text.trim()) return;
 
     setMarkers(prev => {
@@ -138,8 +148,9 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         end: segment.end,
         createdAt: Date.now(),
         subtitleText: segment.text,
-        tags: [],
+        tags: source === 'shadow' ? ['shadow'] : [],
         misunderstoodIndices: [wordIndex],
+        source,
       };
 
       return [...prev, newMarker];
@@ -169,7 +180,12 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
     }));
   };
 
-  const handleToggleRangeForSegment = (segment: FocusedSegment | null, start: number, end: number) => {
+  const handleToggleRangeForSegment = (
+    segment: FocusedSegment | null,
+    start: number,
+    end: number,
+    source: 'loop' | 'shadow' = 'loop'
+  ) => {
     if (!segment || !segment.text.trim()) return;
 
     setMarkers(prev => {
@@ -206,8 +222,9 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         end: segment.end,
         createdAt: Date.now(),
         subtitleText: segment.text,
-        tags: [],
+        tags: source === 'shadow' ? ['shadow'] : [],
         misunderstoodIndices: range,
+        source,
       };
 
       return [...prev, newMarker];

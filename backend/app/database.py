@@ -331,6 +331,15 @@ def migrate_db():
         conn.commit()
         print("Migration complete.")
     
+    # Migration: Add source column if it doesn't exist in flashcards
+    try:
+        c.execute("SELECT source FROM flashcards LIMIT 1")
+    except sqlite3.OperationalError:
+        print("Migrating: Adding 'source' column to flashcards table...")
+        c.execute("ALTER TABLE flashcards ADD COLUMN source TEXT DEFAULT 'loop'")
+        conn.commit()
+        print("Migration complete.")
+    
     conn.close()
 
 
