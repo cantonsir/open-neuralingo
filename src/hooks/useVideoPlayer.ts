@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { Marker, PlayerState, Subtitle, View } from '../types';
+import { FocusedSegment, Marker, PlayerState, Subtitle, View } from '../types';
 import { api } from '../db';
 import { parseSubtitles } from '../utils';
 
@@ -20,6 +20,7 @@ export function useVideoPlayer({
   setSubtitles,
 }: UseVideoPlayerOptions) {
   const [videoId, setVideoId] = useState<string>('');
+  const [videoTitle, setVideoTitle] = useState<string>('');
   const [inputUrl, setInputUrl] = useState<string>('');
   const [isSetupMode, setIsSetupMode] = useState<boolean>(true);
   const [isFetchingSubs, setIsFetchingSubs] = useState(false);
@@ -38,8 +39,13 @@ export function useVideoPlayer({
   const [currentLoop, setCurrentLoop] = useState<Marker | null>(null);
   const [tempSegment, setTempSegment] = useState<{ start: number; end: number } | null>(null);
   const [pendingSegment, setPendingSegment] = useState<{ start: number; end: number } | null>(null);
+  const [focusedSegment, setFocusedSegment] = useState<FocusedSegment | null>(null);
 
   const loopIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setFocusedSegment(null);
+  }, [videoId]);
 
   // --- Loop Engine ---
   useEffect(() => {
@@ -179,6 +185,21 @@ export function useVideoPlayer({
     }
   };
 
+  useEffect(() => {
+    if (!player || !pendingSegment) return;
+
+    const { start, end } = pendingSegment;
+    setPendingSegment(null);
+    try {
+      setCurrentLoop(null);
+      setTempSegment({ start, end });
+      player.seekTo(start, true);
+      player.playVideo();
+    } catch (err) {
+      console.warn('Failed to play pending segment:', err);
+    }
+  }, [player, pendingSegment]);
+
   const getCurrentSubtitle = (): Subtitle | null => {
     return subtitles.find(
       s => state.currentTime >= s.start && state.currentTime <= s.end
@@ -206,20 +227,22 @@ export function useVideoPlayer({
       setVideoId(id);
       setIsSetupMode(false);
 
-      let videoTitle = `YouTube Video (${id})`;
+      let resolvedTitle = `YouTube Video (${id})`;
       try {
         const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
         if (oembedRes.ok) {
           const oembedData = await oembedRes.json();
-          videoTitle = oembedData.title || videoTitle;
+          resolvedTitle = oembedData.title || resolvedTitle;
         }
       } catch (e) {
         // Silently fail
       }
 
+      setVideoTitle(resolvedTitle);
+
       api.saveToHistory({
         videoId: id,
-        title: videoTitle,
+        title: resolvedTitle,
         thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
         watchedAt: Date.now(),
         wordsLearned: 0
@@ -241,11 +264,13 @@ export function useVideoPlayer({
     if (subText.trim()) {
       setSubtitles(parseSubtitles(subText));
     }
+    setVideoTitle(`YouTube Video (${id})`);
     setIsSetupMode(false);
   };
 
   return {
     videoId,
+    videoTitle,
     setVideoId,
     inputUrl,
     setInputUrl,
@@ -266,6 +291,8 @@ export function useVideoPlayer({
     setTempSegment,
     pendingSegment,
     setPendingSegment,
+    focusedSegment,
+    setFocusedSegment,
     handlePlayLoop,
     handleStopLoop,
     changePlaybackRate,

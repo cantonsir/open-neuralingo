@@ -5,11 +5,18 @@ export interface Subtitle {
   text: string;
 }
 
+export interface FocusedSegment {
+  start: number;
+  end: number;
+  text: string;
+  subtitleId?: string;
+}
+
 export type Module = 'listening' | 'reading' | 'speaking' | 'writing';
 
 export type Theme = 'dark' | 'light';
 
-export type View = 'home' | 'loop' | 'shadowing' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose';
+export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose' | 'feedback';
 
 export type TagType = 'too-fast' | 'unclear' | 'accent' | 'grammar' | 'vocabulary';
 
@@ -100,6 +107,16 @@ export interface ListeningSession {
   audioUrl: string;
   transcript: Array<{ speaker: string; text: string }>;
   durationSeconds: number;
+  contextId?: string;
+  createdAt: number;
+}
+
+export interface ListeningFeedbackSession {
+  id: string;
+  videoId: string;
+  videoTitle: string;
+  markers: Marker[];
+  feedback?: any;
   contextId?: string;
   createdAt: number;
 }

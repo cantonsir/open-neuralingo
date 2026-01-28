@@ -1,19 +1,19 @@
 import React from 'react';
 
-import { MousePointer2 } from 'lucide-react';
-
 interface VocabularyBreakdownProps {
     text: string;
     markedIndices: number[];
     onToggleWord: (index: number) => void;
     onToggleRange?: (start: number, end: number) => void;
+    compact?: boolean;
 }
 
 const VocabularyBreakdown: React.FC<VocabularyBreakdownProps> = ({
     text,
     markedIndices,
     onToggleWord,
-    onToggleRange
+    onToggleRange,
+    compact = false,
 }) => {
     // Split by space and filter empty strings to avoid blank blocks
     const words = text.trim().split(/\s+/).filter(w => w.length > 0);
@@ -34,14 +34,16 @@ const VocabularyBreakdown: React.FC<VocabularyBreakdownProps> = ({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                    Interactive Transcript
+            {!compact && (
+                <div className="flex items-center justify-between mb-2">
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                        Interactive Transcript
+                    </div>
+                    <div className="text-[10px] text-gray-400 dark:text-gray-500 italic flex items-center gap-1">
+                        <span className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1 rounded text-[9px] font-mono">Shift</span> + Click to select phrase
+                    </div>
                 </div>
-                <div className="text-[10px] text-gray-400 dark:text-gray-500 italic flex items-center gap-1">
-                    <span className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-1 rounded text-[9px] font-mono">Shift</span> + Click to select phrase
-                </div>
-            </div>
+            )}
 
             <div className="flex flex-wrap gap-2">
                 {words.map((word, index) => {
@@ -69,9 +71,11 @@ const VocabularyBreakdown: React.FC<VocabularyBreakdownProps> = ({
                     );
                 })}
             </div>
-            <div className="text-[10px] text-gray-400 dark:text-gray-600 italic mt-1">
-                Click words you misunderstood.
-            </div>
+            {!compact && (
+                <div className="text-[10px] text-gray-400 dark:text-gray-600 italic mt-1">
+                    Click words you misunderstood.
+                </div>
+            )}
         </div>
     );
 };

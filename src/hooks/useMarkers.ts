@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { Marker, Subtitle, TagType } from '../types';
+import { FocusedSegment, Marker, Subtitle, TagType } from '../types';
 
 interface UseMarkersOptions {
   player: YouTubePlayer | null;
@@ -10,6 +10,15 @@ interface UseMarkersOptions {
 
 export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
   const [markers, setMarkers] = useState<Marker[]>([]);
+
+  const findMarkerForSegment = (segment: FocusedSegment, list: Marker[]) => {
+    if (segment.subtitleId) {
+      const direct = list.find(m => m.id === segment.subtitleId);
+      if (direct) return direct;
+    }
+
+    return list.find(m => Math.abs(m.start - segment.start) < 0.1 && Math.abs(m.end - segment.end) < 0.1);
+  };
 
   const addMarker = useCallback(async () => {
     if (!player) return;
@@ -103,6 +112,40 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
     }));
   };
 
+  const handleToggleWordForSegment = (segment: FocusedSegment | null, wordIndex: number) => {
+    if (!segment || !segment.text.trim()) return;
+
+    setMarkers(prev => {
+      const existing = findMarkerForSegment(segment, prev);
+      if (existing) {
+        return prev.map(m => {
+          if (m.id !== existing.id) return m;
+          const indices = new Set(m.misunderstoodIndices || []);
+          if (indices.has(wordIndex)) indices.delete(wordIndex);
+          else indices.add(wordIndex);
+          return {
+            ...m,
+            subtitleText: m.subtitleText || segment.text,
+            misunderstoodIndices: Array.from(indices),
+          };
+        });
+      }
+
+      const newMarker: Marker = {
+        id: Math.random().toString(36).substr(2, 9),
+        videoId: videoId,
+        start: segment.start,
+        end: segment.end,
+        createdAt: Date.now(),
+        subtitleText: segment.text,
+        tags: [],
+        misunderstoodIndices: [wordIndex],
+      };
+
+      return [...prev, newMarker];
+    });
+  };
+
   const handleToggleRange = (id: string, start: number, end: number) => {
     setMarkers(prev => prev.map(m => {
       if (m.id === id) {
@@ -124,6 +167,51 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
       }
       return m;
     }));
+  };
+
+  const handleToggleRangeForSegment = (segment: FocusedSegment | null, start: number, end: number) => {
+    if (!segment || !segment.text.trim()) return;
+
+    setMarkers(prev => {
+      const range = [];
+      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+        range.push(i);
+      }
+
+      const existing = findMarkerForSegment(segment, prev);
+      if (existing) {
+        return prev.map(m => {
+          if (m.id !== existing.id) return m;
+          const currentIndices = new Set(m.misunderstoodIndices || []);
+          const allSelected = range.every(idx => currentIndices.has(idx));
+
+          if (allSelected) {
+            range.forEach(idx => currentIndices.delete(idx));
+          } else {
+            range.forEach(idx => currentIndices.add(idx));
+          }
+
+          return {
+            ...m,
+            subtitleText: m.subtitleText || segment.text,
+            misunderstoodIndices: Array.from(currentIndices),
+          };
+        });
+      }
+
+      const newMarker: Marker = {
+        id: Math.random().toString(36).substr(2, 9),
+        videoId: videoId,
+        start: segment.start,
+        end: segment.end,
+        createdAt: Date.now(),
+        subtitleText: segment.text,
+        tags: [],
+        misunderstoodIndices: range,
+      };
+
+      return [...prev, newMarker];
+    });
   };
 
   const handleRemoveWord = (wordToRemove: string) => {
@@ -169,7 +257,9 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
     handleAddTag,
     handleRemoveTag,
     handleToggleWord,
+    handleToggleWordForSegment,
     handleToggleRange,
+    handleToggleRangeForSegment,
     handleRemoveWord,
     handleUpdateVocabData,
   };

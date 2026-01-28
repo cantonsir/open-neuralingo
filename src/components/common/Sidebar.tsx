@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2 } from 'lucide-react';
+import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, MessageSquare } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
 
 
@@ -255,14 +255,6 @@ export default function Sidebar({
                             activeColorTheme="orange"
                         />
                         <NavItem
-                            icon={<Mic size={20} />}
-                            label="Shadowing"
-                            isActive={view === 'shadowing'}
-                            collapsed={collapsed}
-                            onClick={() => setView('shadowing')}
-                            activeColorTheme="orange"
-                        />
-                        <NavItem
                             icon={<Volume2 size={20} />}
                             label="Audio Generator"
                             isActive={view === 'compose'}
@@ -311,6 +303,14 @@ export default function Sidebar({
                             badge={savedCardsCount}
                             collapsed={collapsed}
                             onClick={() => setView('flashcards')}
+                            activeColorTheme="orange"
+                        />
+                        <NavItem
+                            icon={<MessageSquare size={20} />}
+                            label="Feedback"
+                            isActive={view === 'feedback'}
+                            collapsed={collapsed}
+                            onClick={() => setView('feedback')}
                             activeColorTheme="orange"
                         />
                     </>

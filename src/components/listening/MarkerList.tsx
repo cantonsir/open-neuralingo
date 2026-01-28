@@ -1,6 +1,6 @@
 import React from 'react';
-import { Marker, TagType } from '../../types';
-import { Play, Repeat, Trash2, Tag as TagIcon, MoreHorizontal } from 'lucide-react';
+import { FocusedSegment, Marker, TagType } from '../../types';
+import { Play, Repeat, Trash2, Tag as TagIcon, Mic } from 'lucide-react';
 import { formatTime } from '../../utils';
 import VocabularyBreakdown from './VocabularyBreakdown';
 
@@ -15,6 +15,8 @@ interface MarkerListProps {
   onToggleWord: (id: string, index: number) => void;
   onToggleRange: (id: string, start: number, end: number) => void;
   onPlayOnce: (start: number, end: number) => void;
+  onFocusSegment: (segment: FocusedSegment | null) => void;
+  onShadowSegment: (segment: FocusedSegment) => void;
 }
 
 const TAG_CONFIG: Record<TagType, { label: string; color: string }> = {
@@ -35,7 +37,9 @@ const MarkerList: React.FC<MarkerListProps> = ({
   onRemoveTag,
   onToggleWord,
   onToggleRange,
-  onPlayOnce
+  onPlayOnce,
+  onFocusSegment,
+  onShadowSegment,
 }) => {
   const [revealedIds, setRevealedIds] = React.useState<Set<string>>(new Set());
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -61,6 +65,16 @@ const MarkerList: React.FC<MarkerListProps> = ({
     setRevealedIds(newRevealed);
   };
 
+  const buildFocusedSegment = (marker: Marker): FocusedSegment | null => {
+    if (!marker.subtitleText || !marker.subtitleText.trim()) return null;
+    return {
+      start: marker.start,
+      end: marker.end,
+      text: marker.subtitleText,
+      subtitleId: marker.id,
+    };
+  };
+
   if (markers.length === 0) {
     // ... same empty check ...
     return (
@@ -84,6 +98,8 @@ const MarkerList: React.FC<MarkerListProps> = ({
         const isLooping = currentLoopId === marker.id;
         const isRevealed = revealedIds.has(marker.id);
         const hasSubtitle = !!marker.subtitleText;
+        const focusSegment = buildFocusedSegment(marker);
+        const canShadow = !!focusSegment;
 
         return (
           <div
@@ -203,7 +219,10 @@ const MarkerList: React.FC<MarkerListProps> = ({
             <div className="flex gap-2">
               {/* Main Action: Play Once */}
               <button
-                onClick={() => onPlayOnce(marker.start, marker.end)}
+                onClick={() => {
+                  onFocusSegment(focusSegment);
+                  onPlayOnce(marker.start, marker.end);
+                }}
                 className="flex-1 py-2 flex items-center justify-center gap-2 rounded-lg font-medium text-sm transition-all bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 shadow-sm"
               >
                 <Play size={14} fill="currentColor" /> Replay
@@ -211,7 +230,11 @@ const MarkerList: React.FC<MarkerListProps> = ({
 
               {/* Secondary Action: Loop */}
               <button
-                onClick={() => isLooping ? onStopLoop() : onPlayLoop(marker)}
+                onClick={() => {
+                  onFocusSegment(focusSegment);
+                  if (isLooping) onStopLoop();
+                  else onPlayLoop(marker);
+                }}
                 className={`
                   px-3 flex items-center justify-center rounded-lg transition-all border shadow-sm
                   ${isLooping
@@ -221,6 +244,24 @@ const MarkerList: React.FC<MarkerListProps> = ({
                 title={isLooping ? "Stop Looping" : "Loop Segment"}
               >
                 <Repeat size={16} className={isLooping ? "animate-spin-slow" : ""} />
+              </button>
+
+              {/* Shadow Action */}
+              <button
+                onClick={() => {
+                  if (!focusSegment) return;
+                  onShadowSegment(focusSegment);
+                }}
+                disabled={!canShadow}
+                className={`
+                  px-3 flex items-center justify-center rounded-lg transition-all border shadow-sm
+                  ${canShadow
+                    ? 'bg-white dark:bg-gray-800 text-gray-400 hover:text-orange-500 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    : 'bg-gray-100 dark:bg-gray-900 text-gray-300 border-gray-200 dark:border-gray-800 cursor-not-allowed'}
+                `}
+                title="Shadow this line"
+              >
+                <Mic size={16} />
               </button>
             </div>
           </div>

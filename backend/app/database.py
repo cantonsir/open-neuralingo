@@ -285,6 +285,19 @@ def init_db():
             created_at INTEGER
         )
     ''')
+
+    # Listening feedback sessions
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS listening_feedback_sessions (
+            id TEXT PRIMARY KEY,
+            video_id TEXT,
+            video_title TEXT,
+            marker_snapshot_json TEXT,
+            feedback_json TEXT,
+            context_id TEXT,
+            created_at INTEGER
+        )
+    ''')
     
     # Reading table
     c.execute('''

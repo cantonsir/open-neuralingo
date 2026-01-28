@@ -214,6 +214,7 @@ function App() {
             targetLanguage={targetLanguage}
             // Video player
             videoId={videoPlayer.videoId}
+            videoTitle={videoPlayer.videoTitle}
             inputUrl={videoPlayer.inputUrl}
             setInputUrl={videoPlayer.setInputUrl}
             isFetchingSubs={videoPlayer.isFetchingSubs}
@@ -227,6 +228,8 @@ function App() {
             setSubtitlesVisible={videoPlayer.setSubtitlesVisible}
             isPeekingSubs={videoPlayer.isPeekingSubs}
             getCurrentSubtitle={videoPlayer.getCurrentSubtitle}
+            focusedSegment={videoPlayer.focusedSegment}
+            setFocusedSegment={videoPlayer.setFocusedSegment}
             // Markers
             markers={markersHook.markers}
             currentLoopId={videoPlayer.currentLoop?.id || null}
@@ -239,6 +242,8 @@ function App() {
             handleToggleRange={markersHook.handleToggleRange}
             handleRemoveWord={markersHook.handleRemoveWord}
             handleUpdateVocabData={markersHook.handleUpdateVocabData}
+            handleToggleWordForSegment={markersHook.handleToggleWordForSegment}
+            handleToggleRangeForSegment={markersHook.handleToggleRangeForSegment}
             // Controls
             handlePrevSubtitle={videoPlayer.handlePrevSubtitle}
             handleNextSubtitle={videoPlayer.handleNextSubtitle}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { YouTubePlayer } from 'react-youtube';
 import { Play, Mic, Square, RefreshCw, ChevronLeft, ChevronRight, Volume2, Sparkles } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
-import { Subtitle, PlayerState } from '../../types';
+import { FocusedSegment, Subtitle, PlayerState } from '../../types';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { analyzeShadowing, ShadowingResult } from '../../services/geminiService';
 
@@ -13,6 +13,8 @@ interface ShadowingViewProps {
   state: PlayerState;
   onStateChange: (state: Partial<PlayerState>) => void;
   currentSubtitle: Subtitle | null;
+  focusedSegment: FocusedSegment | null;
+  setFocusedSegment: (segment: FocusedSegment | null) => void;
   subtitles: Subtitle[];
   onPrevSubtitle: () => void;
   onNextSubtitle: () => void;
@@ -26,6 +28,8 @@ export default function ShadowingView({
   state,
   onStateChange,
   currentSubtitle,
+  focusedSegment,
+  setFocusedSegment,
   subtitles,
   onPrevSubtitle,
   onNextSubtitle,
@@ -45,9 +49,15 @@ export default function ShadowingView({
   const [analysis, setAnalysis] = useState<ShadowingResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  const activeSegment = focusedSegment && focusedSegment.text.trim()
+    ? focusedSegment
+    : (currentSubtitle
+      ? { start: currentSubtitle.start, end: currentSubtitle.end, text: currentSubtitle.text, subtitleId: currentSubtitle.id }
+      : null);
+
   const handlePlayNative = () => {
-    if (currentSubtitle) {
-      onPlaySegment(currentSubtitle.start, currentSubtitle.end);
+    if (activeSegment) {
+      onPlaySegment(activeSegment.start, activeSegment.end);
     } else if (player) {
       player.playVideo();
     }
@@ -60,13 +70,13 @@ export default function ShadowingView({
   };
 
   const handleAnalyze = async () => {
-    if (!recordingBlob || !currentSubtitle) return;
+    if (!recordingBlob || !activeSegment) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
 
     try {
       const result = await analyzeShadowing({
-        text: currentSubtitle.text,
+        text: activeSegment.text,
         learnerAudio: recordingBlob,
       });
       setAnalysis(result);
@@ -119,13 +129,19 @@ export default function ShadowingView({
 
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <button
-                  onClick={onPrevSubtitle}
+                  onClick={() => {
+                    setFocusedSegment(null);
+                    onPrevSubtitle();
+                  }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <ChevronLeft size={14} /> Prev
                 </button>
                 <button
-                  onClick={onNextSubtitle}
+                  onClick={() => {
+                    setFocusedSegment(null);
+                    onNextSubtitle();
+                  }}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   Next <ChevronRight size={14} />
@@ -135,13 +151,13 @@ export default function ShadowingView({
 
             <div className="min-h-[64px] flex items-center">
               <p className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white text-center w-full">
-                {currentSubtitle ? currentSubtitle.text : 'No subtitle selected.'}
+                {activeSegment ? activeSegment.text : 'No subtitle selected.'}
               </p>
             </div>
 
-            {currentSubtitle && (
+            {activeSegment && (
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                {currentSubtitle.start.toFixed(2)}s – {currentSubtitle.end.toFixed(2)}s
+                {activeSegment.start.toFixed(2)}s – {activeSegment.end.toFixed(2)}s
               </p>
             )}
           </div>
@@ -172,11 +188,10 @@ export default function ShadowingView({
               <button
                 onClick={isRecording ? undefined : handleRecord}
                 disabled={isRecording}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  isRecording
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-colors ${isRecording
                     ? 'bg-red-400/40 text-red-100 cursor-not-allowed'
                     : 'bg-red-500 text-white hover:bg-red-600'
-                }`}
+                  }`}
               >
                 <Mic size={16} />
                 {isRecording ? 'Recording...' : 'Record Shadow'}
@@ -209,7 +224,7 @@ export default function ShadowingView({
           <div className="mt-4 flex-1 flex flex-col">
             <button
               onClick={handleAnalyze}
-              disabled={!recordingBlob || !currentSubtitle || isAnalyzing}
+              disabled={!recordingBlob || !activeSegment || isAnalyzing}
               className="w-full mb-3 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed hover:from-yellow-400 hover:to-orange-400 transition-colors"
             >
               <Sparkles size={16} />
