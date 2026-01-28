@@ -7,11 +7,11 @@ import { GoalVideo, GoalVideoDetail, api } from '../../db';
 import LoopView from './LoopView';
 import DashboardView from './DashboardView';
 import HistoryView from './HistoryView';
-import FlashcardPractice from './FlashcardPractice';
+import FlashcardPractice from '../common/FlashcardPractice';
 import LearningHome from './LearningHome';
 import CourseDashboard from './CourseDashboard';
 import LearningSession from './LearningSession';
-import VocabularyManager from './VocabularyManager';
+import VocabularyManager from '../common/VocabularyManager';
 import SelfAssessment from './SelfAssessment';
 import MiniTest from './MiniTest';
 import ListeningCompose from './ListeningCompose';
@@ -233,6 +233,7 @@ export default function ListeningModule({
       {view === 'flashcards' && (
         <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
           <FlashcardPractice
+            module="listening"
             savedCards={savedCards}
             onExit={() => setView('home')}
             onPlayAudio={handlePlaySegment}
@@ -317,6 +318,7 @@ export default function ListeningModule({
       {view === 'vocab' && (
         <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
           <VocabularyManager
+            module="listening"
             markers={markers}
             savedCards={savedCards}
             onRemoveWord={handleRemoveWord}

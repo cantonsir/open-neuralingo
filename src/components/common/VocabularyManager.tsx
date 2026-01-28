@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Marker } from '../../types';
+import { FlashcardModule } from '../../db';
 import { BookOpen, Activity, Play, Trash2, Save, Flag, Volume2, Sparkles, CheckCircle2, Circle, Eye } from 'lucide-react';
 import { formatTime } from '../../utils';
 import { generateDefinition } from '../../ai';
-import Toast from '../common/Toast';
-import Modal from '../common/Modal';
+import Toast from './Toast';
+import Modal from './Modal';
 import FlashcardPractice from './FlashcardPractice';
 
 interface VocabularyManagerProps {
+    module: FlashcardModule;
     markers: Marker[];
     savedCards?: Marker[]; // New prop for DB cards
     onRemoveWord: (word: string) => void;
@@ -20,6 +22,7 @@ interface VocabularyManagerProps {
 }
 
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({
+    module,
     markers,
     savedCards = [],
     onRemoveWord,
@@ -41,6 +44,19 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     // UI State
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error', actionLabel?: string, onAction?: () => void } | null>(null);
     const [showDiscardModal, setShowDiscardModal] = useState(false);
+
+    // Module specific colors
+    const getModuleColor = () => {
+        switch (module) {
+            case 'listening': return 'yellow';
+            case 'speaking': return 'green';
+            case 'reading': return 'blue';
+            case 'writing': return 'purple';
+            default: return 'yellow';
+        }
+    };
+    const moduleColor = getModuleColor();
+
 
     // HELPER: Toggle Check
     const toggleCheck = (id: string, e: React.MouseEvent) => {
@@ -108,10 +124,20 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
     // Select first marker by default if none selected
     if (!selectedMarkerId && activeMarkers.length > 0) {
-        setSelectedMarkerId(activeMarkers[0].id);
+        // Only auto-select if we haven't selected one yet OR the current selection is no longer valid
+        // But for simplicity, let's just default to first if null.
+        // We'll handle "current selection invalid" in the render or useEffect if needed, 
+        // but finding it every render is safer.
+    }
+    
+    // Derived state for the currently selected marker object
+    const selectedMarker = activeMarkers.find(m => m.id === selectedMarkerId) || (activeMarkers.length > 0 ? activeMarkers[0] : undefined);
+    
+    // Effect to sync ID if we defaulted
+    if (!selectedMarkerId && selectedMarker) {
+         setSelectedMarkerId(selectedMarker.id);
     }
 
-    const selectedMarker = activeMarkers.find(m => m.id === selectedMarkerId) || activeMarkers[0];
 
     const renderSidebarItem = (marker: Marker) => {
         const isSelected = selectedMarkerId === marker.id;
@@ -140,19 +166,19 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         const pressCount = marker.pressCount || 1;
 
         let dotColor = "text-gray-500";
-        if (pressCount > 3) dotColor = "text-yellow-500";
+        if (pressCount > 3) dotColor = `text-${moduleColor}-500`;
         if (pressCount > 6) dotColor = "text-red-500";
 
         const badgeColorClass = hasPhrase
             ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-300 border-green-200 dark:border-green-900/50"
-            : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300 border-red-200 dark:border-red-900/50";
+            : `bg-${moduleColor}-100 dark:bg-${moduleColor}-900/30 text-${moduleColor}-600 dark:text-${moduleColor}-300 border-${moduleColor}-200 dark:border-${moduleColor}-900/50`;
 
         return (
             <div
                 key={marker.id}
                 onClick={() => setSelectedMarkerId(marker.id)}
                 className={`p-4 cursor-pointer border-l-4 transition-all group relative ${isSelected
-                    ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-500'
+                    ? `bg-${moduleColor}-50 dark:bg-${moduleColor}-900/10 border-${moduleColor}-500`
                     : 'border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
             >
@@ -230,13 +256,16 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
         const isBulkMode = checkedIds.size > 1;
 
+        // If we are in bulk mode, selectedMarker might be undefined if we unchecked the last one or something, 
+        // but usually we just show the bulk UI.
+
         return (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 dark:bg-gray-950 transition-colors relative">
                 {/* Header (Hidden in Bulk Mode) */}
                 {!isBulkMode && selectedMarker && (
                     <div className="h-16 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-8 shrink-0 transition-colors">
                         <div className="flex items-center gap-3">
-                            <BookOpen className="text-yellow-500" size={20} />
+                            <BookOpen className={`text-${moduleColor}-500`} size={20} />
                             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Sentence Workbench</h2>
                             <span className="bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded text-xs font-mono">ID: {selectedMarker.id}</span>
                         </div>
@@ -265,179 +294,181 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                         </p>
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                        {/* Sentence Display */}
-                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 mb-8 shadow-sm transition-colors">
-                            <div className="flex flex-wrap gap-2 text-2xl leading-relaxed text-gray-800 dark:text-gray-300 font-medium justify-center text-center">
-                                {selectedMarker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0).map((word, i) => {
-                                    const markedIndices = selectedMarker.misunderstoodIndices || [];
-                                    const isMarked = markedIndices.includes(i);
-                                    const isPhrasePart = isMarked && (markedIndices.includes(i - 1) || markedIndices.includes(i + 1));
+                    selectedMarker && (
+                        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            {/* Sentence Display */}
+                            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-8 mb-8 shadow-sm transition-colors">
+                                <div className="flex flex-wrap gap-2 text-2xl leading-relaxed text-gray-800 dark:text-gray-300 font-medium justify-center text-center">
+                                    {selectedMarker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0).map((word, i) => {
+                                        const markedIndices = selectedMarker.misunderstoodIndices || [];
+                                        const isMarked = markedIndices.includes(i);
+                                        const isPhrasePart = isMarked && (markedIndices.includes(i - 1) || markedIndices.includes(i + 1));
 
-                                    return (
-                                        <span
-                                            key={i}
-                                            className={`
-                                            px-2 py-0.5 rounded transition-all cursor-default relative group
-                                            ${isMarked
-                                                    ? (isPhrasePart
-                                                        ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-100 border border-green-200 dark:border-green-500/30'
-                                                        : 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-100 border border-red-200 dark:border-red-500/30')
-                                                    : 'hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
-                                                }
-                                        `}
-                                        >
-                                            {word}
-                                            {isMarked && (
-                                                <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPhrasePart ? 'bg-green-400' : 'bg-red-400'}`}></span>
-                                                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isPhrasePart ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                </span>
-                                            )}
-                                        </span>
-                                    );
-                                })}
-                            </div>
-                            <div className="mt-6 text-center">
-                                <p className="text-xs text-gray-500 dark:text-gray-600 font-mono flex justify-center items-center gap-2">
-                                    <Activity size={12} />
-                                    ATTEMPTED {selectedMarker.pressCount || 1} TIMES
-                                    <span className="mx-2 text-gray-400 dark:text-gray-700">|</span>
-                                    CLICK PLAY TO LISTEN
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Cards Area */}
-                        <div className="space-y-6">
-                            {(() => {
-                                // Helper to group consecutive indices
-                                const words = selectedMarker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
-                                const markedIndices = selectedMarker.misunderstoodIndices || [];
-                                const groupedItems: { indices: number[], text: string, mainIndex: number }[] = [];
-                                if (markedIndices.length > 0) {
-                                    const sortedIndices = [...markedIndices].sort((a, b) => a - b);
-                                    let currentGroup: number[] = [sortedIndices[0]];
-
-                                    for (let i = 1; i < sortedIndices.length; i++) {
-                                        if (sortedIndices[i] === sortedIndices[i - 1] + 1) {
-                                            currentGroup.push(sortedIndices[i]);
-                                        } else {
-                                            groupedItems.push({
-                                                indices: currentGroup,
-                                                text: currentGroup.map(idx => words[idx] || '').join(' '),
-                                                mainIndex: currentGroup[0]
-                                            });
-                                            currentGroup = [sortedIndices[i]];
-                                        }
-                                    }
-                                    groupedItems.push({
-                                        indices: currentGroup,
-                                        text: currentGroup.map(idx => words[idx] || '').join(' '),
-                                        mainIndex: currentGroup[0]
-                                    });
-                                }
-
-                                return groupedItems.map(item => {
-                                    const { text, mainIndex } = item;
-                                    const data = selectedMarker.vocabData?.[mainIndex] || { definition: '', notes: '' };
-                                    const isPhrase = item.indices.length > 1;
-
-                                    return (
-                                        <div key={`${selectedMarker.id}-${mainIndex}`} className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden group hover:border-gray-300 dark:hover:border-gray-700 transition-all shadow-sm">
-                                            {/* Card Header */}
-                                            <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`h-2 w-2 rounded-full ${isPhrase ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`} />
-                                                    <span className={`font-bold text-lg ${isPhrase ? 'text-gray-900 dark:text-green-100' : 'text-gray-900 dark:text-red-100'}`}>{text}</span>
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${isPhrase ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300'}`}>
-                                                        {isPhrase ? 'PHRASE' : 'WORD'}
+                                        return (
+                                            <span
+                                                key={i}
+                                                className={`
+                                                px-2 py-0.5 rounded transition-all cursor-default relative group
+                                                ${isMarked
+                                                        ? (isPhrasePart
+                                                            ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-100 border border-green-200 dark:border-green-500/30'
+                                                            : `bg-${moduleColor}-100 dark:bg-${moduleColor}-500/20 text-${moduleColor}-700 dark:text-${moduleColor}-100 border border-${moduleColor}-200 dark:border-${moduleColor}-500/30`)
+                                                        : 'hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+                                                    }
+                                            `}
+                                            >
+                                                {word}
+                                                {isMarked && (
+                                                    <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isPhrasePart ? 'bg-green-400' : `bg-${moduleColor}-400`}`}></span>
+                                                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isPhrasePart ? 'bg-green-500' : `bg-${moduleColor}-500`}`}></span>
                                                     </span>
-                                                </div>
-                                            </div>
+                                                )}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-6 text-center">
+                                    <p className="text-xs text-gray-500 dark:text-gray-600 font-mono flex justify-center items-center gap-2">
+                                        <Activity size={12} />
+                                        ATTEMPTED {selectedMarker.pressCount || 1} TIMES
+                                        <span className="mx-2 text-gray-400 dark:text-gray-700">|</span>
+                                        CLICK PLAY TO LISTEN
+                                    </p>
+                                </div>
+                            </div>
 
-                                            {/* Card Body */}
-                                            <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                                {/* Audio Playback Control */}
-                                                <div className="col-span-1 lg:col-span-2 bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-900/30 flex items-center justify-between">
+                            {/* Cards Area */}
+                            <div className="space-y-6">
+                                {(() => {
+                                    // Helper to group consecutive indices
+                                    const words = selectedMarker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
+                                    const markedIndices = selectedMarker.misunderstoodIndices || [];
+                                    const groupedItems: { indices: number[], text: string, mainIndex: number }[] = [];
+                                    if (markedIndices.length > 0) {
+                                        const sortedIndices = [...markedIndices].sort((a, b) => a - b);
+                                        let currentGroup: number[] = [sortedIndices[0]];
+
+                                        for (let i = 1; i < sortedIndices.length; i++) {
+                                            if (sortedIndices[i] === sortedIndices[i - 1] + 1) {
+                                                currentGroup.push(sortedIndices[i]);
+                                            } else {
+                                                groupedItems.push({
+                                                    indices: currentGroup,
+                                                    text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                                    mainIndex: currentGroup[0]
+                                                });
+                                                currentGroup = [sortedIndices[i]];
+                                            }
+                                        }
+                                        groupedItems.push({
+                                            indices: currentGroup,
+                                            text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                            mainIndex: currentGroup[0]
+                                        });
+                                    }
+
+                                    return groupedItems.map(item => {
+                                        const { text, mainIndex } = item;
+                                        const data = selectedMarker.vocabData?.[mainIndex] || { definition: '', notes: '' };
+                                        const isPhrase = item.indices.length > 1;
+
+                                        return (
+                                            <div key={`${selectedMarker.id}-${mainIndex}`} className="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden group hover:border-gray-300 dark:hover:border-gray-700 transition-all shadow-sm">
+                                                {/* Card Header */}
+                                                <div className="bg-gray-50 dark:bg-gray-900 px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center transition-colors">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center text-yellow-600 dark:text-yellow-500">
-                                                            <Volume2 size={20} />
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-[10px] font-bold text-yellow-600 dark:text-yellow-500 uppercase tracking-wider">Front (Question)</span>
-                                                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</p>
-                                                        </div>
+                                                        <div className={`h-2 w-2 rounded-full ${isPhrase ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : `bg-${moduleColor}-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]`}`} />
+                                                        <span className={`font-bold text-lg ${isPhrase ? 'text-gray-900 dark:text-green-100' : `text-gray-900 dark:text-${moduleColor}-100`}`}>{text}</span>
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isPhrase ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-300' : `bg-${moduleColor}-100 dark:bg-${moduleColor}-900/40 text-${moduleColor}-600 dark:text-${moduleColor}-300`}`}>
+                                                            {isPhrase ? 'PHRASE' : 'WORD'}
+                                                        </span>
                                                     </div>
-                                                    <button
-                                                        onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end, selectedMarker.videoId)}
-                                                        className="bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors"
-                                                    >
-                                                        <Play size={14} fill="currentColor" /> Play
-                                                    </button>
                                                 </div>
 
-                                                {/* Back: Answer Fields */}
-                                                <div className="col-span-1 lg:col-span-2 border-t border-gray-100 dark:border-gray-800 pt-6 mt-2">
-                                                    <span className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6">Back (Answer)</span>
-
-                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                                        {/* Left: Fields */}
-                                                        <div className="space-y-4">
+                                                {/* Card Body */}
+                                                <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                                    {/* Audio Playback Control */}
+                                                    <div className={`col-span-1 lg:col-span-2 bg-${moduleColor}-50 dark:bg-${moduleColor}-900/10 p-4 rounded-xl border border-${moduleColor}-100 dark:border-${moduleColor}-900/30 flex items-center justify-between`}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 bg-${moduleColor}-100 dark:bg-${moduleColor}-900/20 rounded-full flex items-center justify-center text-${moduleColor}-600 dark:text-${moduleColor}-500`}>
+                                                                <Volume2 size={20} />
+                                                            </div>
                                                             <div>
-                                                                <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Expression</label>
-                                                                <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 text-gray-800 dark:text-gray-200 font-medium transition-colors">
-                                                                    {text}
-                                                                </div>
+                                                                <span className={`text-[10px] font-bold text-${moduleColor}-600 dark:text-${moduleColor}-500 uppercase tracking-wider`}>Front (Question)</span>
+                                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Audio Clip ({formatTime(selectedMarker.end - selectedMarker.start)})</p>
                                                             </div>
                                                         </div>
+                                                        <button
+                                                            onClick={() => onPlaySegment(selectedMarker.start, selectedMarker.end, selectedMarker.videoId)}
+                                                            className={`bg-${moduleColor}-500 hover:bg-${moduleColor}-400 text-black px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors`}
+                                                        >
+                                                            <Play size={14} fill="currentColor" /> Play
+                                                        </button>
+                                                    </div>
 
-                                                        {/* Right: Meaning with AI */}
-                                                        <div className="space-y-4">
-                                                            <div>
-                                                                <div className="flex justify-between items-center mb-1.5">
-                                                                    <label className="block text-xs font-bold text-gray-500 uppercase">Meaning</label>
-                                                                    <button
-                                                                        onClick={() => handleGenerateAI(selectedMarker.id, mainIndex, text)}
-                                                                        disabled={isGenerating}
-                                                                        className="text-[10px] flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors disabled:opacity-50"
-                                                                        title="Generate with AI"
-                                                                    >
-                                                                        <Sparkles size={12} />
-                                                                        {isGenerating ? 'Generating...' : 'AI Generate'}
-                                                                    </button>
+                                                    {/* Back: Answer Fields */}
+                                                    <div className="col-span-1 lg:col-span-2 border-t border-gray-100 dark:border-gray-800 pt-6 mt-2">
+                                                        <span className="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-6">Back (Answer)</span>
+
+                                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                                            {/* Left: Fields */}
+                                                            <div className="space-y-4">
+                                                                <div>
+                                                                    <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase">Expression</label>
+                                                                    <div className="bg-gray-100 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded p-3 text-gray-800 dark:text-gray-200 font-medium transition-colors">
+                                                                        {text}
+                                                                    </div>
                                                                 </div>
-                                                                <textarea
-                                                                    className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-32 resize-none"
-                                                                    placeholder="Enter definition..."
-                                                                    value={data.definition}
-                                                                    onChange={(e) => {
-                                                                        const val = e.target.value;
-                                                                        if (viewMode === 'session') {
-                                                                            onUpdateVocabData(selectedMarker.id, mainIndex, 'definition', val);
-                                                                        } else {
-                                                                            // Database update
-                                                                            const currentVocab = selectedMarker.vocabData || {};
-                                                                            const currentItem = currentVocab[mainIndex] || { definition: '', notes: '' };
-                                                                            const newVocab = {
-                                                                                ...currentVocab,
-                                                                                [mainIndex]: { ...currentItem, definition: val }
-                                                                            };
-                                                                            onUpdateCard?.(selectedMarker.id, { vocabData: newVocab });
-                                                                        }
-                                                                    }}
-                                                                />
+                                                            </div>
+
+                                                            {/* Right: Meaning with AI */}
+                                                            <div className="space-y-4">
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-1.5">
+                                                                        <label className="block text-xs font-bold text-gray-500 uppercase">Meaning</label>
+                                                                        <button
+                                                                            onClick={() => handleGenerateAI(selectedMarker.id, mainIndex, text)}
+                                                                            disabled={isGenerating}
+                                                                            className="text-[10px] flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors disabled:opacity-50"
+                                                                            title="Generate with AI"
+                                                                        >
+                                                                            <Sparkles size={12} />
+                                                                            {isGenerating ? 'Generating...' : 'AI Generate'}
+                                                                        </button>
+                                                                    </div>
+                                                                    <textarea
+                                                                        className="w-full bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded p-3 text-sm text-gray-900 dark:text-gray-200 focus:border-blue-500 focus:outline-none transition-colors h-32 resize-none"
+                                                                        placeholder="Enter definition..."
+                                                                        value={data.definition}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            if (viewMode === 'session') {
+                                                                                onUpdateVocabData(selectedMarker.id, mainIndex, 'definition', val);
+                                                                            } else {
+                                                                                // Database update
+                                                                                const currentVocab = selectedMarker.vocabData || {};
+                                                                                const currentItem = currentVocab[mainIndex] || { definition: '', notes: '' };
+                                                                                const newVocab = {
+                                                                                    ...currentVocab,
+                                                                                    [mainIndex]: { ...currentItem, definition: val }
+                                                                                };
+                                                                                onUpdateCard?.(selectedMarker.id, { vocabData: newVocab });
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                });
-                            })()}
+                                        );
+                                    });
+                                })()}
+                            </div>
                         </div>
-                    </div>
+                    )
                 )}
 
                 {/* Bottom Bar Operations */}
@@ -463,7 +494,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                     setToast({ message: "Card saved to deck", type: 'success', actionLabel: 'Undo', onAction: () => { } });
                                 }
                             }}
-                            className="px-6 py-2 rounded-lg text-sm font-bold bg-yellow-500 text-black hover:bg-yellow-400 shadow-lg shadow-yellow-500/20 transition-all flex items-center gap-2"
+                            className={`px-6 py-2 rounded-lg text-sm font-bold bg-${moduleColor}-500 text-black hover:bg-${moduleColor}-400 shadow-lg shadow-${moduleColor}-500/20 transition-all flex items-center gap-2`}
                         >
                             <Save size={16} />
                             {checkedIds.size > 0 ? `Save Selected (${checkedIds.size})` : 'Save to Deck'}
@@ -487,6 +518,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                 {isPreviewing && selectedMarker && (
                     <div className="absolute inset-0 z-[60] bg-gray-50 dark:bg-gray-950 animate-in slide-in-from-right duration-300">
                         <FlashcardPractice
+                            module={module}
                             savedCards={[selectedMarker]} // Preview just this one
                             onExit={() => setIsPreviewing(false)}
                             onPlayAudio={onPlaySegment}
@@ -539,7 +571,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                         <button
                             onClick={() => setViewMode('database')}
                             className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${viewMode === 'database'
-                                ? 'bg-white dark:bg-gray-700 text-yellow-600 dark:text-yellow-400 shadow-sm'
+                                ? `bg-white dark:bg-gray-700 text-${moduleColor}-600 dark:text-${moduleColor}-400 shadow-sm`
                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                                 }`}
                         >

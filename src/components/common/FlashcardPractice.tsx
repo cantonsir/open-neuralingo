@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Play, RotateCcw, Volume2, ArrowLeft } from 'lucide-react';
 import { Marker } from '../../types';
+import { FlashcardModule } from '../../db';
 
 interface FlashcardPracticeProps {
+    module: FlashcardModule;
     savedCards: Marker[];
     onExit: () => void;
     onPlayAudio: (start: number, end: number, videoId?: string) => void;
     previewMode?: boolean;
 }
 
-const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExit, onPlayAudio, previewMode = false }) => {
+const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCards, onExit, onPlayAudio, previewMode = false }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
 
@@ -46,10 +48,24 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
         }
     };
 
+    // Module-specific styling
+    const getModuleColor = () => {
+        switch (module) {
+            case 'listening': return 'yellow';
+            case 'speaking': return 'green';
+            case 'reading': return 'blue';
+            case 'writing': return 'purple';
+            default: return 'yellow';
+        }
+    };
+
+    const moduleColor = getModuleColor();
+
     if (!currentCard) {
         return (
             <div className="flex flex-col items-center justify-center h-full bg-gray-50 dark:bg-gray-950 p-8 text-center transition-colors">
                 <h2 className="text-xl font-bold text-gray-700 dark:text-gray-300 mb-4">Deck Empty</h2>
+                <p className="text-gray-500 dark:text-gray-400 mb-4 text-sm capitalize">No cards saved in {module} module yet.</p>
                 <button
                     onClick={onExit}
                     className="text-blue-500 hover:underline"
@@ -74,7 +90,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
                     {/* Progress Bar */}
                     <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-yellow-400 rounded-full transition-all duration-300 ease-out"
+                            className={`h-full bg-${moduleColor}-400 rounded-full transition-all duration-300 ease-out`}
                             style={{ width: `${Math.max(5, progress)}%` }}
                         />
                     </div>
@@ -102,11 +118,11 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
 
                         {/* Audio Icon (Front Identity) */}
                         <div className="mb-8 relative group cursor-pointer" onClick={handlePlayAudio}>
-                            <div className="w-20 h-20 bg-yellow-50 dark:bg-yellow-500/10 rounded-full flex items-center justify-center transition-transform transform group-hover:scale-110">
-                                <Volume2 size={32} className="text-yellow-500" />
+                            <div className={`w-20 h-20 bg-${moduleColor}-50 dark:bg-${moduleColor}-500/10 rounded-full flex items-center justify-center transition-transform transform group-hover:scale-110`}>
+                                <Volume2 size={32} className={`text-${moduleColor}-500`} />
                             </div>
                             {/* Ripple Effect hint */}
-                            <div className="absolute inset-0 border-2 border-yellow-500/30 rounded-full animate-ping opacity-0 group-hover:opacity-100" />
+                            <div className={`absolute inset-0 border-2 border-${moduleColor}-500/30 rounded-full animate-ping opacity-0 group-hover:opacity-100`} />
                         </div>
 
                         {/* Instruction */}
@@ -132,7 +148,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
                         {isFlipped && (
                             <div className="w-full mt-10 pt-10 border-t border-gray-100 dark:border-gray-800 animate-in slide-in-from-bottom-4 duration-500 text-left">
                                 <div className="mb-4 flex items-center gap-2">
-                                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest">Video Practice</span>
+                                    <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest capitalize">{module} Practice</span>
                                 </div>
 
                                 {/* 1. Full Sentence with Highlights */}
@@ -262,9 +278,9 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
                             <span className="text-[10px] text-gray-400 group-hover:text-orange-400/70">2 days</span>
                         </button>
 
-                        <button onClick={handleNext} className="flex flex-col items-center gap-1 py-3 bg-yellow-400 border border-yellow-500 rounded-xl shadow-lg shadow-yellow-500/20 hover:bg-yellow-300 transition-all transform hover:-translate-y-1">
+                        <button onClick={handleNext} className={`flex flex-col items-center gap-1 py-3 bg-${moduleColor}-400 border border-${moduleColor}-500 rounded-xl shadow-lg shadow-${moduleColor}-500/20 hover:bg-${moduleColor}-300 transition-all transform hover:-translate-y-1`}>
                             <span className="text-sm font-bold text-black">Good</span>
-                            <span className="text-[10px] text-yellow-800 font-medium">4 days</span>
+                            <span className={`text-[10px] text-${moduleColor}-800 font-medium`}>4 days</span>
                         </button>
 
                         <button onClick={handleNext} className="flex flex-col items-center gap-1 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl hover:bg-green-50 dark:hover:bg-green-900/10 hover:border-green-200 dark:hover:border-green-900/30 transition-all group">
@@ -276,13 +292,6 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ savedCards, onExi
             </div>
         </div>
     );
-};
-
-// Simple helper to format time for display (if not imported)
-const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
 export default FlashcardPractice;

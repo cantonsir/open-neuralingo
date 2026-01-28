@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { View, Module } from './types';
+import { FlashcardModule } from './db';
 
 // Components
 import Sidebar from './components/common/Sidebar';
 import SettingsPanel from './components/common/SettingsPanel';
+import FlashcardPractice from './components/common/FlashcardPractice';
+import VocabularyManager from './components/common/VocabularyManager';
 import ListeningModule from './components/listening/ListeningModule';
 import ReadingView from './components/reading/ReadingView';
 import SpeakingView from './components/speaking/SpeakingView';
@@ -62,7 +65,7 @@ function App() {
   });
 
   // --- Deck (Flashcards) ---
-  const { savedCards, saveCard, deleteCard, updateCard } = useDeck();
+  const { savedCards, saveCard, deleteCard, updateCard } = useDeck(activeModule as FlashcardModule);
 
   // --- Learning Data ---
   const learningData = useLearningData();
@@ -152,7 +155,32 @@ function App() {
         {activeModule === 'reading' && (
           view === 'learning' ? <ReadingLessons /> :
             view === 'assessment' ? <ReadingAssessmentPage /> :
-              view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
+              view === 'vocab' ? (
+                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                  <VocabularyManager
+                    module="reading"
+                    markers={[]}
+                    savedCards={savedCards}
+                    onRemoveWord={() => { }}
+                    onUpdateVocabData={() => { }}
+                    onPlaySegment={() => { }}
+                    onSaveToDeck={handleSaveToDeck}
+                    onDeleteCard={handleDeleteFromDeck}
+                    onUpdateCard={handleUpdateCard}
+                  />
+                </div>
+              ) :
+                view === 'flashcards' ? (
+                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                    <FlashcardPractice
+                      module="reading"
+                      savedCards={savedCards}
+                      onExit={() => setView('home')}
+                      onPlayAudio={() => { }}
+                    />
+                  </div>
+                ) :
+                  view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
                 view === 'generator' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
                   view === 'library' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
                     view === 'reader' && readingData ? (
@@ -170,7 +198,32 @@ function App() {
         {activeModule === 'speaking' && (
           view === 'learning' ? <SpeakingLessons /> :
             view === 'assessment' ? <SpeakingAssessment /> :
-              view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
+              view === 'vocab' ? (
+                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                  <VocabularyManager
+                    module="speaking"
+                    markers={[]}
+                    savedCards={savedCards}
+                    onRemoveWord={() => { }}
+                    onUpdateVocabData={() => { }}
+                    onPlaySegment={() => { }}
+                    onSaveToDeck={handleSaveToDeck}
+                    onDeleteCard={handleDeleteFromDeck}
+                    onUpdateCard={handleUpdateCard}
+                  />
+                </div>
+              ) :
+                view === 'flashcards' ? (
+                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                    <FlashcardPractice
+                      module="speaking"
+                      savedCards={savedCards}
+                      onExit={() => setView('home')}
+                      onPlayAudio={() => { }}
+                    />
+                  </div>
+                ) :
+                  view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
                 view === 'conversation' && speakingData ? (
                   <SpeakingView
                     mode={speakingData.mode}
@@ -190,7 +243,32 @@ function App() {
         {activeModule === 'writing' && (
           view === 'learning' ? <WritingLessons /> :
             view === 'assessment' ? <WritingAssessmentPage /> :
-              view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
+              view === 'vocab' ? (
+                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                  <VocabularyManager
+                    module="writing"
+                    markers={[]}
+                    savedCards={savedCards}
+                    onRemoveWord={() => { }}
+                    onUpdateVocabData={() => { }}
+                    onPlaySegment={() => { }}
+                    onSaveToDeck={handleSaveToDeck}
+                    onDeleteCard={handleDeleteFromDeck}
+                    onUpdateCard={handleUpdateCard}
+                  />
+                </div>
+              ) :
+                view === 'flashcards' ? (
+                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                    <FlashcardPractice
+                      module="writing"
+                      savedCards={savedCards}
+                      onExit={() => setView('home')}
+                      onPlayAudio={() => { }}
+                    />
+                  </div>
+                ) :
+                  view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
                 view === 'writer' && writingData ? (
                   <WritingView
                     topic={writingData.topic}

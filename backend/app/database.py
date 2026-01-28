@@ -47,7 +47,7 @@ def init_db():
     conn = sqlite3.connect(Config.DB_FILE)
     c = conn.cursor()
     
-    # Flashcards table
+    # Legacy flashcards table (kept for backward compatibility)
     c.execute('''
         CREATE TABLE IF NOT EXISTS flashcards (
             id TEXT PRIMARY KEY,
@@ -61,6 +61,79 @@ def init_db():
             tags TEXT,
             note TEXT,
             press_count INTEGER
+        )
+    ''')
+    
+    # Module-specific flashcard tables
+    # Listening flashcards
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS listening_flashcards (
+            id TEXT PRIMARY KEY,
+            video_id TEXT,
+            start_time REAL,
+            end_time REAL,
+            subtitle_text TEXT,
+            created_at INTEGER,
+            vocab_data TEXT,
+            misunderstood_indices TEXT,
+            tags TEXT,
+            note TEXT,
+            press_count INTEGER,
+            source TEXT DEFAULT 'loop'
+        )
+    ''')
+    
+    # Speaking flashcards
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS speaking_flashcards (
+            id TEXT PRIMARY KEY,
+            video_id TEXT,
+            start_time REAL,
+            end_time REAL,
+            subtitle_text TEXT,
+            created_at INTEGER,
+            vocab_data TEXT,
+            misunderstood_indices TEXT,
+            tags TEXT,
+            note TEXT,
+            press_count INTEGER,
+            source TEXT
+        )
+    ''')
+    
+    # Reading flashcards
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reading_flashcards (
+            id TEXT PRIMARY KEY,
+            video_id TEXT,
+            start_time REAL,
+            end_time REAL,
+            subtitle_text TEXT,
+            created_at INTEGER,
+            vocab_data TEXT,
+            misunderstood_indices TEXT,
+            tags TEXT,
+            note TEXT,
+            press_count INTEGER,
+            source TEXT
+        )
+    ''')
+    
+    # Writing flashcards
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS writing_flashcards (
+            id TEXT PRIMARY KEY,
+            video_id TEXT,
+            start_time REAL,
+            end_time REAL,
+            subtitle_text TEXT,
+            created_at INTEGER,
+            vocab_data TEXT,
+            misunderstood_indices TEXT,
+            tags TEXT,
+            note TEXT,
+            press_count INTEGER,
+            source TEXT
         )
     ''')
     
@@ -339,6 +412,28 @@ def migrate_db():
         c.execute("ALTER TABLE flashcards ADD COLUMN source TEXT DEFAULT 'loop'")
         conn.commit()
         print("Migration complete.")
+    
+    # Migration: Copy data from old flashcards table to listening_flashcards
+    try:
+        # Check if listening_flashcards is empty and flashcards has data
+        old_count = c.execute("SELECT COUNT(*) FROM flashcards").fetchone()[0]
+        new_count = c.execute("SELECT COUNT(*) FROM listening_flashcards").fetchone()[0]
+        
+        if old_count > 0 and new_count == 0:
+            print(f"Migrating: Copying {old_count} cards from flashcards to listening_flashcards...")
+            c.execute('''
+                INSERT INTO listening_flashcards 
+                (id, video_id, start_time, end_time, subtitle_text, created_at, 
+                 vocab_data, misunderstood_indices, tags, note, press_count, source)
+                SELECT id, video_id, start_time, end_time, subtitle_text, created_at,
+                       vocab_data, misunderstood_indices, tags, note, press_count, 
+                       COALESCE(source, 'loop')
+                FROM flashcards
+            ''')
+            conn.commit()
+            print(f"Migration complete: {old_count} cards copied.")
+    except sqlite3.OperationalError as e:
+        print(f"Migration skipped (tables may not exist yet): {e}")
     
     conn.close()
 

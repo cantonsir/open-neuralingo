@@ -2,6 +2,9 @@ import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSessi
 
 const API_BASE = '/api';
 
+// Valid modules for flashcards
+export type FlashcardModule = 'listening' | 'speaking' | 'reading' | 'writing';
+
 export interface HistoryItem {
     videoId: string;
     title: string;
@@ -185,6 +188,71 @@ export const api = {
             if (!response.ok) throw new Error('Failed to update card');
         } catch (error) {
             console.error('API updateCard error:', error);
+            throw error;
+        }
+    },
+
+    // --- Module-specific Flashcard API ---
+
+    /**
+     * Fetch all flashcards for a specific module.
+     */
+    async fetchModuleCards(module: FlashcardModule): Promise<Marker[]> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards`);
+            if (!response.ok) throw new Error(`Failed to fetch ${module} cards`);
+            return await response.json();
+        } catch (error) {
+            console.error(`API fetchModuleCards (${module}) error:`, error);
+            return [];
+        }
+    },
+
+    /**
+     * Save a card to a specific module.
+     */
+    async saveModuleCard(module: FlashcardModule, card: Marker): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(card),
+            });
+            if (!response.ok) throw new Error(`Failed to save ${module} card`);
+        } catch (error) {
+            console.error(`API saveModuleCard (${module}) error:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Delete a card from a specific module.
+     */
+    async deleteModuleCard(module: FlashcardModule, id: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/${id}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error(`Failed to delete ${module} card`);
+        } catch (error) {
+            console.error(`API deleteModuleCard (${module}) error:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Update specific fields of a card in a specific module.
+     */
+    async updateModuleCard(module: FlashcardModule, id: string, updates: Partial<Marker>): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/${module}/cards/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates),
+            });
+            if (!response.ok) throw new Error(`Failed to update ${module} card`);
+        } catch (error) {
+            console.error(`API updateModuleCard (${module}) error:`, error);
             throw error;
         }
     },
