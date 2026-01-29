@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import * as api from '../db';
+import { api } from '../db';
 
 interface ScoreTrendData {
   testNumber: number;

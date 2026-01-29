@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, Clock, ChevronDown, ChevronUp, Play } from 'lucide-react';
-import { View } from '../../types';
+import { View, LibraryItem, SpeakingSession } from '../../types';
 import { api } from '../../db';
 import UnifiedInput from '../common/UnifiedInput';
 
@@ -9,18 +9,7 @@ interface AppState {
     setSpeakingData: (data: any) => void;
 }
 
-interface LibraryItem {
-    id: string;
-    title: string;
-}
 
-interface SpeakingSession {
-    id: string;
-    topic: string;
-    transcript: { role: string; text: string }[];
-    durationSeconds: number;
-    createdAt: number;
-}
 
 export default function SpeakingScenario({ setView, setSpeakingData }: AppState) {
     const [topic, setTopic] = useState('');
@@ -33,11 +22,7 @@ export default function SpeakingScenario({ setView, setSpeakingData }: AppState)
 
 
     useEffect(() => {
-        fetch('/api/library')
-            .then(res => res.json())
-            .then(data => setLibrary(data))
-            .catch(console.error);
-
+        api.fetchLibrary().then(setLibrary);
         loadHistory();
     }, []);
 
@@ -101,8 +86,7 @@ export default function SpeakingScenario({ setView, setSpeakingData }: AppState)
                             try {
                                 setIsUploading(true);
                                 const result = await api.uploadFile(file);
-                                const res = await fetch('/api/library');
-                                const data = await res.json();
+                                const data = await api.fetchLibrary();
                                 setLibrary(data);
                                 setContextId(result.id);
                             } catch (error) {

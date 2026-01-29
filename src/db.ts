@@ -286,7 +286,7 @@ export const api = {
      * @param includePending - Include learning cards even if not due yet (default: false)
      */
     async fetchDueCards(
-        module: FlashcardModule, 
+        module: FlashcardModule,
         includeNew: boolean = true,
         sort: SortOption = 'due_first',
         newLimit?: number,
@@ -397,7 +397,7 @@ export const api = {
         try {
             const response = await fetch(`${API_BASE}/${module}/cards/export?format=${format}`);
             if (!response.ok) throw new Error(`Failed to export ${module} cards`);
-            
+
             if (format === 'csv') {
                 return await response.text();
             }
@@ -785,6 +785,20 @@ export const api = {
     // --- File Upload API ---
 
     /**
+     * Fetch all library items.
+     */
+    async fetchLibrary(): Promise<any[]> {
+        try {
+            const response = await fetch(`${API_BASE}/library`);
+            if (!response.ok) throw new Error('Failed to fetch library');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchLibrary error:', error);
+            return [];
+        }
+    },
+
+    /**
      * Upload a file to the library.
      */
     async uploadFile(file: File): Promise<{ status: string; id: string }> {
@@ -1114,6 +1128,33 @@ export const api = {
             if (!response.ok) throw new Error('Failed to delete practice session');
         } catch (error) {
             console.error('API deletePracticeSession error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Extract video context (transcript and metadata) from a YouTube URL.
+     */
+    async extractVideoContext(url: string): Promise<{
+        videoId: string;
+        title: string;
+        thumbnail: string;
+        transcript: string;
+        duration?: number;
+    }> {
+        try {
+            const response = await fetch(`${API_BASE}/video/extract-context`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url }),
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to extract video context');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('API extractVideoContext error:', error);
             throw error;
         }
     },

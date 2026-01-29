@@ -926,9 +926,9 @@ export async function generateLessonPracticeDialogue(
     if (!apiKey) return [];
 
     // Model selection based on fast mode
-    // Standard: gemini-2.0-flash (higher quality)
-    // Fast: gemini-2.0-flash (same for now, can switch to lighter model later)
-    const model = options.isFastMode ? 'gemini-2.0-flash' : 'gemini-2.0-flash';
+    // Standard: gemini-2.5-flash-preview-05-20 (higher quality, more natural dialogues)
+    // Fast: gemini-2.0-flash-lite (quicker generation, lower cost)
+    const model = options.isFastMode ? 'gemini-2.0-flash-lite' : 'gemini-2.5-flash-preview-05-20';
 
     const vocabList = options.vocabulary.length > 0
         ? options.vocabulary.join(', ')

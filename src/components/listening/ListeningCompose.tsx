@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, Clock, ChevronDown, ChevronUp, Download, Play, Pause } from 'lucide-react';
-import { View } from '../../types';
+import { Volume2, Clock, ChevronDown, ChevronUp, Play, Pause, Sparkles } from 'lucide-react';
+import { View, LibraryItem, ListeningSession } from '../../types';
 import { api } from '../../db';
 import UnifiedInput from '../common/UnifiedInput';
 import { generateListeningDiscussion, DiscussionLine } from '../../services/geminiService';
@@ -8,20 +8,6 @@ import { generateSpeech } from '../../services/ttsService';
 
 interface AppState {
     setView: (view: View) => void;
-}
-
-interface LibraryItem {
-    id: string;
-    title: string;
-}
-
-interface ListeningSession {
-    id: string;
-    prompt: string;
-    audioUrl: string;
-    transcript: DiscussionLine[];
-    durationSeconds: number;
-    createdAt: number;
 }
 
 export default function ListeningCompose({ setView }: AppState) {
@@ -35,12 +21,12 @@ export default function ListeningCompose({ setView }: AppState) {
     const [playingAudio, setPlayingAudio] = useState<string | null>(null);
     const [audioElements, setAudioElements] = useState<{ [key: string]: HTMLAudioElement }>({});
 
-    useEffect(() => {
-        fetch('/api/library')
-            .then(res => res.json())
-            .then(data => setLibrary(data))
-            .catch(console.error);
+    // New State for Upgraded Input
+    const [mode, setMode] = useState<'fast' | 'plan'>('fast');
+    const [url, setUrl] = useState('');
 
+    useEffect(() => {
+        api.fetchLibrary().then(setLibrary);
         loadHistory();
     }, []);
 
@@ -54,8 +40,8 @@ export default function ListeningCompose({ setView }: AppState) {
     };
 
     const generateAudioDiscussion = async () => {
-        if (!prompt && !contextId) {
-            alert("Please enter a prompt or select a context.");
+        if (!prompt && !contextId && !url) {
+            alert("Please enter a prompt, provide a URL, or select a context.");
             return;
         }
 
@@ -65,12 +51,20 @@ export default function ListeningCompose({ setView }: AppState) {
             let contextText = '';
             if (contextId) {
                 const item = library.find(l => l.id === contextId);
-                if (item) contextText = item.title;
+                if (item) contextText += `\nLibrary Context: ${item.title}`;
+            }
+            if (url) {
+                contextText += `\nReference URL: ${url}`;
+            }
+            if (mode === 'plan') {
+                contextText += `\n(User requested PLAN mode: potentially more detailed or structured output)`;
+            } else {
+                contextText += `\n(User requested FAST mode: direct and concise output)`;
             }
 
             // Generate discussion script
             const discussion = await generateListeningDiscussion(prompt || "General conversation", contextText);
-            
+
             if (discussion.length === 0) {
                 alert('Failed to generate discussion. Please try again.');
                 setIsGenerating(false);
@@ -87,15 +81,15 @@ export default function ListeningCompose({ setView }: AppState) {
 
             for (let i = 0; i < discussion.length; i++) {
                 const line = discussion[i];
-                
+
                 // Assign voice to speaker if not already assigned
                 if (!speakerVoiceMap[line.speaker]) {
                     speakerVoiceMap[line.speaker] = availableVoices[nextVoiceIndex % availableVoices.length];
                     nextVoiceIndex++;
                 }
-                
+
                 const voice = speakerVoiceMap[line.speaker];
-                
+
                 const audioUrl = await generateSpeech({ text: line.text, voiceName: voice });
                 if (audioUrl) {
                     audioUrls.push(audioUrl);
@@ -125,6 +119,8 @@ export default function ListeningCompose({ setView }: AppState) {
             // Clear form
             setPrompt('');
             setContextId('');
+            setUrl('');
+            // Keep mode as is (sticky preference)
             alert('Audio discussion generated successfully!');
         } catch (error) {
             console.error('Failed to generate audio:', error);
@@ -144,7 +140,7 @@ export default function ListeningCompose({ setView }: AppState) {
             if (playingAudio && audioElements[playingAudio]) {
                 audioElements[playingAudio].pause();
             }
-            
+
             // Play new audio
             let audio = audioElements[sessionId];
             if (!audio) {
@@ -192,8 +188,7 @@ export default function ListeningCompose({ setView }: AppState) {
                             try {
                                 setIsUploading(true);
                                 const result = await api.uploadFile(file);
-                                const res = await fetch('/api/library');
-                                const data = await res.json();
+                                const data = await api.fetchLibrary();
                                 setLibrary(data);
                                 setContextId(result.id);
                             } catch (error) {
@@ -206,24 +201,20 @@ export default function ListeningCompose({ setView }: AppState) {
                         isUploading={isUploading}
                         themeColor="amber"
                         placeholder="Describe a topic for listening practice..."
+                        // New Props
+                        mode={mode}
+                        onModeChange={setMode}
+                        url={url}
+                        onUrlChange={setUrl}
+                        onSubmit={generateAudioDiscussion}
                     />
 
-                    {/* Generate Button */}
-                    <div className="mt-6">
-                        <button
-                            onClick={generateAudioDiscussion}
-                            disabled={isGenerating}
-                            className="w-full p-4 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-3 font-medium"
-                        >
-                            <Volume2 className="w-5 h-5" />
-                            {isGenerating ? 'Generating Audio...' : 'Generate Audio Discussion'}
-                        </button>
-                    </div>
+
                 </div>
 
                 {/* History Section */}
                 <div className="mt-12">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-800 dark:text-gray-200">
                         <Clock className="w-5 h-5 text-gray-400" />
                         Recent Sessions
                     </h2>
@@ -233,7 +224,7 @@ export default function ListeningCompose({ setView }: AppState) {
                     ) : (
                         <div className="space-y-4">
                             {history.map(session => (
-                                <div key={session.id} className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+                                <div key={session.id} className="bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm transition-all hover:shadow-md">
                                     <div
                                         onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
                                         className="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
@@ -269,12 +260,12 @@ export default function ListeningCompose({ setView }: AppState) {
                                     {expandedSession === session.id && (
                                         <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                                             <h4 className="text-xs uppercase tracking-wider font-bold text-gray-400 mb-3">Transcript</h4>
-                                            <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+                                            <div className="space-y-3 max-h-64 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700">
                                                 {session.transcript.map((line, idx) => (
                                                     <div key={idx} className="flex gap-3">
-                                                        <div className="flex-shrink-0">
-                                                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                                                                {line.speaker}:
+                                                        <div className="flex-shrink-0 w-24">
+                                                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block truncate">
+                                                                {line.speaker}
                                                             </span>
                                                         </div>
                                                         <div className="flex-1 text-sm text-gray-800 dark:text-gray-200">

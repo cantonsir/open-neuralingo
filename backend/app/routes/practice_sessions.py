@@ -2,14 +2,25 @@
 Practice Sessions Routes
 
 Handles CRUD operations for AI-generated practice dialogues in segment learning.
+Also provides video context extraction for YouTube URLs.
 """
 
 import json
 import time
 import uuid
+import re
+import urllib.request
+import urllib.parse
 from flask import Blueprint, request, jsonify
 
 from app.database import get_db
+
+# Try to import youtube_transcript_api
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    YOUTUBE_TRANSCRIPT_AVAILABLE = True
+except ImportError:
+    YOUTUBE_TRANSCRIPT_AVAILABLE = False
 
 
 practice_sessions_bp = Blueprint('practice_sessions', __name__)
@@ -224,3 +235,111 @@ def delete_practice_session(session_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ===== VIDEO CONTEXT EXTRACTION =====
+
+def extract_video_id(url):
+    """Extract YouTube video ID from various URL formats."""
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})',
+        r'^([a-zA-Z0-9_-]{11})$'  # Just the video ID
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_video_title(video_id):
+    """Get video title using YouTube oEmbed API (no API key needed)."""
+    try:
+        oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
+        with urllib.request.urlopen(oembed_url, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return data.get('title', 'YouTube Video')
+    except Exception:
+        return 'YouTube Video'
+
+
+@practice_sessions_bp.route('/video/extract-context', methods=['POST'])
+def extract_video_context():
+    """
+    Extract transcript and metadata from a YouTube URL.
+
+    Request Body:
+        url: YouTube video URL
+
+    Returns:
+        {
+            videoId: YouTube video ID
+            title: Video title
+            thumbnail: Thumbnail URL
+            transcript: Extracted transcript text
+            duration: (optional) Video duration
+        }
+    """
+    data = request.json
+    if not data or not data.get('url'):
+        return jsonify({'error': 'No URL provided'}), 400
+
+    url = data.get('url')
+    video_id = extract_video_id(url)
+
+    if not video_id:
+        return jsonify({'error': 'Invalid YouTube URL'}), 400
+
+    result = {
+        'videoId': video_id,
+        'title': 'YouTube Video',
+        'thumbnail': f'https://img.youtube.com/vi/{video_id}/mqdefault.jpg',
+        'transcript': '',
+        'duration': None
+    }
+
+    # Get video title
+    try:
+        result['title'] = get_video_title(video_id)
+    except Exception as e:
+        print(f'Failed to get video title: {e}')
+
+    # Get transcript if available
+    if YOUTUBE_TRANSCRIPT_AVAILABLE:
+        try:
+            # Try to get transcript in various languages
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+            # Try to get English transcript first, then any available
+            transcript = None
+            try:
+                transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+            except Exception:
+                # Get any available transcript and translate if needed
+                try:
+                    for t in transcript_list:
+                        transcript = t
+                        break
+                except Exception:
+                    pass
+
+            if transcript:
+                transcript_data = transcript.fetch()
+                # Join all transcript segments
+                transcript_text = ' '.join([item['text'] for item in transcript_data])
+                result['transcript'] = transcript_text
+
+                # Calculate approximate duration from last segment
+                if transcript_data:
+                    last_segment = transcript_data[-1]
+                    result['duration'] = int(last_segment.get('start', 0) + last_segment.get('duration', 0))
+
+        except Exception as e:
+            print(f'Failed to get transcript: {e}')
+            # Transcript not available, but we can still return video info
+    else:
+        print('youtube_transcript_api not installed, skipping transcript extraction')
+
+    return jsonify(result)

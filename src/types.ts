@@ -190,7 +190,7 @@ export interface TestResult {
 export interface SpeakingSession {
   id: string;
   topic: string;
-  transcript: Array<{ role: string; content: string }>;
+  transcript: Array<{ role: string; text: string }>;
   durationSeconds: number;
   createdAt: number;
 }
@@ -221,6 +221,11 @@ export interface ReadingSession {
   content: string;
   contextId?: string;
   createdAt: number;
+}
+
+export interface LibraryItem {
+  id: string;
+  title: string;
 }
 
 // Google Developers YouTube API Demo Video (Extremely stable for testing)
