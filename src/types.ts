@@ -5,6 +5,21 @@ export interface Subtitle {
   text: string;
 }
 
+export interface WordTiming {
+  word: string;
+  start: number;  // seconds
+  end: number;    // seconds
+}
+
+export interface TTSResult {
+  audioUrl: string;
+  duration?: number;
+  subtitles?: Subtitle[];
+  wordTimings?: WordTiming[];  // For Cloud TTS
+  source: 'cloud-tts' | 'gemini-tts';
+  accuracy: 'word-level' | 'speech-recognition' | 'duration-based' | 'estimated';
+}
+
 export interface FocusedSegment {
   start: number;
   end: number;
@@ -211,6 +226,7 @@ export interface ListeningSession {
   transcript: Array<{ speaker: string; text: string }>;
   durationSeconds: number;
   contextId?: string;
+  subtitles?: Subtitle[];
   createdAt: number;
 }
 

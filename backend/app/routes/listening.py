@@ -41,11 +41,20 @@ def get_listening_sessions():
                     except:
                         transcript = []
                 
+                # Parse subtitles JSON
+                subtitles = []
+                if sess.get('subtitles_json'):
+                    try:
+                        subtitles = json.loads(sess['subtitles_json'])
+                    except:
+                        subtitles = []
+                
                 session_list.append({
                     'id': sess['id'],
                     'prompt': sess['prompt'],
                     'audioUrl': sess['audio_url'],
                     'transcript': transcript,
+                    'subtitles': subtitles,
                     'durationSeconds': sess['duration_seconds'],
                     'contextId': sess['context_id'],
                     'createdAt': sess['created_at']
@@ -84,15 +93,19 @@ def save_listening_session():
             # Serialize transcript to JSON
             transcript_json = json.dumps(data.get('transcript', []))
             
+            # Serialize subtitles to JSON
+            subtitles_json = json.dumps(data.get('subtitles', []))
+            
             conn.execute('''
                 INSERT INTO listening_sessions 
-                (id, prompt, audio_url, transcript_json, duration_seconds, context_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (id, prompt, audio_url, transcript_json, subtitles_json, duration_seconds, context_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 session_id,
                 data.get('prompt', 'Untitled'),
                 data.get('audioUrl', ''),
                 transcript_json,
+                subtitles_json,
                 data.get('durationSeconds', 0),
                 data.get('contextId'),
                 data.get('createdAt', int(time.time() * 1000))

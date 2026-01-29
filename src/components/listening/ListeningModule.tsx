@@ -204,28 +204,33 @@ export default function ListeningModule({
     // 1. Set Audio URL
     setAudioUrl(session.audioUrl);
 
-    // 2. Generate Subtitles with estimated timestamps
-    const generatedSubtitles: Subtitle[] = [];
-    let currentTime = 0;
+    // 2. Use stored subtitles if available, otherwise generate estimation
+    if (session.subtitles && session.subtitles.length > 0) {
+      setLocalSubtitles(session.subtitles);
+    } else {
+      // Fallback: Generate Subtitles with estimated timestamps
+      const generatedSubtitles: Subtitle[] = [];
+      let currentTime = 0;
 
-    session.transcript.forEach((line, index) => {
-      const text = `${line.speaker}: ${line.text}`;
-      const wordCount = text.split(' ').length;
-      // Estimate duration: ~150 words per minute => ~2.5 words per second
-      // Minimum duration 2 seconds
-      const duration = Math.max(2, wordCount / 2.5);
+      session.transcript.forEach((line, index) => {
+        const text = `${line.speaker}: ${line.text}`;
+        const wordCount = text.split(' ').length;
+        // Estimate duration: ~150 words per minute => ~2.5 words per second
+        // Minimum duration 2 seconds
+        const duration = Math.max(2, wordCount / 2.5);
 
-      generatedSubtitles.push({
-        id: `gen-${session.id}-${index}`,
-        start: currentTime,
-        end: currentTime + duration,
-        text: text
+        generatedSubtitles.push({
+          id: `gen-${session.id}-${index}`,
+          start: currentTime,
+          end: currentTime + duration,
+          text: text
+        });
+
+        currentTime += duration;
       });
 
-      currentTime += duration;
-    });
-
-    setLocalSubtitles(generatedSubtitles);
+      setLocalSubtitles(generatedSubtitles);
+    }
 
     // 3. Clear Video ID (indicates audio mode to LoopView)
     // We can't clear videoId in parent easily without a callback, but LoopView checks for audioUrl

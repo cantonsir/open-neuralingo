@@ -1,4 +1,4 @@
-import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession, SrsStats, IntervalsPreview, LearningStatus, SortOption, ReviewRating } from './types';
+import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession, SrsStats, IntervalsPreview, LearningStatus, SortOption, ReviewRating, Subtitle } from './types';
 
 const API_BASE = '/api';
 
@@ -138,6 +138,7 @@ export interface PracticeSession {
     attachedContexts?: { type: string; url?: string; name?: string }[];
     transcript: { speaker: string; text: string }[];
     audioUrls?: string[];
+    subtitles?: Subtitle[];
     durationSeconds?: number;
     commandUsed?: string;
     createdAt: number;
@@ -1070,6 +1071,7 @@ export const api = {
             transcriptJson: { speaker: string; text: string }[];
             attachedContexts?: object[];
             audioUrls?: string[];
+            subtitles?: Subtitle[];
             durationSeconds?: number;
             commandUsed?: string;
         }

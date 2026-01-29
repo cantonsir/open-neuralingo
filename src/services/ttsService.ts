@@ -1,5 +1,9 @@
 // Gemini TTS Service - Text-to-Speech using Gemini 2.5 Flash TTS
 
+import { TTSResult, Subtitle } from '../types';
+import { generateSubtitlesFromDuration } from '../utils/subtitleGenerator';
+import { analyzeAudioForSubtitles } from '../utils/audioAnalyzer';
+
 export interface TTSOptions {
     text: string;
     voiceName?: string;
@@ -26,9 +30,9 @@ const CLOUD_TTS_API_KEY = import.meta.env.VITE_CLOUD_TTS_API_KEY;
 /**
  * Generate speech audio from text using Cloud TTS (Chirp 3 HD) first,
  * falling back to Gemini 2.5 Flash TTS if needed.
- * Returns a blob URL that can be played in an audio element
+ * Returns TTSResult with audio URL and subtitles
  */
-export async function generateSpeech(options: TTSOptions): Promise<string> {
+export async function generateSpeech(options: TTSOptions): Promise<TTSResult> {
     // 1. Try Google Cloud TTS (Chirp 3 HD)
     try {
         // console.log('Attempting Cloud TTS (Chirp 3 HD)...', options.text.substring(0, 20) + '...');
@@ -44,7 +48,7 @@ export async function generateSpeech(options: TTSOptions): Promise<string> {
 /**
  * Generate speech using Google Cloud Text-to-Speech API (Chirp 3 HD)
  */
-async function generateCloudSpeech(options: TTSOptions): Promise<string> {
+async function generateCloudSpeech(options: TTSOptions): Promise<TTSResult> {
     const { text, voiceName = 'Kore' } = options;
 
     if (!CLOUD_TTS_API_KEY) {
@@ -65,7 +69,9 @@ async function generateCloudSpeech(options: TTSOptions): Promise<string> {
                 },
                 audioConfig: {
                     audioEncoding: 'MP3'
-                }
+                },
+                // Request word-level timing info
+                enableTimePointing: ['TIMEPOINT_TYPE_SSML']
             })
         }
     );
@@ -88,23 +94,38 @@ async function generateCloudSpeech(options: TTSOptions): Promise<string> {
         bytes[i] = binaryString.charCodeAt(i);
     }
     const blob = new Blob([bytes], { type: 'audio/mp3' });
-    return URL.createObjectURL(blob);
+    const audioUrl = URL.createObjectURL(blob);
+    
+    // For now, use duration-based estimation for Cloud TTS too
+    // (Word-level timing requires additional API configuration)
+    const audio = new Audio(audioUrl);
+    await new Promise<void>((resolve) => {
+        audio.addEventListener('loadedmetadata', () => resolve());
+        audio.load();
+    });
+    
+    const subtitles = generateSubtitlesFromDuration(text, audio.duration, 'cloud-tts');
+    
+    return {
+        audioUrl,
+        subtitles,
+        source: 'cloud-tts',
+        accuracy: 'duration-based'
+    };
 }
 
 /**
  * Generate dialogue audio using Gemini 2.5 Flash TTS (Multi-speaker capable)
- * This bypasses Cloud TTS as it requires model inference for speaker changes.
  */
-export async function generateDialogue(text: string, voiceName: string = 'Aoede'): Promise<string> {
+export async function generateDialogue(text: string, voiceName: string = 'Aoede'): Promise<TTSResult> {
     return await generateGeminiSpeech({ text, voiceName });
 }
 
 /**
  * Generate speech audio from text using Gemini 2.5 Flash TTS
-
- * Returns a blob URL that can be played in an audio element
+ * Returns TTSResult with audio URL and subtitles
  */
-async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
+async function generateGeminiSpeech(options: TTSOptions): Promise<TTSResult> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -166,7 +187,34 @@ async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
 
         // Convert base64 PCM to WAV and create blob URL
         const audioUrl = pcmToWavBlobUrl(base64Audio);
-        return audioUrl;
+        
+        // Generate subtitles using smart audio analysis
+        try {
+            const { subtitles, accuracy } = await analyzeAudioForSubtitles(
+                audioUrl,
+                sanitizedText,
+                'gemini-tts'
+            );
+            
+            return {
+                audioUrl,
+                subtitles,
+                source: 'gemini-tts',
+                accuracy: accuracy as TTSResult['accuracy']
+            };
+        } catch (analysisError) {
+            console.error('Audio analysis failed, using basic estimation:', analysisError);
+            
+            // Fallback: Basic estimation
+            const estimatedDuration = sanitizedText.split(/\s+/).length / 2.5;
+            
+            return {
+                audioUrl,
+                subtitles: generateSubtitlesFromDuration(sanitizedText, estimatedDuration, 'gemini-tts'),
+                source: 'gemini-tts',
+                accuracy: 'estimated'
+            };
+        }
 
     } catch (error) {
         console.error('Gemini TTS error:', error);

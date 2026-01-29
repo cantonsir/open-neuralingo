@@ -361,6 +361,7 @@ def init_db():
             attached_contexts TEXT,
             transcript_json TEXT NOT NULL,
             audio_urls TEXT,
+            subtitles_json TEXT,
             duration_seconds INTEGER,
             command_used TEXT,
             created_at INTEGER NOT NULL,
@@ -423,6 +424,7 @@ def init_db():
             transcript_json TEXT,
             duration_seconds INTEGER,
             context_id TEXT,
+            subtitles_json TEXT,
             created_at INTEGER
         )
     ''')
@@ -587,6 +589,12 @@ def migrate_db():
             print(f"Could not set card_state for {table}: {e}")
     
     conn.close()
+    
+    # Run migrations for existing databases
+    try:
+        migrate_add_subtitle_columns()
+    except Exception as e:
+        print(f"Migration warning: {e}")
 
 
 def ensure_upload_folder():
@@ -595,3 +603,37 @@ def ensure_upload_folder():
     """
     if not os.path.exists(Config.UPLOAD_FOLDER):
         os.makedirs(Config.UPLOAD_FOLDER)
+
+
+def migrate_add_subtitle_columns():
+    """
+    Migration: Add subtitles_json column to existing tables.
+    Safe to run multiple times - checks if columns exist before adding.
+    """
+    conn = sqlite3.connect(Config.DB_FILE)
+    c = conn.cursor()
+    
+    try:
+        # Check and add to listening_sessions
+        c.execute("PRAGMA table_info(listening_sessions)")
+        columns = [col[1] for col in c.fetchall()]
+        
+        if 'subtitles_json' not in columns:
+            c.execute("ALTER TABLE listening_sessions ADD COLUMN subtitles_json TEXT")
+            print("✅ Added subtitles_json to listening_sessions")
+        
+        # Check and add to practice_sessions
+        c.execute("PRAGMA table_info(practice_sessions)")
+        columns = [col[1] for col in c.fetchall()]
+        
+        if 'subtitles_json' not in columns:
+            c.execute("ALTER TABLE practice_sessions ADD COLUMN subtitles_json TEXT")
+            print("✅ Added subtitles_json to practice_sessions")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"❌ Migration error: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

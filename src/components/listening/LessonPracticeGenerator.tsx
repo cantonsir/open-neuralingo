@@ -27,6 +27,9 @@ import {
 import { api, PracticeSession } from '../../db';
 import { generateLessonPracticeDialogue } from '../../services/geminiService';
 import { generateSpeech } from '../../services/ttsService';
+import { Subtitle } from '../../types';
+import { combineSubtitles } from '../../utils/subtitleGenerator';
+import { getAudioDuration } from '../../utils/audioAnalyzer';
 import PracticeInput from './PracticeInput';
 import VideoContextExtractor, { type VideoContext } from './VideoContextExtractor';
 import {
@@ -52,6 +55,7 @@ interface GeneratedDialogue {
     modelUsed: string;
     transcript: { speaker: string; text: string }[];
     audioUrls: string[];
+    subtitles?: Subtitle[];
     durationSeconds: number;
     createdAt: number;
     isExpanded: boolean;
@@ -114,6 +118,7 @@ export default function LessonPracticeGenerator({
                 modelUsed: s.modelUsed,
                 transcript: s.transcript,
                 audioUrls: s.audioUrls || [],
+                subtitles: s.subtitles,
                 durationSeconds: s.durationSeconds || 0,
                 createdAt: s.createdAt,
                 isExpanded: false,
@@ -233,6 +238,8 @@ export default function LessonPracticeGenerator({
             const speakerVoiceMap: { [speaker: string]: string } = {};
             let nextVoiceIndex = 0;
             const audioUrls: string[] = [];
+            const allSubtitles: Subtitle[][] = [];
+            const audioDurations: number[] = [];
             let totalDuration = 0;
 
             for (let i = 0; i < transcript.length; i++) {
@@ -247,15 +254,42 @@ export default function LessonPracticeGenerator({
                 const voice = speakerVoiceMap[line.speaker];
 
                 try {
-                    const audioUrl = await generateSpeech({ text: line.text, voiceName: voice });
-                    audioUrls.push(audioUrl);
-                    const wordCount = line.text.split(' ').length;
-                    totalDuration += (wordCount / 150) * 60;
+                    const result = await generateSpeech({ text: line.text, voiceName: voice });
+                    audioUrls.push(result.audioUrl);
+                    
+                    if (result.subtitles) {
+                        allSubtitles.push(result.subtitles);
+                    } else {
+                        allSubtitles.push([]);
+                    }
+                    
+                    // Measure duration for accurate timing
+                    let duration = 0;
+                    if (result.duration) {
+                        duration = result.duration;
+                    } else {
+                        // Fallback measurement if not provided by TTS service
+                        try {
+                            duration = await getAudioDuration(result.audioUrl);
+                        } catch (e) {
+                            // Rough estimation fallback
+                            const wordCount = line.text.split(' ').length;
+                            duration = (wordCount / 150) * 60;
+                        }
+                    }
+                    
+                    audioDurations.push(duration);
+                    totalDuration += duration;
                 } catch (err) {
                     console.error('TTS error for line:', line.text, err);
                     audioUrls.push('');
+                    allSubtitles.push([]);
+                    audioDurations.push(0);
                 }
             }
+
+            // Combine subtitles
+            const combinedSubtitles = combineSubtitles(allSubtitles, audioDurations);
 
             const dialogueId = `local-${Date.now()}`;
             const newDialogue: GeneratedDialogue = {
@@ -264,6 +298,7 @@ export default function LessonPracticeGenerator({
                 modelUsed: isFastMode ? 'gemini-2.0-flash-lite' : 'gemini-2.5-flash',
                 transcript,
                 audioUrls,
+                subtitles: combinedSubtitles,
                 durationSeconds: Math.round(totalDuration),
                 createdAt: Date.now(),
                 isExpanded: true,
@@ -278,6 +313,8 @@ export default function LessonPracticeGenerator({
                     prompt: targetPrompt.trim(),
                     modelUsed: newDialogue.modelUsed,
                     transcriptJson: transcript,
+                    audioUrls: newDialogue.audioUrls,
+                    subtitles: newDialogue.subtitles,
                     durationSeconds: newDialogue.durationSeconds
                 });
 

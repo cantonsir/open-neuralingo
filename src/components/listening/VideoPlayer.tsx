@@ -209,7 +209,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             onMouseEnter={() => setIsHoveringSubs(true)}
             onMouseLeave={() => setIsHoveringSubs(false)}
           >
-            {currentSubtitle.text}
+            {/* Remove speaker prefix for cleaner display if present */}
+            {currentSubtitle.text.replace(/^[^:]+:\s*/, '')}
           </div>
         </div>
       )}

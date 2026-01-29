@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, ChevronDown, ChevronUp, Play, Sparkles, MoveRight, Trash2 } from 'lucide-react';
-import { View, LibraryItem, ListeningSession } from '../../types';
+import { Clock, ChevronDown, ChevronUp, Play, Sparkles, MoveRight, Trash2, Download } from 'lucide-react';
+import { View, LibraryItem, ListeningSession, Subtitle } from '../../types';
 import { api } from '../../db';
 import UnifiedInput from '../common/UnifiedInput';
 import { generateListeningDiscussion, chatWithPlanner } from '../../services/geminiService';
 import { generateDialogue } from '../../services/ttsService';
+import { combineSubtitles } from '../../utils/subtitleGenerator';
+import { getAudioDuration } from '../../utils/audioAnalyzer';
+import { downloadSubtitles } from '../../utils/subtitleExporter';
 import MessageBubble from './MessageBubble';
 
 interface ListeningComposeProps {
@@ -153,21 +156,35 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
             .map(line => `${line.speaker}: ${line.text}`)
             .join('\n');
 
-        // Generate single audio file for the entire dialogue
-        const mainAudioUrl = await generateDialogue(fullTranscript, 'Aoede');
-
-        // Estimate duration (rough: ~150 words per minute)
-        const totalWordCount = discussion.reduce((acc, line) => acc + line.text.split(' ').length, 0);
-        const totalDuration = (totalWordCount / 150) * 60;
+        // Generate audio with subtitles
+        const ttsResult = await generateDialogue(fullTranscript, 'Aoede');
+        
+        // Use result subtitles if available, otherwise estimate
+        let subtitles: Subtitle[] = ttsResult.subtitles || [];
+        
+        // Estimate duration
+        let totalDuration = 0;
+        if (ttsResult.duration) {
+            totalDuration = ttsResult.duration;
+        } else {
+             try {
+                totalDuration = await getAudioDuration(ttsResult.audioUrl);
+            } catch (e) {
+                // Fallback estimation
+                const totalWordCount = discussion.reduce((acc, line) => acc + line.text.split(' ').length, 0);
+                totalDuration = (totalWordCount / 150) * 60;
+            }
+        }
 
         // Save session
         const session: ListeningSession = {
             id: crypto.randomUUID(),
             prompt: userPrompt,
-            audioUrl: mainAudioUrl,
+            audioUrl: ttsResult.audioUrl,
             transcript: discussion,
             durationSeconds: Math.round(totalDuration),
             contextId: contextId || undefined,
+            subtitles: subtitles,
             createdAt: Date.now()
         };
 
@@ -246,16 +263,61 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                 <div className="flex items-center gap-1 ml-2">
                     {/* Compact Controls for Sidebar */}
                     {session.audioUrl && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onLoadSession(session);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-full transition-colors"
-                            title="Play"
-                        >
-                            <Play className="w-4 h-4" />
-                        </button>
+                        <>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onLoadSession(session);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-full transition-colors"
+                                title="Play"
+                            >
+                                <Play className="w-4 h-4" />
+                            </button>
+
+                            {/* Export Subtitles Dropdown */}
+                            {session.subtitles && session.subtitles.length > 0 && (
+                                <div className="relative group">
+                                    <button
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                                        title="Export Subtitles"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                    </button>
+                                    
+                                    {/* Dropdown menu */}
+                                    <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                downloadSubtitles(
+                                                    session.subtitles!,
+                                                    session.prompt.substring(0, 30).replace(/[^a-z0-9]/gi, '_'),
+                                                    'srt'
+                                                );
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg text-gray-700 dark:text-gray-300"
+                                        >
+                                            Export SRT
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                downloadSubtitles(
+                                                    session.subtitles!,
+                                                    session.prompt.substring(0, 30).replace(/[^a-z0-9]/gi, '_'),
+                                                    'vtt'
+                                                );
+                                            }}
+                                            className="w-full px-3 py-2 text-left text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg text-gray-700 dark:text-gray-300"
+                                        >
+                                            Export VTT
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {!isCompact && (

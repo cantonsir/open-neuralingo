@@ -66,8 +66,8 @@ def save_practice_session(goal_id, segment_index):
             conn.execute('''
                 INSERT INTO practice_sessions
                 (id, goal_id, segment_index, prompt, model_used, attached_contexts,
-                 transcript_json, audio_urls, duration_seconds, command_used, created_at, is_favorite)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
+                 transcript_json, audio_urls, subtitles_json, duration_seconds, command_used, created_at, is_favorite)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)
             ''', (
                 session_id,
                 goal_id,
@@ -77,6 +77,7 @@ def save_practice_session(goal_id, segment_index):
                 json.dumps(data.get('attachedContexts')) if data.get('attachedContexts') else None,
                 json.dumps(transcript_json),
                 json.dumps(data.get('audioUrls')) if data.get('audioUrls') else None,
+                json.dumps(data.get('subtitles')) if data.get('subtitles') else None,
                 data.get('durationSeconds'),
                 data.get('commandUsed'),
                 created_at
@@ -125,6 +126,7 @@ def get_practice_sessions(goal_id, segment_index):
                     'attachedContexts': json.loads(s['attached_contexts']) if s['attached_contexts'] else None,
                     'transcript': json.loads(s['transcript_json']) if s['transcript_json'] else [],
                     'audioUrls': json.loads(s['audio_urls']) if s['audio_urls'] else None,
+                    'subtitles': json.loads(s['subtitles_json']) if s.get('subtitles_json') else None,
                     'durationSeconds': s['duration_seconds'],
                     'commandUsed': s['command_used'],
                     'createdAt': s['created_at'],
@@ -167,6 +169,7 @@ def get_practice_session(session_id):
                 'attachedContexts': json.loads(s['attached_contexts']) if s['attached_contexts'] else None,
                 'transcript': json.loads(s['transcript_json']) if s['transcript_json'] else [],
                 'audioUrls': json.loads(s['audio_urls']) if s['audio_urls'] else None,
+                'subtitles': json.loads(s['subtitles_json']) if s.get('subtitles_json') else None,
                 'durationSeconds': s['duration_seconds'],
                 'commandUsed': s['command_used'],
                 'createdAt': s['created_at'],
