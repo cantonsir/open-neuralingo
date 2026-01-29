@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, ChevronDown, Paperclip, Send } from 'lucide-react';
+import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, ChevronDown, Paperclip, Send, Loader2 } from 'lucide-react';
 
 interface UnifiedInputProps {
     value: string;
@@ -19,6 +19,7 @@ interface UnifiedInputProps {
     url?: string;
     onUrlChange?: (url: string) => void;
     onSubmit?: () => void;
+    isLoading?: boolean;
 }
 
 export default function UnifiedInput({
@@ -37,7 +38,8 @@ export default function UnifiedInput({
     onModeChange,
     url,
     onUrlChange,
-    onSubmit
+    onSubmit,
+    isLoading = false
 }: UnifiedInputProps) {
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [showLinkInput, setShowLinkInput] = useState(false);
@@ -85,11 +87,11 @@ export default function UnifiedInput({
     // Theme definitions (extended for gradients usually)
     const getThemeColors = () => {
         switch (themeColor) {
-            case 'amber': return 'from-amber-500 to-orange-600 text-amber-600';
-            case 'emerald': return 'from-emerald-500 to-green-600 text-emerald-600';
-            case 'purple': return 'from-purple-500 to-pink-600 text-purple-600';
-            case 'indigo': return 'from-indigo-500 to-blue-600 text-indigo-600';
-            default: return 'from-blue-500 to-cyan-600 text-blue-600';
+            case 'amber': return 'from-amber-500 to-orange-600';
+            case 'emerald': return 'from-emerald-500 to-green-600';
+            case 'purple': return 'from-purple-500 to-pink-600';
+            case 'indigo': return 'from-indigo-500 to-blue-600';
+            default: return 'from-blue-500 to-cyan-600';
         }
     };
 
@@ -278,14 +280,18 @@ export default function UnifiedInput({
                     {/* Send / Action Button - NOW CLICKABLE */}
                     <button
                         onClick={handleSubmit}
-                        disabled={(!value.trim() && !contextId && !url) || !onSubmit}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-md ${(value.trim() || contextId || url) && onSubmit
+                        disabled={(!value.trim() && !contextId && !url) || !onSubmit || isLoading}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-md ${(value.trim() || contextId || url) && onSubmit && !isLoading
                             ? `bg-gradient-to-r ${getThemeColors()} text-white scale-100 hover:scale-105 active:scale-95 cursor-pointer`
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50'
                             }`}
                         title="Generate"
                     >
-                        <Send className="w-5 h-5 ml-0.5" />
+                        {isLoading ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+                        ) : (
+                            <Send className="w-5 h-5 ml-0.5" />
+                        )}
                     </button>
                 </div>
             </div>

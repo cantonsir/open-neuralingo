@@ -923,6 +923,21 @@ export const api = {
         }
     },
 
+    /**
+     * Delete a listening session.
+     */
+    async deleteListeningSession(sessionId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/listening/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete listening session');
+        } catch (error) {
+            console.error('API deleteListeningSession error:', error);
+            throw error;
+        }
+    },
+
     // --- Reading History API ---
 
     /**

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, View } from '../../types';
+import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, View, ListeningSession } from '../../types';
 import { GoalVideo, GoalVideoDetail, api } from '../../db';
 
 // Views
@@ -20,7 +20,7 @@ interface ListeningModuleProps {
   view: View;
   setView: (view: View) => void;
   targetLanguage: string;
-  
+
   // Video player props
   videoId: string;
   videoTitle: string;
@@ -39,7 +39,7 @@ interface ListeningModuleProps {
   getCurrentSubtitle: () => Subtitle | null;
   focusedSegment: FocusedSegment | null;
   setFocusedSegment: (segment: FocusedSegment | null) => void;
-  
+
   // Marker props
   markers: Marker[];
   currentLoopId: string | null;
@@ -54,19 +54,19 @@ interface ListeningModuleProps {
   handleUpdateVocabData: (markerId: string, index: number, field: 'definition' | 'notes', value: string) => void;
   handleToggleWordForSegment: (segment: FocusedSegment | null, index: number) => void;
   handleToggleRangeForSegment: (segment: FocusedSegment | null, start: number, end: number) => void;
-  
+
   // Playback controls
   handlePrevSubtitle: () => void;
   handleNextSubtitle: () => void;
   handlePlaySegment: (start: number, end: number, targetVideoId?: string) => void;
   changePlaybackRate: (rate: number) => void;
-  
+
   // Deck
   savedCards: Marker[];
   handleSaveToDeck: (marker: Marker) => void;
   handleDeleteFromDeck: (id: string) => void;
   handleUpdateCard: (id: string, updates: Partial<Marker>) => void;
-  
+
   // Learning data
   assessmentProfile: any;
   setAssessmentProfile: (profile: any) => void;
@@ -79,6 +79,12 @@ interface ListeningModuleProps {
   goalDetailsCache: Record<string, GoalVideoDetail>;
   refreshAssessmentData: () => Promise<void>;
   refreshGoalDetails: (goalId: string) => Promise<void>;
+
+  // Audio state
+  audioUrl?: string;
+  setAudioUrl: (url: string | undefined) => void;
+  setSubtitles: (subtitles: Subtitle[]) => void;
+  setVideoId: (id: string) => void;
 }
 
 export default function ListeningModule({
@@ -146,6 +152,40 @@ export default function ListeningModule({
     endTime: number;
   } | null>(null);
 
+  // Audio state (local to module if not passed from parent, but simpler to manage here for now if parent doesn't have it)
+  // Actually, for cleaner architecture, let's add audioUrl to the parent App state or manage it here.
+  // Since ListeningModuleProps defined it, we assume it comes from parent or we add it to the state management.
+  // Wait, I see I didn't update App.tsx. I should probably manage audioUrl state here in ListeningModule if possible
+  // or add it to the Props.
+  // Let's add local state for audioUrl for now to avoid changing App.tsx if not strictly necessary,
+  // BUT ListeningModule is a controlled component by App.tsx generally.
+  // Let's check App.tsx. It renders ListeningModule.
+  // I'll add the audioUrl state to ListeningModule for now, as it seems to be the main controller for the listening view.
+
+  const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
+  const [localSubtitles, setLocalSubtitles] = useState<Subtitle[]>(subtitles); // To override parent subtitles if needed
+
+  // Update local subtitles when parent subtitles change (standard video flow)
+  React.useEffect(() => {
+    if (videoId) {
+      setLocalSubtitles(subtitles);
+      setAudioUrl(undefined);
+    }
+  }, [subtitles, videoId]);
+
+  // Pause player when navigating away from loop view
+  useEffect(() => {
+    if (view !== 'loop' && player) {
+      // Safe check for pauseVideo function
+      if (typeof player.pauseVideo === 'function') {
+        player.pauseVideo();
+      } else if (player.pause) {
+        // Handle HTMLAudioElement mock or other player types
+        player.pause();
+      }
+    }
+  }, [view, player]);
+
   // Key to force MiniTest remount
   const [miniTestKey, setMiniTestKey] = useState(0);
 
@@ -153,8 +193,46 @@ export default function ListeningModule({
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = inputUrl.match(regExp);
     const id = match && match[2].length === 11 ? match[2] : null;
-    if (id) fetchSubtitles(id);
+    if (id) {
+      fetchSubtitles(id);
+      setAudioUrl(undefined); // Clear audio url when loading video
+    }
     else alert('Please enter a valid YouTube URL');
+  };
+
+  const handleLoadSession = (session: ListeningSession) => {
+    // 1. Set Audio URL
+    setAudioUrl(session.audioUrl);
+
+    // 2. Generate Subtitles with estimated timestamps
+    const generatedSubtitles: Subtitle[] = [];
+    let currentTime = 0;
+
+    session.transcript.forEach((line, index) => {
+      const text = `${line.speaker}: ${line.text}`;
+      const wordCount = text.split(' ').length;
+      // Estimate duration: ~150 words per minute => ~2.5 words per second
+      // Minimum duration 2 seconds
+      const duration = Math.max(2, wordCount / 2.5);
+
+      generatedSubtitles.push({
+        id: `gen-${session.id}-${index}`,
+        start: currentTime,
+        end: currentTime + duration,
+        text: text
+      });
+
+      currentTime += duration;
+    });
+
+    setLocalSubtitles(generatedSubtitles);
+
+    // 3. Clear Video ID (indicates audio mode to LoopView)
+    // We can't clear videoId in parent easily without a callback, but LoopView checks for audioUrl
+    // We will pass empty videoId to LoopView if audioUrl is present
+
+    // 4. Switch View
+    setView('loop');
   };
 
   return (
@@ -162,8 +240,9 @@ export default function ListeningModule({
       {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
       <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'}`}>
         <LoopView
-          videoId={videoId}
-          videoTitle={videoTitle}
+          videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
+          audioUrl={audioUrl}
+          videoTitle={audioUrl ? 'Generated Audio Session' : videoTitle}
           inputUrl={inputUrl}
           setInputUrl={setInputUrl}
           isFetchingSubs={isFetchingSubs}
@@ -173,7 +252,7 @@ export default function ListeningModule({
           onStateChange={(s) => setState({ ...state, ...s })}
           state={state}
           currentSubtitle={getCurrentSubtitle()}
-          subtitles={subtitles}
+          subtitles={localSubtitles} // Use local subtitles
           subtitlesVisible={subtitlesVisible}
           isPeekingSubs={isPeekingSubs}
           setSubtitlesVisible={setSubtitlesVisible}
@@ -214,7 +293,10 @@ export default function ListeningModule({
       {/* Compose View - Generate Audio Discussions */}
       {view === 'compose' && (
         <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
-          <ListeningCompose setView={setView} />
+          <ListeningCompose
+            setView={setView}
+            onLoadSession={handleLoadSession}
+          />
         </div>
       )}
 

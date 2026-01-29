@@ -4,7 +4,8 @@ import { Subtitle, PlayerState } from '../../types';
 
 interface VideoPlayerProps {
   videoId: string;
-  onReady: (player: YouTubePlayer) => void;
+  audioUrl?: string; // New prop for audio support
+  onReady: (player: YouTubePlayer | any) => void;
   onStateChange: (state: PlayerState) => void;
   currentSubtitle: Subtitle | null;
   playbackRate: number;
@@ -14,6 +15,7 @@ interface VideoPlayerProps {
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({
   videoId,
+  audioUrl,
   onReady,
   onStateChange,
   currentSubtitle,
@@ -22,6 +24,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   startTime
 }) => {
   const playerRef = useRef<YouTubePlayer | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isHoveringSubs, setIsHoveringSubs] = useState(false);
   const [isError, setIsError] = useState(false);
@@ -29,7 +32,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // Sync playback rate when it changes in parent
   useEffect(() => {
     if (playerRef.current) {
-      playerRef.current.setPlaybackRate(playbackRate);
+      // Check if it's a real YouTube player or our mock audio player
+      if (typeof playerRef.current.setPlaybackRate === 'function') {
+        playerRef.current.setPlaybackRate(playbackRate);
+      }
+    }
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
 
@@ -87,34 +96,104 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     });
   };
 
+  // Audio Player Logic
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      const audio = audioRef.current;
+
+      // Mock Player Object to mimic YouTube API
+      const mockPlayer = {
+        playVideo: () => audio.play(),
+        pauseVideo: () => audio.pause(),
+        seekTo: (seconds: number) => { audio.currentTime = seconds; },
+        getDuration: () => audio.duration,
+        getCurrentTime: () => audio.currentTime,
+        setPlaybackRate: (rate: number) => { audio.playbackRate = rate; },
+        getPlaybackRate: () => audio.playbackRate,
+      };
+
+      // Emit initial ready event
+      onReady(mockPlayer);
+      playerRef.current = mockPlayer as any;
+
+      const updateState = () => {
+        onStateChange({
+          currentTime: audio.currentTime,
+          duration: audio.duration || 0,
+          isPlaying: !audio.paused,
+          playbackRate: audio.playbackRate
+        });
+      };
+
+      audio.addEventListener('timeupdate', updateState);
+      audio.addEventListener('play', updateState);
+      audio.addEventListener('pause', updateState);
+      audio.addEventListener('ratechange', updateState);
+      audio.addEventListener('loadedmetadata', updateState);
+
+      return () => {
+        audio.removeEventListener('timeupdate', updateState);
+        audio.removeEventListener('play', updateState);
+        audio.removeEventListener('pause', updateState);
+        audio.removeEventListener('ratechange', updateState);
+        audio.removeEventListener('loadedmetadata', updateState);
+      };
+    }
+  }, [audioUrl, onReady, onStateChange]);
+
   return (
     <div
-      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl group"
+      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl group flex items-center justify-center"
       ref={containerRef}
     >
-      {isError ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-8 text-center bg-gray-900 z-30">
-          <p className="text-xl font-bold text-red-500 mb-2">Video Load Error</p>
-          <p className="mb-4">YouTube refused to play this video.</p>
-          <p className="text-sm mb-4">
-            Try reloading the page. If the issue persists, the video ID might be invalid or the environment restricts embedding.
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
-          >
-            Reload Page
-          </button>
+      {/* Mode: Audio Player */}
+      {audioUrl ? (
+        <div className="w-full h-full bg-gray-900 flex flex-col items-center justify-center p-8">
+          <div className="w-32 h-32 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+          </div>
+          <h3 className="text-white text-xl font-medium mb-2">Audio Session</h3>
+          <p className="text-gray-400 text-sm">Listen & Loop Practice</p>
+          <audio
+            ref={audioRef}
+            src={audioUrl}
+            className="hidden" // We use custom controls
+            controls={false}
+            autoPlay
+          />
         </div>
       ) : (
-        <YouTube
-          videoId={videoId}
-          opts={opts}
-          onReady={handleReady}
-          onStateChange={handleStateChange}
-          onError={handleError}
-          className="absolute inset-0 w-full h-full"
-        />
+        /* Mode: YouTube Player */
+        <>
+          {isError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-8 text-center bg-gray-900 z-30">
+              <p className="text-xl font-bold text-red-500 mb-2">Video Load Error</p>
+              <p className="mb-4">YouTube refused to play this video.</p>
+              <p className="text-sm mb-4">
+                Try reloading the page. If the issue persists, the video ID might be invalid or the environment restricts embedding.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-white text-sm"
+              >
+                Reload Page
+              </button>
+            </div>
+          ) : (
+            <YouTube
+              videoId={videoId}
+              opts={opts}
+              onReady={handleReady}
+              onStateChange={handleStateChange}
+              onError={handleError}
+              className="absolute inset-0 w-full h-full"
+            />
+          )}
+        </>
       )}
 
       {/* Custom Subtitle Overlay */}
@@ -134,8 +213,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         </div>
       )}
-
-
 
     </div>
   );

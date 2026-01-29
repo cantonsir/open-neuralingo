@@ -12,6 +12,7 @@ import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, PracticeMode } 
 interface LoopViewProps {
   // Video state
   videoId: string;
+  audioUrl?: string; // Add audioUrl prop
   videoTitle: string;
   inputUrl: string;
   setInputUrl: (url: string) => void;
@@ -57,6 +58,7 @@ interface LoopViewProps {
 
 export default function LoopView({
   videoId,
+  audioUrl,
   videoTitle,
   inputUrl,
   setInputUrl,
@@ -150,7 +152,7 @@ export default function LoopView({
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Empty State */}
-        {!videoId ? (
+        {!videoId && !audioUrl ? (
           <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 via-gray-50 to-yellow-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900">
             <div className="text-center max-w-md">
               <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-yellow-400/20 to-orange-500/20 flex items-center justify-center">
@@ -172,6 +174,7 @@ export default function LoopView({
               <div className="flex-1 flex flex-col justify-center min-h-0">
                 <VideoPlayer
                   videoId={videoId}
+                  audioUrl={audioUrl}
                   onReady={onPlayerReady}
                   onStateChange={onStateChange}
                   currentSubtitle={currentSubtitle}

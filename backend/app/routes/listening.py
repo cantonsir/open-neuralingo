@@ -106,4 +106,20 @@ def save_listening_session():
         return jsonify({'error': str(e)}), 500
 
 
+@listening_bp.route('/listening/sessions/<session_id>', methods=['DELETE'])
+def delete_listening_session(session_id):
+    """
+    Delete a listening session.
+    """
+    try:
+        with get_db() as conn:
+            conn.execute('DELETE FROM listening_sessions WHERE id = ?', (session_id,))
+            conn.commit()
+            
+        return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 

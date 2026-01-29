@@ -92,7 +92,16 @@ async function generateCloudSpeech(options: TTSOptions): Promise<string> {
 }
 
 /**
+ * Generate dialogue audio using Gemini 2.5 Flash TTS (Multi-speaker capable)
+ * This bypasses Cloud TTS as it requires model inference for speaker changes.
+ */
+export async function generateDialogue(text: string, voiceName: string = 'Aoede'): Promise<string> {
+    return await generateGeminiSpeech({ text, voiceName });
+}
+
+/**
  * Generate speech audio from text using Gemini 2.5 Flash TTS
+
  * Returns a blob URL that can be played in an audio element
  */
 async function generateGeminiSpeech(options: TTSOptions): Promise<string> {
