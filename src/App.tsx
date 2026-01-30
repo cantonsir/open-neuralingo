@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Module } from './types';
+import React, { useCallback, useState } from 'react';
+import { View, Module, Marker, PlayerState } from './types';
 import { FlashcardModule } from './db';
 
 // Components
@@ -58,6 +58,11 @@ function App() {
     setView,
     setSubtitles,
   });
+
+  const { setState: setPlayerState } = videoPlayer;
+  const handlePlayerStateChange = useCallback((patch: Partial<PlayerState>) => {
+    setPlayerState(prev => ({ ...prev, ...patch }));
+  }, [setPlayerState]);
 
   // --- Markers ---
   const markersHook = useMarkers({
@@ -307,8 +312,10 @@ function App() {
             player={videoPlayer.player}
             setPlayer={videoPlayer.setPlayer}
             state={videoPlayer.state}
-            setState={(s) => videoPlayer.setState(prev => ({ ...prev, ...s }))}
+            setState={handlePlayerStateChange}
             subtitles={subtitles}
+            setSubtitles={setSubtitles}
+            setVideoId={videoPlayer.setVideoId}
             subtitlesVisible={videoPlayer.subtitlesVisible}
             setSubtitlesVisible={videoPlayer.setSubtitlesVisible}
             isPeekingSubs={videoPlayer.isPeekingSubs}

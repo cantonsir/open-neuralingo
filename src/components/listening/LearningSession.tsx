@@ -39,6 +39,7 @@ interface LearningSessionProps {
     segmentEndTime: number;
     onExit: () => void;
     onComplete: () => void;
+    onLoadSession?: (session: any) => void;
 }
 
 type Phase = 'loading' | 'test' | 'analyzing' | 'results' | 'learning' | 'practice' | 'watch' | 'summary';
@@ -64,7 +65,8 @@ export default function LearningSession({
     segmentStartTime,
     segmentEndTime,
     onExit,
-    onComplete
+    onComplete,
+    onLoadSession
 }: LearningSessionProps) {
     // Phase state
     const [phase, setPhase] = useState<Phase>('loading');
@@ -721,6 +723,7 @@ export default function LearningSession({
                 onComplete={() => setPhase('watch')}
                 onBack={() => setPhase('learning')}
                 onExit={handleExit}
+                onLoadSession={onLoadSession}
             />
         );
     }

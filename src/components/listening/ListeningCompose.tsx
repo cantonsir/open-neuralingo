@@ -8,6 +8,7 @@ import { generateDialogue } from '../../services/ttsService';
 import { combineSubtitles } from '../../utils/subtitleGenerator';
 import { getAudioDuration } from '../../utils/audioAnalyzer';
 import { downloadSubtitles } from '../../utils/subtitleExporter';
+import { blobUrlToDataUrl, downloadAudio, getAudioFormat } from '../../utils/audioConverter';
 import MessageBubble from './MessageBubble';
 
 interface ListeningComposeProps {
@@ -57,6 +58,10 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
     const loadHistory = async () => {
         try {
             const sessions = await api.fetchListeningSessions();
+            console.log('[ListeningCompose] Loaded sessions:', sessions);
+            sessions.forEach((s, i) => {
+                console.log(`[ListeningCompose] Session ${i}: subtitles count =`, s.subtitles?.length || 0);
+            });
             setHistory(sessions);
         } catch (error) {
             console.error('Failed to load history:', error);
@@ -176,17 +181,45 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
             }
         }
 
+        // Convert blob URL to data URL for persistence
+        console.log('[ListeningCompose] Converting audio blob to data URL for persistence...');
+        let persistentAudioUrl = ttsResult.audioUrl;
+        
+        if (ttsResult.audioUrl.startsWith('blob:')) {
+            try {
+                persistentAudioUrl = await blobUrlToDataUrl(ttsResult.audioUrl);
+                console.log('[ListeningCompose] ✅ Conversion successful, data URL length:', persistentAudioUrl.length);
+            } catch (conversionError) {
+                console.error('[ListeningCompose] ⚠️ Failed to convert blob to data URL:', conversionError);
+                console.warn('[ListeningCompose] Audio will not persist after reload!');
+                // Continue with blob URL (won't work after reload, but better than failing)
+            }
+        } else {
+            console.log('[ListeningCompose] Audio is already a data URL, no conversion needed');
+        }
+
         // Save session
         const session: ListeningSession = {
             id: crypto.randomUUID(),
             prompt: userPrompt,
-            audioUrl: ttsResult.audioUrl,
+            audioUrl: persistentAudioUrl,
             transcript: discussion,
             durationSeconds: Math.round(totalDuration),
             contextId: contextId || undefined,
             subtitles: subtitles,
             createdAt: Date.now()
         };
+
+        console.log('[ListeningCompose] Saving session to database:');
+        console.log('  - Session ID:', session.id);
+        console.log('  - Audio URL type:', persistentAudioUrl.startsWith('blob:') ? 'Blob URL (⚠️ temporary!)' : 'Data URL (✅ persistent)');
+        console.log('  - Audio URL (first 100 chars):', persistentAudioUrl.substring(0, 100));
+        console.log('  - Subtitles count:', subtitles.length);
+        console.log('  - Duration:', totalDuration, 'seconds');
+        if (subtitles.length > 0) {
+            console.log('  - First subtitle:', subtitles[0]);
+            console.log('  - Last subtitle:', subtitles[subtitles.length - 1]);
+        }
 
         await api.saveListeningSession(session);
 
@@ -274,6 +307,27 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                             >
                                 <Play className="w-4 h-4" />
                             </button>
+
+                            {/* Download Audio Button */}
+                            {session.audioUrl && (
+                                <button
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                            const format = getAudioFormat(session.audioUrl);
+                                            const filename = `${session.prompt.substring(0, 30).replace(/[^a-z0-9]/gi, '_')}.${format}`;
+                                            await downloadAudio(session.audioUrl, filename, `audio/${format}`);
+                                        } catch (error) {
+                                            console.error('Failed to download audio:', error);
+                                            alert('Failed to download audio');
+                                        }
+                                    }}
+                                    className="p-1.5 text-gray-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-full transition-colors"
+                                    title="Download Audio"
+                                >
+                                    <Download className="w-4 h-4" />
+                                </button>
+                            )}
 
                             {/* Export Subtitles Dropdown */}
                             {session.subtitles && session.subtitles.length > 0 && (

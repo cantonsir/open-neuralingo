@@ -109,24 +109,27 @@ export async function getWordTimingsFromSpeechRecognition(
 export async function analyzeAudioForSubtitles(
   audioUrl: string,
   text: string,
-  baseId: string
+  baseId: string,
+  useSpeechRecognition: boolean = false
 ): Promise<{ subtitles: Subtitle[]; accuracy: string }> {
-  // First attempt: Speech Recognition (most accurate)
-  const wordTimings = await getWordTimingsFromSpeechRecognition(audioUrl, text);
-  
-  if (wordTimings && wordTimings.length > 0) {
-    const { generateSubtitlesFromWordTimings } = await import('./subtitleGenerator');
-    return {
-      subtitles: generateSubtitlesFromWordTimings(text, wordTimings, baseId),
-      accuracy: 'speech-recognition'
-    };
+  if (useSpeechRecognition) {
+    // First attempt: Speech Recognition (most accurate)
+    const wordTimings = await getWordTimingsFromSpeechRecognition(audioUrl, text);
+
+    if (wordTimings && wordTimings.length > 0) {
+      const { generateSubtitlesFromWordTimings } = await import('./subtitleGenerator');
+      return {
+        subtitles: generateSubtitlesFromWordTimings(text, wordTimings, baseId),
+        accuracy: 'speech-recognition'
+      };
+    }
   }
-  
-  // Second attempt: Duration-based estimation
+
+  // Duration-based estimation (no playback side effects)
   try {
     const duration = await getAudioDuration(audioUrl);
     const { generateSubtitlesFromDuration } = await import('./subtitleGenerator');
-    
+
     return {
       subtitles: generateSubtitlesFromDuration(text, duration, baseId),
       accuracy: 'duration-based'

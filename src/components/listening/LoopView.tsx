@@ -180,6 +180,8 @@ export default function LoopView({
                   currentSubtitle={currentSubtitle}
                   playbackRate={state.playbackRate}
                   forceShowSubtitle={subtitlesVisible || isPeekingSubs}
+                  title={audioUrl ? videoTitle : undefined}
+                  showTitle={!!audioUrl && !subtitlesVisible}
                 />
 
                 <Timeline

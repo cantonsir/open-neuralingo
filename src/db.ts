@@ -897,7 +897,9 @@ export const api = {
      */
     async fetchListeningSessions(): Promise<ListeningSession[]> {
         try {
-            const response = await fetch(`${API_BASE}/listening/sessions`);
+            const response = await fetch(`${API_BASE}/listening/sessions`, {
+                cache: 'no-store',
+            });
             if (!response.ok) throw new Error('Failed to fetch listening sessions');
             return await response.json();
         } catch (error) {
@@ -909,15 +911,27 @@ export const api = {
     /**
      * Save a listening session.
      */
-    async saveListeningSession(session: { prompt: string; audioUrl: string; transcript: any[]; durationSeconds: number; contextId?: string; createdAt: number }): Promise<{ status: string; id: string }> {
+    async saveListeningSession(session: { prompt: string; audioUrl: string; transcript: any[]; subtitles?: Subtitle[]; durationSeconds: number; contextId?: string; createdAt: number }): Promise<{ status: string; id: string }> {
         try {
+            console.log('[API] Saving listening session:');
+            console.log('  - Prompt:', session.prompt);
+            console.log('  - Audio URL length:', session.audioUrl.length);
+            console.log('  - Transcript length:', session.transcript.length);
+            console.log('  - Subtitles count:', session.subtitles?.length || 0);
+            
             const response = await fetch(`${API_BASE}/listening/sessions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(session),
             });
-            if (!response.ok) throw new Error('Failed to save listening session');
-            return await response.json();
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[API] Save failed:', response.status, errorText);
+                throw new Error(`Failed to save listening session: ${response.status} ${errorText}`);
+            }
+            const result = await response.json();
+            console.log('[API] Save successful:', result);
+            return result;
         } catch (error) {
             console.error('API saveListeningSession error:', error);
             throw error;

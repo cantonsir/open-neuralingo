@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { YouTubePlayer } from 'react-youtube';
 import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, View, ListeningSession } from '../../types';
 import { GoalVideo, GoalVideoDetail, api } from '../../db';
@@ -80,9 +80,6 @@ interface ListeningModuleProps {
   refreshAssessmentData: () => Promise<void>;
   refreshGoalDetails: (goalId: string) => Promise<void>;
 
-  // Audio state
-  audioUrl?: string;
-  setAudioUrl: (url: string | undefined) => void;
   setSubtitles: (subtitles: Subtitle[]) => void;
   setVideoId: (id: string) => void;
 }
@@ -104,6 +101,7 @@ export default function ListeningModule({
   subtitles,
   subtitlesVisible,
   setSubtitlesVisible,
+  setSubtitles,
   isPeekingSubs,
   getCurrentSubtitle,
   focusedSegment,
@@ -140,6 +138,7 @@ export default function ListeningModule({
   goalDetailsCache,
   refreshAssessmentData,
   refreshGoalDetails,
+  setVideoId,
 }: ListeningModuleProps) {
   // Learning Section navigation state
   const [learningView, setLearningView] = useState<'home' | 'course' | 'lesson'>('home');
@@ -163,15 +162,57 @@ export default function ListeningModule({
   // I'll add the audioUrl state to ListeningModule for now, as it seems to be the main controller for the listening view.
 
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
+  const [audioTitle, setAudioTitle] = useState<string>('');
   const [localSubtitles, setLocalSubtitles] = useState<Subtitle[]>(subtitles); // To override parent subtitles if needed
 
-  // Update local subtitles when parent subtitles change (standard video flow)
+  // Update local subtitles when parent subtitles change
+  // BUT only when NOT in audio mode (don't overwrite audio session subtitles)
   React.useEffect(() => {
-    if (videoId) {
+    if (!audioUrl) {
       setLocalSubtitles(subtitles);
-      setAudioUrl(undefined);
     }
-  }, [subtitles, videoId]);
+  }, [subtitles, audioUrl]);
+
+  // Track previous subtitle to avoid logging every frame
+  const prevSubtitleRef = useRef<Subtitle | null>(null);
+
+  // Compute current subtitle locally for audio sessions
+  // This fixes the issue where getCurrentSubtitle() from parent uses parent's subtitles
+  // but audio sessions manage their own localSubtitles
+  const localCurrentSubtitle = useMemo(() => {
+    if (!audioUrl) return null; // For YouTube videos, use parent's getCurrentSubtitle
+    
+    // Debug logging for audio sessions only
+    if (localSubtitles.length === 0) {
+      console.warn('[Subtitle Matching] No subtitles available yet');
+      return null;
+    }
+    
+    // Find matching subtitle
+    const found = localSubtitles.find(
+      s => state.currentTime >= s.start && state.currentTime <= s.end
+    );
+    
+    // Only log when subtitle changes or when there's a mismatch
+    if (found) {
+      if (!prevSubtitleRef.current || prevSubtitleRef.current.id !== found.id) {
+        console.log('[Subtitle Matching] ✅ Match found:', {
+          text: found.text.substring(0, 50) + '...',
+          start: found.start,
+          end: found.end,
+          currentTime: state.currentTime
+        });
+        prevSubtitleRef.current = found;
+      }
+    } else {
+      if (prevSubtitleRef.current) {
+        console.log('[Subtitle Matching] ⚠️ No match at time:', state.currentTime, 'between', localSubtitles[0]?.start, 'and', localSubtitles[localSubtitles.length - 1]?.end);
+        prevSubtitleRef.current = null;
+      }
+    }
+    
+    return found || null;
+  }, [audioUrl, localSubtitles, state.currentTime]);
 
   // Pause player when navigating away from loop view
   useEffect(() => {
@@ -196,17 +237,33 @@ export default function ListeningModule({
     if (id) {
       fetchSubtitles(id);
       setAudioUrl(undefined); // Clear audio url when loading video
+      setAudioTitle('');
     }
     else alert('Please enter a valid YouTube URL');
   };
 
   const handleLoadSession = (session: ListeningSession) => {
+    console.log('[handleLoadSession] ========== LOADING SESSION ==========');
+    console.log('[handleLoadSession] Session ID:', session.id);
+    console.log('[handleLoadSession] Session prompt:', session.prompt);
+    console.log('[handleLoadSession] Session audioUrl type:', session.audioUrl?.startsWith('blob:') ? 'Blob URL' : session.audioUrl?.startsWith('data:') ? 'Data URL' : 'Other');
+    console.log('[handleLoadSession] Session audioUrl (first 100 chars):', session.audioUrl?.substring(0, 100));
+    console.log('[handleLoadSession] Session subtitles:', session.subtitles);
+    console.log('[handleLoadSession] Session subtitles count:', session.subtitles?.length || 0);
+    console.log('[handleLoadSession] Session transcript count:', session.transcript?.length || 0);
+    
     // 1. Set Audio URL
     setAudioUrl(session.audioUrl);
+    setAudioTitle(session.prompt || 'Audio Session');
+    console.log('[handleLoadSession] ✅ Audio URL set');
 
     // 2. Use stored subtitles if available, otherwise generate estimation
+    let subtitlesToUse: Subtitle[] = [];
     if (session.subtitles && session.subtitles.length > 0) {
-      setLocalSubtitles(session.subtitles);
+      subtitlesToUse = session.subtitles;
+      console.log('[handleLoadSession] ✅ Using stored subtitles:', subtitlesToUse.length);
+      console.log('[handleLoadSession] First subtitle:', subtitlesToUse[0]);
+      console.log('[handleLoadSession] Last subtitle:', subtitlesToUse[subtitlesToUse.length - 1]);
     } else {
       // Fallback: Generate Subtitles with estimated timestamps
       const generatedSubtitles: Subtitle[] = [];
@@ -229,34 +286,71 @@ export default function ListeningModule({
         currentTime += duration;
       });
 
-      setLocalSubtitles(generatedSubtitles);
+      subtitlesToUse = generatedSubtitles;
+      console.log('[handleLoadSession] Generated fallback subtitles:', subtitlesToUse.length);
     }
 
-    // 3. Clear Video ID (indicates audio mode to LoopView)
-    // We can't clear videoId in parent easily without a callback, but LoopView checks for audioUrl
-    // We will pass empty videoId to LoopView if audioUrl is present
+    // Emergency Fallback if still empty
+    if (subtitlesToUse.length === 0) {
+        console.warn('[handleLoadSession] Subtitles still empty. Checking transcript:', session.transcript);
+        if (session.transcript && Array.isArray(session.transcript) && session.transcript.length > 0) {
+             let currentTime = 0;
+             session.transcript.forEach((line, i) => {
+                 const text = line.text ? `${line.speaker || 'Speaker'}: ${line.text}` : JSON.stringify(line);
+                 const duration = Math.max(3, text.length / 15); 
+                 subtitlesToUse.push({
+                     id: `emergency-fallback-${i}`,
+                     start: currentTime,
+                     end: currentTime + duration,
+                     text: text
+                 });
+                 currentTime += duration;
+             });
+        } else {
+             subtitlesToUse.push({
+                 id: 'error-no-data',
+                 start: 0,
+                 end: 3600,
+                 text: 'Error: No transcript data found for this session.'
+             });
+        }
+    }
 
-    // 4. Switch View
+    console.log('[handleLoadSession] Final subtitlesToUse:', subtitlesToUse);
+    console.log('[handleLoadSession] Final subtitles count:', subtitlesToUse.length);
+
+    // Sync subtitles with parent so Space key markers work
+    setSubtitles(subtitlesToUse);
+    setLocalSubtitles(subtitlesToUse);
+    console.log('[handleLoadSession] ✅ Subtitles synced to state');
+
+    // Use session ID as videoId so markers are tied to this session
+    setVideoId(session.id);
+    console.log('[handleLoadSession] ✅ Video ID set to session ID:', session.id);
+
+    // 3. Switch View
     setView('loop');
+    console.log('[handleLoadSession] ✅ Switched to loop view');
+    console.log('[handleLoadSession] ========== SESSION LOADED ==========');
   };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
       {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
-      <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'}`}>
-        <LoopView
-          videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
-          audioUrl={audioUrl}
-          videoTitle={audioUrl ? 'Generated Audio Session' : videoTitle}
-          inputUrl={inputUrl}
-          setInputUrl={setInputUrl}
-          isFetchingSubs={isFetchingSubs}
-          onLoadVideo={handleLoadVideo}
+      <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'} relative`}>
+          <LoopView
+            videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
+            audioUrl={audioUrl}
+            videoTitle={audioUrl ? (audioTitle || 'Audio Session') : videoTitle}
+            inputUrl={inputUrl}
+            setInputUrl={setInputUrl}
+            isFetchingSubs={isFetchingSubs}
+            onLoadVideo={handleLoadVideo}
           player={player}
           onPlayerReady={setPlayer}
-          onStateChange={(s) => setState({ ...state, ...s })}
+          onStateChange={setState}
           state={state}
-          currentSubtitle={getCurrentSubtitle()}
+          currentSubtitle={audioUrl ? localCurrentSubtitle : getCurrentSubtitle()}
           subtitles={localSubtitles} // Use local subtitles
           subtitlesVisible={subtitlesVisible}
           isPeekingSubs={isPeekingSubs}
@@ -287,7 +381,11 @@ export default function ListeningModule({
       {view === 'home' && (
         <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
           <DashboardView
-            onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+            onPlayVideo={(videoId) => {
+              setAudioUrl(undefined);
+              setAudioTitle('');
+              fetchSubtitles(videoId);
+            }}
             onNavigate={(v) => setView(v as View)}
             savedCardsCount={savedCards.length}
             markersCount={markers.length}
@@ -295,21 +393,23 @@ export default function ListeningModule({
         </div>
       )}
 
-      {/* Compose View - Generate Audio Discussions */}
-      {view === 'compose' && (
-        <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
-          <ListeningCompose
-            setView={setView}
-            onLoadSession={handleLoadSession}
-          />
-        </div>
-      )}
+      {/* Compose View - Generate Audio Discussions (keep mounted) */}
+      <div className={`flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto ${view === 'compose' ? 'flex' : 'hidden'}`}>
+        <ListeningCompose
+          setView={setView}
+          onLoadSession={handleLoadSession}
+        />
+      </div>
 
       {/* History View */}
       {view === 'history' && (
         <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
           <HistoryView
-            onPlayVideo={(videoId) => fetchSubtitles(videoId)}
+            onPlayVideo={(videoId) => {
+              setAudioUrl(undefined);
+              setAudioTitle('');
+              fetchSubtitles(videoId);
+            }}
             savedCardsCount={savedCards.length}
             markersCount={markers.length}
           />
@@ -356,6 +456,8 @@ export default function ListeningModule({
                 setSelectedGoalId(null);
               }}
               onWatchVideo={async (videoId) => {
+                setAudioUrl(undefined);
+                setAudioTitle('');
                 await fetchSubtitles(videoId);
                 setView('loop');
               }}
@@ -396,6 +498,7 @@ export default function ListeningModule({
                 setLearningView('course');
                 setSelectedSegmentData(null);
               }}
+              onLoadSession={handleLoadSession}
             />
           )}
         </div>

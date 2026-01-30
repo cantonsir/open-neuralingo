@@ -15,7 +15,7 @@ import os
 
 from app import create_app
 from app.config import Config
-from app.database import ensure_upload_folder
+from app.database import ensure_upload_folder, migrate_add_subtitle_columns
 
 
 def parse_args():
@@ -50,6 +50,12 @@ def main():
     
     # Ensure upload folder exists
     ensure_upload_folder()
+
+    # Ensure subtitle columns exist
+    try:
+        migrate_add_subtitle_columns()
+    except Exception as e:
+        print(f"Migration warning: {e}")
     
     # Create and run the application
     app = create_app()

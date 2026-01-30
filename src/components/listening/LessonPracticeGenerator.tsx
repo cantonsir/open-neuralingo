@@ -27,7 +27,7 @@ import {
 import { api, PracticeSession } from '../../db';
 import { generateLessonPracticeDialogue } from '../../services/geminiService';
 import { generateSpeech } from '../../services/ttsService';
-import { Subtitle } from '../../types';
+import { Subtitle, ListeningSession } from '../../types';
 import { combineSubtitles } from '../../utils/subtitleGenerator';
 import { getAudioDuration } from '../../utils/audioAnalyzer';
 import PracticeInput from './PracticeInput';
@@ -47,6 +47,7 @@ interface LessonPracticeGeneratorProps {
     onComplete: () => void;
     onBack: () => void;
     onExit: () => void;
+    onLoadSession?: (session: ListeningSession) => void;
 }
 
 interface GeneratedDialogue {
@@ -70,7 +71,8 @@ export default function LessonPracticeGenerator({
     segmentContext,
     onComplete,
     onBack,
-    onExit
+    onExit,
+    onLoadSession
 }: LessonPracticeGeneratorProps) {
     // Input state
     const [prompt, setPrompt] = useState('');
@@ -309,6 +311,7 @@ export default function LessonPracticeGenerator({
 
             setGenerationProgress('Saving...');
             try {
+                // Save to practice_sessions table
                 const result = await api.savePracticeSession(goalId, segmentIndex, {
                     prompt: targetPrompt.trim(),
                     modelUsed: newDialogue.modelUsed,
@@ -317,6 +320,27 @@ export default function LessonPracticeGenerator({
                     subtitles: newDialogue.subtitles,
                     durationSeconds: newDialogue.durationSeconds
                 });
+
+                // Also save to listening_sessions table for Listen & Loop access
+                // Note: For multi-line dialogues, we use the first audio URL
+                // TODO: Future enhancement - concatenate audio files for seamless playback
+                try {
+                    const sessionAudioUrl = newDialogue.audioUrls[0] || '';
+                    
+                    if (sessionAudioUrl) {
+                        await api.saveListeningSession({
+                            prompt: targetPrompt.trim(),
+                            audioUrl: sessionAudioUrl,
+                            transcript: transcript,
+                            subtitles: newDialogue.subtitles,
+                            durationSeconds: newDialogue.durationSeconds,
+                            contextId: `goal-${goalId}-seg-${segmentIndex}`,
+                            createdAt: Date.now()
+                        });
+                    }
+                } catch (listeningError) {
+                    console.warn('Failed to save to listening_sessions (non-critical):', listeningError);
+                }
 
                 setDialogues(prev =>
                     prev.map(d => d.id === dialogueId ? { ...d, id: result.sessionId } : d)
@@ -476,6 +500,24 @@ export default function LessonPracticeGenerator({
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleLoadInLoop = (dialogue: GeneratedDialogue) => {
+        if (!onLoadSession) return;
+        
+        // Convert GeneratedDialogue to ListeningSession format
+        const session: ListeningSession = {
+            id: dialogue.id,
+            prompt: dialogue.prompt,
+            audioUrl: dialogue.audioUrls[0] || '', // Use first audio URL
+            transcript: dialogue.transcript,
+            subtitles: dialogue.subtitles,
+            durationSeconds: dialogue.durationSeconds,
+            createdAt: dialogue.createdAt
+        };
+        
+        // Load the session into Listen & Loop
+        onLoadSession(session);
     };
 
     const hasGeneratedDialogues = dialogues.length > 0;
@@ -779,18 +821,21 @@ export default function LessonPracticeGenerator({
                                         <div className="flex items-center gap-3">
                                             <button
                                                 onClick={() => {
-                                                    if (playingDialogueId === dialogue.id) {
+                                                    if (onLoadSession) {
+                                                        handleLoadInLoop(dialogue);
+                                                    } else if (playingDialogueId === dialogue.id) {
                                                         stopPlayback();
                                                     } else {
                                                         playDialogue(dialogue);
                                                     }
                                                 }}
-                                                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${playingDialogueId === dialogue.id
+                                                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${playingDialogueId === dialogue.id && !onLoadSession
                                                     ? 'bg-yellow-500 text-white'
-                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-yellow-500 hover:text-white'
                                                     }`}
+                                                title={onLoadSession ? 'Load in Listen & Loop' : 'Play dialogue'}
                                             >
-                                                {playingDialogueId === dialogue.id ? (
+                                                {playingDialogueId === dialogue.id && !onLoadSession ? (
                                                     <Pause size={18} />
                                                 ) : (
                                                     <Play size={18} />

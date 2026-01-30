@@ -193,7 +193,8 @@ async function generateGeminiSpeech(options: TTSOptions): Promise<TTSResult> {
             const { subtitles, accuracy } = await analyzeAudioForSubtitles(
                 audioUrl,
                 sanitizedText,
-                'gemini-tts'
+                'gemini-tts',
+                false
             );
             
             return {

@@ -10,6 +10,8 @@ interface VideoPlayerProps {
   currentSubtitle: Subtitle | null;
   playbackRate: number;
   forceShowSubtitle: boolean;
+  title?: string;
+  showTitle?: boolean;
   startTime?: number; // Optional: start position in seconds for the video
 }
 
@@ -21,6 +23,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   currentSubtitle,
   playbackRate,
   forceShowSubtitle,
+  title,
+  showTitle,
   startTime
 }) => {
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -196,6 +200,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </>
       )}
 
+      {/* Subtitle Title Overlay (Audio Sessions) */}
+      {showTitle && title && !isError && (
+        <div className="absolute top-4 left-4 z-20 pointer-events-none">
+          <div className="bg-black/60 text-white text-sm md:text-base px-3 py-1.5 rounded-full max-w-3xl truncate">
+            {title}
+          </div>
+        </div>
+      )}
+
       {/* Custom Subtitle Overlay */}
       {currentSubtitle && !isError && (
         <div
@@ -214,6 +227,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </div>
         </div>
       )}
+      
+
 
     </div>
   );
