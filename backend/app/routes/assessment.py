@@ -41,6 +41,9 @@ def get_assessment_profile():
                 'listeningLevel': p['listening_level'],
                 'subtitleDependence': p['subtitle_dependence'],
                 'difficulties': json.loads(p['difficulties']) if p['difficulties'] else [],
+                'speakingSpeed': p.get('speaking_speed', 2),
+                'learningGoal': p.get('learning_goal', 'entertainment'),
+                'skillsFocus': json.loads(p.get('skills_focus', '[]')),
                 'updatedAt': p['updated_at']
             })
         
@@ -70,10 +73,11 @@ def save_assessment_profile():
             timestamp = int(data.get('completedAt', 0)) or int(time.time() * 1000)
             
             conn.execute('''
-                INSERT INTO assessment_profiles 
-                (id, target_language, target_content, listening_level, 
-                 subtitle_dependence, difficulties, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO assessment_profiles
+                (id, target_language, target_content, listening_level,
+                 subtitle_dependence, difficulties, speaking_speed,
+                 learning_goal, skills_focus, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 profile_id,
                 data.get('targetLanguage', 'en'),
@@ -81,6 +85,9 @@ def save_assessment_profile():
                 data.get('listeningLevel', 2),
                 data.get('subtitleDependence', 1),
                 json.dumps(data.get('difficulties', [])),
+                data.get('speakingSpeed', 2),
+                data.get('learningGoal', 'entertainment'),
+                json.dumps(data.get('skillsFocus', [])),
                 timestamp,
                 timestamp
             ))

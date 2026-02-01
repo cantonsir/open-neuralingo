@@ -631,6 +631,25 @@ def migrate_db():
     except Exception as e:
         print(f"Migration warning (generated_subtitles): {e}")
 
+    # Migration: Add new assessment profile fields (speaking speed, learning goal, skills focus)
+    try:
+        conn = sqlite3.connect(Config.DB_FILE)
+        c = conn.cursor()
+
+        # Check if speaking_speed column exists
+        try:
+            c.execute("SELECT speaking_speed FROM assessment_profiles LIMIT 1")
+        except sqlite3.OperationalError:
+            print("Migrating: Adding new assessment fields (speaking_speed, learning_goal, skills_focus)...")
+            c.execute("ALTER TABLE assessment_profiles ADD COLUMN speaking_speed INTEGER DEFAULT 2")
+            c.execute("ALTER TABLE assessment_profiles ADD COLUMN learning_goal TEXT DEFAULT 'entertainment'")
+            c.execute("ALTER TABLE assessment_profiles ADD COLUMN skills_focus TEXT DEFAULT '[]'")
+            conn.commit()
+            print("Migration complete: Added speaking_speed, learning_goal, skills_focus to assessment_profiles.")
+        conn.close()
+    except Exception as e:
+        print(f"Migration warning (assessment fields): {e}")
+
 
 def ensure_upload_folder():
     """

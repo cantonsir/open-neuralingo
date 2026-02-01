@@ -8,6 +8,9 @@ interface AssessmentResult {
     listeningLevel: number;
     subtitleDependence: number;
     difficulties: string[];
+    speakingSpeed: number;
+    learningGoal: string;
+    skillsFocus: string[];
 }
 
 export interface TestSentence {
@@ -42,6 +45,32 @@ const languageLabels: Record<string, string> = {
     de: 'German',
 };
 
+const speakingSpeedLabels: Record<number, string> = {
+    0: 'very slow and clear speech',
+    1: 'slow natural speech',
+    2: 'normal conversational pace',
+    3: 'fast natural speech',
+    4: 'native speed with slang and shortcuts',
+};
+
+const learningGoalLabels: Record<string, string> = {
+    travel: 'travel and tourism scenarios',
+    work: 'professional and work contexts',
+    entertainment: 'entertainment and media content',
+    academic: 'academic and educational settings',
+    social: 'social interactions and conversations',
+    heritage: 'cultural and family contexts',
+};
+
+const skillsFocusLabels: Record<string, string> = {
+    'word-recognition': 'catching individual words clearly',
+    'meaning-comprehension': 'understanding overall meaning and context',
+    'grammar-patterns': 'recognizing grammar structures and sentence patterns',
+    'fast-speech': 'processing fast or native-speed speech',
+    'real-world': 'handling real-world conversational situations',
+    'specific-accents': 'understanding specific accents and dialects',
+};
+
 // --- MODEL CONFIGURATION ---
 const TEXT_MODEL = 'gemini-2.0-flash'; // Fallback / Standard 
 // User requested: "gemini-3-flash-preview" for text
@@ -61,20 +90,39 @@ function buildPrompt(assessment: AssessmentResult): string {
     const level = assessment.listeningLevel;
     const difficulties = assessment.difficulties.map(d => difficultyLabels[d] || d).join(' and ');
 
+    // NEW FIELDS
+    const speedPref = speakingSpeedLabels[assessment.speakingSpeed || 2];
+    const goal = learningGoalLabels[assessment.learningGoal || 'entertainment'];
+    const skills = (assessment.skillsFocus || []).map(s => skillsFocusLabels[s] || s).join(' and ');
+
     return `You are a language learning expert. Generate exactly 10 ${language} listening practice sentences for a learner.
 
 Learner Profile:
 - Target content: ${content}
+- Learning goal: ${goal}
 - Listening level: ${level}/5 (0=beginner, 5=advanced)
+- Speaking speed preference: ${speedPref}
 - Main difficulties: ${difficulties || 'general listening comprehension'}
+- Focus skills: ${skills || 'overall listening improvement'}
 
-Sentence Requirements based on level ${level}:
+Sentence Requirements based on level ${level} and speed preference "${speedPref}":
 ${level <= 1 ? '- Very short sentences (4-6 words)\n- Basic, high-frequency vocabulary\n- Clear, simple grammar' : ''}
 ${level === 2 ? '- Short sentences (6-8 words)\n- Common vocabulary with some variety\n- Simple sentence structures' : ''}
 ${level === 3 ? '- Medium sentences (8-10 words)\n- Natural vocabulary from ${content}\n- Some idiomatic expressions' : ''}
 ${level >= 4 ? '- Longer sentences (10-15 words)\n- Natural speech patterns with contractions\n- Include linking sounds and reduced forms' : ''}
 
-Content theme: Create sentences that would naturally appear in ${content}.
+${assessment.speakingSpeed >= 3 ? 'IMPORTANT: Use natural contractions (gonna, wanna, kinda), reduced forms (\'em, \'til), and fast speech patterns.' : ''}
+${assessment.speakingSpeed <= 1 ? 'IMPORTANT: Use clear, fully pronounced words. Avoid contractions and linking sounds.' : ''}
+
+Content theme: Create sentences that would naturally appear in ${goal} within the context of ${content}.
+
+Skill Focus Instructions:
+${skills.includes('word-recognition') ? '- Design sentences where individual words are distinct and can be practiced separately\n' : ''}
+${skills.includes('meaning-comprehension') ? '- Include sentences with clear context clues and logical flow\n' : ''}
+${skills.includes('grammar-patterns') ? '- Feature common grammar structures and sentence patterns from ${language}\n' : ''}
+${skills.includes('fast-speech') ? '- Use natural fast speech patterns with elisions and reductions\n' : ''}
+${skills.includes('real-world') ? '- Create realistic conversational exchanges and natural dialogues\n' : ''}
+${skills.includes('specific-accents') ? '- Include colloquialisms and regional expressions from ${language}\n' : ''}
 
 IMPORTANT: Return ONLY a valid JSON array with exactly 10 objects. No markdown, no explanation.
 Format: [{"id": 1, "sentence": "...", "difficulty": "easy|medium|hard"}, ...]
