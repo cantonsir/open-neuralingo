@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { YouTubePlayer } from 'react-youtube';
 import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, View, ListeningSession } from '../../types';
 import { GoalVideo, GoalVideoDetail, api } from '../../db';
+import { generateSubtitles } from '../../services/subtitleGenerationService';
 
 // Views
 import LoopView from './LoopView';
@@ -27,7 +28,7 @@ interface ListeningModuleProps {
   inputUrl: string;
   setInputUrl: (url: string) => void;
   isFetchingSubs: boolean;
-  fetchSubtitles: (id: string, shouldNavigate?: boolean) => Promise<void>;
+  fetchSubtitles: (id: string, shouldNavigate?: boolean) => Promise<any>;
   player: YouTubePlayer | null;
   setPlayer: (player: YouTubePlayer | null) => void;
   state: PlayerState;
@@ -164,6 +165,7 @@ export default function ListeningModule({
   const [audioUrl, setAudioUrl] = useState<string | undefined>(undefined);
   const [audioTitle, setAudioTitle] = useState<string>('');
   const [localSubtitles, setLocalSubtitles] = useState<Subtitle[]>(subtitles); // To override parent subtitles if needed
+  const [isGeneratingSubtitles, setIsGeneratingSubtitles] = useState(false);
 
   // Update local subtitles when parent subtitles change
   // BUT only when NOT in audio mode (don't overwrite audio session subtitles)
@@ -172,6 +174,34 @@ export default function ListeningModule({
       setLocalSubtitles(subtitles);
     }
   }, [subtitles, audioUrl]);
+
+  // Handle subtitle generation for videos without subtitles
+  const handleGenerateSubtitles = useCallback(async (targetVideoId: string) => {
+    console.log('[ListeningModule] Starting subtitle generation for:', targetVideoId);
+    setIsGeneratingSubtitles(true);
+    
+    try {
+      const generatedSubs = await generateSubtitles(targetVideoId);
+      console.log('[ListeningModule] Generated subtitles:', generatedSubs.length);
+      
+      // Update both parent and local subtitles
+      setSubtitles(generatedSubs);
+      setLocalSubtitles(generatedSubs);
+      
+    } catch (error) {
+      console.error('[ListeningModule] Subtitle generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Show detailed error with setup instructions if needed
+      if (errorMessage.includes('not configured') || errorMessage.includes('not installed')) {
+        alert(`Subtitle Generation Setup Required:\n\n${errorMessage}\n\nSetup Instructions:\n1. pip install google-cloud-speech yt-dlp\n2. Set GOOGLE_APPLICATION_CREDENTIALS environment variable\n3. Restart the backend server`);
+      } else {
+        alert(`Failed to generate subtitles:\n\n${errorMessage}`);
+      }
+    } finally {
+      setIsGeneratingSubtitles(false);
+    }
+  }, [setSubtitles]);
 
   // Track previous subtitle to avoid logging every frame
   const prevSubtitleRef = useRef<Subtitle | null>(null);
@@ -374,6 +404,8 @@ export default function ListeningModule({
           onFocusSegment={setFocusedSegment}
           onToggleSegmentWord={handleToggleWordForSegment}
           onToggleSegmentRange={handleToggleRangeForSegment}
+          onGenerateSubtitles={handleGenerateSubtitles}
+          isGeneratingSubtitles={isGeneratingSubtitles}
         />
       </div>
 

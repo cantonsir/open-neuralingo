@@ -14,6 +14,7 @@ from app.routes.segment_learning import segment_learning_bp
 from app.routes.library import library_bp
 from app.routes.speaking import speaking_bp
 from app.routes.writing import writing_bp
+from app.routes.subtitle_generation import subtitle_gen_bp
 
 __all__ = [
     'transcript_bp',
@@ -26,4 +27,5 @@ __all__ = [
     'library_bp',
     'speaking_bp',
     'writing_bp',
+    'subtitle_gen_bp',
 ]

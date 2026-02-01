@@ -442,6 +442,20 @@ def init_db():
         )
     ''')
     
+    # Generated subtitles cache (for videos without native subtitles)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS generated_subtitles (
+            video_id TEXT PRIMARY KEY,
+            subtitles_json TEXT NOT NULL,
+            language TEXT,
+            source TEXT,
+            generated_at INTEGER,
+            audio_gcs_uri TEXT,
+            audio_duration_seconds REAL,
+            audio_size_bytes INTEGER
+        )
+    ''')
+    
     # Reading table
     c.execute('''
         CREATE TABLE IF NOT EXISTS reading_sessions (
@@ -595,6 +609,27 @@ def migrate_db():
         migrate_add_subtitle_columns()
     except Exception as e:
         print(f"Migration warning: {e}")
+
+    # Migration: Add audio cache columns to generated_subtitles
+    try:
+        conn = sqlite3.connect(Config.DB_FILE)
+        c = conn.cursor()
+        generated_columns = [
+            ('audio_gcs_uri', 'TEXT'),
+            ('audio_duration_seconds', 'REAL'),
+            ('audio_size_bytes', 'INTEGER'),
+        ]
+        for col_name, col_type in generated_columns:
+            try:
+                c.execute(f"SELECT {col_name} FROM generated_subtitles LIMIT 1")
+            except sqlite3.OperationalError:
+                print(f"Migrating: Adding '{col_name}' column to generated_subtitles table...")
+                c.execute(f"ALTER TABLE generated_subtitles ADD COLUMN {col_name} {col_type}")
+                conn.commit()
+                print(f"Migration complete: Added {col_name} to generated_subtitles.")
+        conn.close()
+    except Exception as e:
+        print(f"Migration warning (generated_subtitles): {e}")
 
 
 def ensure_upload_folder():

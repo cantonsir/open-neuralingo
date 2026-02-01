@@ -208,55 +208,84 @@ export function useVideoPlayer({
 
   const fetchSubtitles = async (id: string, shouldNavigate: boolean = true) => {
     setIsFetchingSubs(true);
+    let subtitlesFetched = false;
+    let errorMessage = '';
+    
     try {
       const response = await fetch(`/api/transcript?videoId=${id}&language=${targetLanguage}`);
-      if (!response.ok) {
-        throw new Error(`Error: ${response.statusText}`);
-      }
-      const data = await response.json();
-
-      const parsed: Subtitle[] = data.map((item: any) => ({
-        id: Math.random().toString(36).substr(2, 9),
-        start: item.start,
-        end: item.start + item.duration,
-        text: item.text
-      }));
-
-      setSubtitles(parsed);
-      setPlayer(null);
-      setVideoId(id);
-      setIsSetupMode(false);
-
-      let resolvedTitle = `YouTube Video (${id})`;
-      try {
-        const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
-        if (oembedRes.ok) {
-          const oembedData = await oembedRes.json();
-          resolvedTitle = oembedData.title || resolvedTitle;
+      
+      if (response.ok) {
+        const data = await response.json();
+        const parsed: Subtitle[] = data.map((item: any) => ({
+          id: Math.random().toString(36).substr(2, 9),
+          start: item.start,
+          end: item.start + item.duration,
+          text: item.text
+        }));
+        setSubtitles(parsed);
+        subtitlesFetched = true;
+      } else {
+        // Parse error response to provide specific feedback
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 404 || errorData.error?.includes('No transcript')) {
+          errorMessage = 'no_subtitles';
+          console.warn(`[fetchSubtitles] No subtitles available for video ${id}`);
+        } else {
+          errorMessage = 'fetch_error';
+          console.error(`[fetchSubtitles] Error fetching subtitles: ${response.status}`);
         }
-      } catch (e) {
-        // Silently fail
-      }
-
-      setVideoTitle(resolvedTitle);
-
-      api.saveToHistory({
-        videoId: id,
-        title: resolvedTitle,
-        thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
-        watchedAt: Date.now(),
-        wordsLearned: 0
-      });
-
-      if (shouldNavigate) {
-        setView('loop');
+        // Set empty subtitles - video can still load
+        setSubtitles([]);
       }
     } catch (error) {
-      console.error(error);
-      alert('Failed to fetch subtitles. Make sure the backend server is running!');
-    } finally {
-      setIsFetchingSubs(false);
+      console.error('[fetchSubtitles] Network/server error:', error);
+      errorMessage = 'server_error';
+      // Set empty subtitles - video can still load
+      setSubtitles([]);
     }
+
+    // Always proceed to load video (even without subtitles)
+    setPlayer(null);
+    setVideoId(id);
+    setIsSetupMode(false);
+
+    // Fetch video title
+    let resolvedTitle = `YouTube Video (${id})`;
+    try {
+      const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        resolvedTitle = oembedData.title || resolvedTitle;
+      }
+    } catch (e) {
+      // Silently fail - use fallback title
+    }
+
+    setVideoTitle(resolvedTitle);
+
+    // Save to history
+    api.saveToHistory({
+      videoId: id,
+      title: resolvedTitle,
+      thumbnail: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+      watchedAt: Date.now(),
+      wordsLearned: 0
+    });
+
+    // Navigate to loop view
+    if (shouldNavigate) {
+      setView('loop');
+    }
+
+    setIsFetchingSubs(false);
+
+    // Return status for UI feedback
+    return {
+      success: subtitlesFetched,
+      errorType: errorMessage,
+      videoId: id,
+      title: resolvedTitle
+    };
   };
 
   const loadVideo = (id: string, subText: string) => {

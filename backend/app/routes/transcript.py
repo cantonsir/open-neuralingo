@@ -5,8 +5,11 @@ Handles YouTube transcript fetching and language listing.
 """
 
 import traceback
+import json
 from flask import Blueprint, request, jsonify
 from youtube_transcript_api import YouTubeTranscriptApi
+
+from app.database import get_db
 
 
 transcript_bp = Blueprint('transcript', __name__)
@@ -44,7 +47,30 @@ def get_transcript():
         return jsonify(transcript_data)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_text = str(e)
+
+        # Fallback: return cached generated subtitles if available
+        try:
+            with get_db() as conn:
+                cached = conn.execute('''
+                    SELECT subtitles_json
+                    FROM generated_subtitles
+                    WHERE video_id = ?
+                ''', (video_id,)).fetchone()
+
+                if cached and cached['subtitles_json']:
+                    try:
+                        subtitles = json.loads(cached['subtitles_json'])
+                        return jsonify(subtitles)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # If no cached subtitles, return a more specific status for missing transcripts
+        not_found_markers = ['NoTranscriptFound', 'TranscriptsDisabled', 'No transcript']
+        status = 404 if any(marker in error_text for marker in not_found_markers) else 500
+        return jsonify({'error': error_text}), status
 
 
 @transcript_bp.route('/transcript/languages', methods=['GET'])

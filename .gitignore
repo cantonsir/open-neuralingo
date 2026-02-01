@@ -43,3 +43,6 @@ venv.bak/
 *.db
 *.sqlite3
 backend/flashcards.db
+
+# Keys
+speech2text-key/
