@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, ChevronDown, Paperclip, Send, Loader2 } from 'lucide-react';
+import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, Paperclip, Send, Loader2, CheckSquare, Square } from 'lucide-react';
 
 interface UnifiedInputProps {
     value: string;
@@ -16,6 +16,8 @@ interface UnifiedInputProps {
     // New Props for "Professional" Mode
     mode?: 'fast' | 'plan';
     onModeChange?: (mode: 'fast' | 'plan') => void;
+    multiVoice?: boolean;
+    onMultiVoiceChange?: (enabled: boolean) => void;
     url?: string;
     onUrlChange?: (url: string) => void;
     onSubmit?: () => void;
@@ -36,6 +38,8 @@ export default function UnifiedInput({
     className = "",
     mode,
     onModeChange,
+    multiVoice = false,
+    onMultiVoiceChange,
     url,
     onUrlChange,
     onSubmit,
@@ -106,30 +110,47 @@ export default function UnifiedInput({
             <div className="px-5 pt-4 flex items-center justify-between gap-3">
 
                 {/* Mode Selector (Only if supported) */}
-                {mode && onModeChange && (
-                    <div className="flex bg-gray-100 dark:bg-gray-900/50 p-1 rounded-full border border-gray-200 dark:border-gray-700">
-                        <button
-                            onClick={() => onModeChange('fast')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${mode === 'fast'
-                                ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
-                                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            <Zap className="w-4 h-4" fill={mode === 'fast' ? "currentColor" : "none"} />
-                            <span className="hidden sm:inline">Fast</span>
-                        </button>
-                        <button
-                            onClick={() => onModeChange('plan')}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${mode === 'plan'
-                                ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
-                                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                }`}
-                        >
-                            <Brain className="w-4 h-4" />
-                            <span className="hidden sm:inline">Plan</span>
-                        </button>
-                    </div>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {mode && onModeChange && (
+                        <div className="flex bg-gray-100 dark:bg-gray-900/50 p-1 rounded-full border border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={() => onModeChange('fast')}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${mode === 'fast'
+                                    ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                <Zap className="w-4 h-4" fill={mode === 'fast' ? "currentColor" : "none"} />
+                                <span className="hidden sm:inline">Fast</span>
+                            </button>
+                            <button
+                                onClick={() => onModeChange('plan')}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${mode === 'plan'
+                                    ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                <Brain className="w-4 h-4" />
+                                <span className="hidden sm:inline">Plan</span>
+                            </button>
+                        </div>
+                    )}
+
+                    {onMultiVoiceChange && (
+                        <div className="flex bg-gray-100 dark:bg-gray-900/50 p-1 rounded-full border border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={() => onMultiVoiceChange(!multiVoice)}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${multiVoice
+                                    ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white'
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                {multiVoice ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                <span className="hidden sm:inline">Multi-Voice</span>
+                            </button>
+                        </div>
+                    )}
+                </div>
 
                 {/* Context Chip */}
                 <div className="flex-1 flex justify-end gap-2 overflow-hidden">

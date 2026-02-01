@@ -95,11 +95,12 @@ export function useAudioPlayer(options: UseAudioPlayerOptions = {}): UseAudioPla
 
         try {
             console.log('[AudioPlayer] Generating TTS for:', sentence.sentence);
-            const audioUrl = await generateSpeech({
+            const ttsResult = await generateSpeech({
                 text: sentence.sentence,
                 voiceName
             });
-            console.log('[AudioPlayer] TTS generated, caching with id:', sentence.id);
+            const audioUrl = ttsResult.audioUrl;
+            console.log('[AudioPlayer] TTS generated, caching with id:', sentence.id, 'source:', ttsResult.source);
             audioCacheRef.current.set(sentence.id, audioUrl);
             return audioUrl;
         } catch (error) {

@@ -177,8 +177,8 @@ export class GeminiLiveService {
 
         // Generate TTS
         try {
-            const audioUrl = await generateSpeech({ text, voiceName: 'Kore' });
-            const audio = new Audio(audioUrl);
+            const ttsResult = await generateSpeech({ text, voiceName: 'Kore' });
+            const audio = new Audio(ttsResult.audioUrl);
 
             // Connect audio to visualizer (AI speaking visualization)
             // Note: We need to disconnect the mic from the visualizer first? 

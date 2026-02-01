@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Trash2, Loader2 } from 'lucide-react';
 import { api } from '../../db';
 
 interface AssessmentResult {
@@ -40,6 +41,8 @@ const AssessmentHistory: React.FC<AssessmentHistoryProps> = ({ onClose }) => {
   const [results, setResults] = useState<AssessmentResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     loadAllResults();
@@ -54,6 +57,25 @@ const AssessmentHistory: React.FC<AssessmentHistoryProps> = ({ onClose }) => {
       console.error('Failed to load assessment history:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (resultId: string) => {
+    try {
+      setDeletingId(resultId);
+      await api.deleteAssessmentResult(resultId);
+
+      // Remove from local state
+      setResults(prev => prev.filter(r => r.id !== resultId));
+
+      // Show success message
+      console.log('Result deleted successfully');
+    } catch (error) {
+      console.error('Failed to delete result:', error);
+      alert('Failed to delete result. Please try again.');
+    } finally {
+      setDeletingId(null);
+      setShowDeleteConfirm(null);
     }
   };
 
@@ -224,11 +246,11 @@ const AssessmentHistory: React.FC<AssessmentHistoryProps> = ({ onClose }) => {
                           className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
                         >
                           {/* Summary Row */}
-                          <button
-                            onClick={() => toggleExpand(result.id)}
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors text-left"
-                          >
-                            <div className="flex items-center space-x-4 flex-1">
+                          <div className="px-4 py-3 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors">
+                            <button
+                              onClick={() => toggleExpand(result.id)}
+                              className="flex items-center space-x-4 flex-1 text-left"
+                            >
                               <span className="text-sm font-medium text-gray-600 dark:text-gray-400 min-w-[80px]">
                                 {formattedDate} • {formattedTime}
                               </span>
@@ -241,18 +263,35 @@ const AssessmentHistory: React.FC<AssessmentHistoryProps> = ({ onClose }) => {
                               <span className="text-sm text-gray-500 dark:text-gray-400">
                                 {totalReplays} replays
                               </span>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowDeleteConfirm(result.id);
+                                }}
+                                disabled={deletingId === result.id}
+                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                                title="Delete this result"
+                              >
+                                {deletingId === result.id ? (
+                                  <Loader2 size={18} className="animate-spin" />
+                                ) : (
+                                  <Trash2 size={18} />
+                                )}
+                              </button>
+                              <svg
+                                className={`w-5 h-5 text-gray-500 transition-transform ${
+                                  isExpanded ? 'transform rotate-180' : ''
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
                             </div>
-                            <svg
-                              className={`w-5 h-5 text-gray-500 transition-transform ${
-                                isExpanded ? 'transform rotate-180' : ''
-                              }`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
+                          </div>
 
                           {/* Expanded Details */}
                           {isExpanded && (
@@ -354,6 +393,34 @@ const AssessmentHistory: React.FC<AssessmentHistoryProps> = ({ onClose }) => {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+              Delete Test Result?
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              This action cannot be undone. The test result and all its details will be permanently deleted.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(showDeleteConfirm)}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

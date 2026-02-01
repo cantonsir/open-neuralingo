@@ -122,7 +122,10 @@ def get_assessment_results():
                 # Default behavior for backward compatibility
                 query += ' LIMIT 5'
 
-            results = conn.execute(query, params if params else None).fetchall()
+            if params:
+                results = conn.execute(query, params).fetchall()
+            else:
+                results = conn.execute(query).fetchall()
             
             if not results:
                 return jsonify([])
@@ -225,10 +228,59 @@ def save_assessment_result():
                     resp.get('reactionTimeMs', 0),
                     json.dumps(resp.get('markedIndices', []))
                 ))
-                
+
+            # Invalidate cached statistics so new results appear immediately
+            conn.execute('DELETE FROM assessment_analytics')
+
             conn.commit()
-            
+
             return jsonify({'status': 'success', 'id': result_id}), 201
-        
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@assessment_bp.route('/assessment/results/<result_id>', methods=['DELETE'])
+def delete_assessment_result(result_id):
+    """
+    Delete a specific assessment result and all its details.
+
+    Path Parameters:
+        result_id: UUID of the result to delete
+
+    Returns:
+        200: Success with deleted result info
+        404: Result not found
+        500: Server error
+    """
+    try:
+        with get_db() as conn:
+            # Check if result exists
+            result = conn.execute(
+                'SELECT id FROM mini_test_results WHERE id = ?',
+                (result_id,)
+            ).fetchone()
+
+            if not result:
+                return jsonify({'error': 'Result not found'}), 404
+
+            # Delete dependent records first (foreign key constraint)
+            conn.execute(
+                'DELETE FROM mini_test_details WHERE result_id = ?',
+                (result_id,)
+            )
+
+            # Delete the main result
+            conn.execute(
+                'DELETE FROM mini_test_results WHERE id = ?',
+                (result_id,)
+            )
+
+            # Invalidate cached statistics to reflect deletion
+            conn.execute('DELETE FROM assessment_analytics')
+
+            conn.commit()
+            return jsonify({'status': 'deleted', 'id': result_id}), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500

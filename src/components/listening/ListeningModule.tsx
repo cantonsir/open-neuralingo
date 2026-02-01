@@ -430,6 +430,7 @@ export default function ListeningModule({
         <ListeningCompose
           setView={setView}
           onLoadSession={handleLoadSession}
+          targetLanguage={targetLanguage}
         />
       </div>
 

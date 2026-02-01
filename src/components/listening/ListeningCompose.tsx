@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Clock, ChevronDown, ChevronUp, Play, Sparkles, MoveRight, Trash2, Download } from 'lucide-react';
+import { Clock, ChevronDown, ChevronUp, Play, Sparkles, MoveRight, Trash2, Download, CheckSquare, Square } from 'lucide-react';
 import { View, LibraryItem, ListeningSession, Subtitle } from '../../types';
 import { api } from '../../db';
 import UnifiedInput from '../common/UnifiedInput';
 import { generateListeningDiscussion, chatWithPlanner } from '../../services/geminiService';
-import { generateDialogue } from '../../services/ttsService';
+import { generateMultiVoiceDialogue, generateSpeech } from '../../services/ttsService';
 import { combineSubtitles } from '../../utils/subtitleGenerator';
 import { getAudioDuration } from '../../utils/audioAnalyzer';
 import { downloadSubtitles } from '../../utils/subtitleExporter';
@@ -14,6 +14,7 @@ import MessageBubble from './MessageBubble';
 interface ListeningComposeProps {
     setView: (view: View) => void;
     onLoadSession: (session: ListeningSession) => void;
+    targetLanguage: string;
 }
 
 interface Message {
@@ -24,7 +25,7 @@ interface Message {
     timestamp: number;
 }
 
-export default function ListeningCompose({ setView, onLoadSession }: ListeningComposeProps) {
+export default function ListeningCompose({ setView, onLoadSession, targetLanguage }: ListeningComposeProps) {
     const [prompt, setPrompt] = useState('');
     const [contextId, setContextId] = useState('');
     const [library, setLibrary] = useState<LibraryItem[]>([]);
@@ -38,10 +39,13 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
     // Sidebar/History State
     const [history, setHistory] = useState<ListeningSession[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(new Set());
 
     // New State for Upgraded Input
     const [mode, setMode] = useState<'fast' | 'plan'>('fast');
     const [url, setUrl] = useState('');
+    const [multiVoice, setMultiVoice] = useState(false);
 
     const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
@@ -63,6 +67,14 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                 console.log(`[ListeningCompose] Session ${i}: subtitles count =`, s.subtitles?.length || 0);
             });
             setHistory(sessions);
+            setSelectedSessionIds(prev => {
+                const allowed = new Set(sessions.map(session => session.id));
+                const next = new Set([...prev].filter(id => allowed.has(id)));
+                if (next.size === 0) {
+                    setIsSelectionMode(false);
+                }
+                return next;
+            });
         } catch (error) {
             console.error('Failed to load history:', error);
         }
@@ -150,19 +162,24 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
         }
 
         // Generate discussion script
-        const discussion = await generateListeningDiscussion(userPrompt, contextText);
+        const discussion = await generateListeningDiscussion(userPrompt, contextText, {
+            multiVoice,
+            languageCode: targetLanguage
+        });
 
         if (discussion.length === 0) {
             throw new Error('Failed to generate discussion.');
         }
 
-        // Format transcript for multi-speaker generation
+        // Format transcript for single-voice generation
         const fullTranscript = discussion
             .map(line => `${line.speaker}: ${line.text}`)
             .join('\n');
 
         // Generate audio with subtitles
-        const ttsResult = await generateDialogue(fullTranscript, 'Aoede');
+        const ttsResult = multiVoice
+            ? await generateMultiVoiceDialogue(discussion, { languageCode: targetLanguage })
+            : await generateSpeech({ text: fullTranscript, voiceName: 'Kore', languageCode: targetLanguage });
 
         // Use result subtitles if available, otherwise estimate
         let subtitles: Subtitle[] = ttsResult.subtitles || [];
@@ -270,6 +287,36 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
         }
     };
 
+    const toggleSessionSelection = (sessionId: string) => {
+        setSelectedSessionIds(prev => {
+            const next = new Set(prev);
+            if (next.has(sessionId)) {
+                next.delete(sessionId);
+            } else {
+                next.add(sessionId);
+            }
+            return next;
+        });
+    };
+
+    const handleDeleteSelectedSessions = async () => {
+        if (selectedSessionIds.size === 0) return;
+        const count = selectedSessionIds.size;
+        if (!confirm(`Delete ${count} selected session${count > 1 ? 's' : ''}?`)) return;
+
+        try {
+            const ids = Array.from(selectedSessionIds);
+            await Promise.all(ids.map(id => api.deleteListeningSession(id)));
+            setHistory(prev => prev.filter(session => !selectedSessionIds.has(session.id)));
+            setMessages(prev => prev.filter(msg => !msg.session || !selectedSessionIds.has(msg.session.id)));
+            setSelectedSessionIds(new Set());
+            setIsSelectionMode(false);
+        } catch (error) {
+            console.error('Failed to delete selected sessions:', error);
+            alert('Failed to delete selected sessions');
+        }
+    };
+
     const formatTime = (ms: number) => {
         return new Date(ms).toLocaleDateString() + ' ' + new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
@@ -281,12 +328,32 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
     };
 
     // Render helper for the session card
-    const renderSessionCard = (session: ListeningSession, isCompact = false) => (
-        <div className={`bg-white dark:bg-gray-800 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm transition-all hover:shadow-md w-full ${isCompact ? 'text-sm' : ''}`}>
+    const renderSessionCard = (session: ListeningSession, isCompact = false, selectionMode = false) => (
+        <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm transition-all hover:shadow-md w-full ${isCompact ? 'text-sm' : ''}`}>
             <div
-                onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
+                onClick={() => {
+                    if (isCompact && selectionMode) {
+                        toggleSessionSelection(session.id);
+                        return;
+                    }
+                    setExpandedSession(expandedSession === session.id ? null : session.id);
+                }}
                 className={`flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors ${isCompact ? 'p-3' : 'p-4'}`}
             >
+                {isCompact && selectionMode && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSessionSelection(session.id);
+                        }}
+                        className="mr-2 text-gray-400 hover:text-amber-500"
+                        title={selectedSessionIds.has(session.id) ? 'Deselect' : 'Select'}
+                    >
+                        {selectedSessionIds.has(session.id)
+                            ? <CheckSquare className="w-4 h-4" />
+                            : <Square className="w-4 h-4" />}
+                    </button>
+                )}
                 <div className="flex-1 min-w-0">
                     <h3 className={`font-bold text-gray-900 dark:text-white line-clamp-1 ${isCompact ? 'text-sm' : ''}`}>{session.prompt}</h3>
                     <p className="text-xs text-gray-500 mt-1 truncate">
@@ -431,12 +498,46 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
 
             {/* Sidebar (History) */}
             <div className={`flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 flex-shrink-0 ${isSidebarOpen ? 'w-72' : 'w-0 opacity-0 overflow-hidden'}`}>
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                    <h2 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        History
-                    </h2>
-                    <span className="text-xs text-gray-400">{history.length} sessions</span>
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+                    <div className="flex flex-col">
+                        <h2 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                            <Clock className="w-4 h-4" />
+                            History
+                        </h2>
+                        <span className="text-xs text-gray-400">{history.length} sessions</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {isSelectionMode ? (
+                            <>
+                                <button
+                                    onClick={handleDeleteSelectedSessions}
+                                    disabled={selectedSessionIds.size === 0}
+                                    className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${selectedSessionIds.size === 0
+                                        ? 'text-gray-400 bg-gray-100 dark:bg-gray-700 cursor-not-allowed'
+                                        : 'text-white bg-red-500 hover:bg-red-600'
+                                        }`}
+                                >
+                                    Delete {selectedSessionIds.size > 0 ? `(${selectedSessionIds.size})` : ''}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsSelectionMode(false);
+                                        setSelectedSessionIds(new Set());
+                                    }}
+                                    className="text-xs font-medium px-2 py-1 rounded-md border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    Cancel
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => setIsSelectionMode(true)}
+                                className="text-xs font-medium px-2 py-1 rounded-md border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            >
+                                Select
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-3 space-y-3">
                     {history.length === 0 ? (
@@ -446,7 +547,7 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                     ) : (
                         history.map(session => (
                             <div key={session.id}>
-                                {renderSessionCard(session, true)}
+                                {renderSessionCard(session, true, isSelectionMode)}
                             </div>
                         ))
                     )}
@@ -550,6 +651,8 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                             placeholder={mode === 'plan' ? "Discuss your idea..." : "Describe a topic for listening practice..."}
                             mode={mode}
                             onModeChange={setMode}
+                            multiVoice={multiVoice}
+                            onMultiVoiceChange={setMultiVoice}
                             url={url}
                             onUrlChange={setUrl}
                             onSubmit={handleInputSubmit}

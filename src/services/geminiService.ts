@@ -1,5 +1,7 @@
 // Gemini AI Service for generating personalized test sentences
 
+import { getLanguageName } from '../utils/languageOptions';
+
 interface AssessmentResult {
     targetLanguage: string;
     targetContent: string;
@@ -1022,27 +1024,41 @@ export interface DiscussionLine {
  * Generate a multi-person discussion script for listening practice.
  * Creates a natural conversation between 2-3 people (~1 minute duration, 10-15 exchanges).
  */
-export async function generateListeningDiscussion(prompt: string, context?: string): Promise<DiscussionLine[]> {
+export async function generateListeningDiscussion(
+    prompt: string,
+    context?: string,
+    options?: { multiVoice?: boolean; languageCode?: string }
+): Promise<DiscussionLine[]> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) return [];
 
-    const systemPrompt = `Generate a script for an audio listening practice segment based on: "${prompt}".
-    ${context ? `Context: ${context}` : ''}
-    
-    The content can be:
+    const languageName = getLanguageName(options?.languageCode);
+
+    const multiVoice = options?.multiVoice ?? false;
+    const formatGuidance = multiVoice
+        ? `The content must be a conversation between 2-3 distinct speakers.
+    Do not generate a monologue.
+    Use consistent speaker names throughout (e.g., "Person A", "Person B", "Person C").`
+        : `The content can be:
     - A conversation between 2-3 people (if the prompt suggests discussion)
     - A monologue/story/news report (if the prompt suggests it)
     - Educational content
+
+    For monologues, use the same speaker name (e.g., "Narrator") for all segments.
+    For conversations, use distinct speaker names (e.g., "Person A", "Person B") consistently.`;
+
+    const systemPrompt = `Generate a script for an audio listening practice segment based on: "${prompt}".
+    ${context ? `Context: ${context}` : ''}
+    Write the script in ${languageName}.
+    
+    ${formatGuidance}
     
     Requirements:
     - Length: About 10-15 segments/exchanges (roughly 1 minute total)
     - Natural and suitable for intermediate learners
     
     Return ONLY valid JSON array in this exact format:
-    [{"speaker": "Speaker Name", "text": "...text segment..."}]
-    
-    For monologues, use the same speaker name (e.g., "Narrator") for all segments.
-    For conversations, use distinct speaker names (e.g., "Person A", "Person B") consistently.`;
+    [{"speaker": "Speaker Name", "text": "...text segment..."}]`;
 
     try {
         const response = await fetch(

@@ -38,7 +38,14 @@ def get_cached_stats(time_window: str) -> Dict[str, Any] | None:
                 return None
 
             c = dict(cached)
-            return json.loads(c['stats_json']) if c['stats_json'] else None
+            if not c.get('stats_json'):
+                return None
+            try:
+                cached_stats = json.loads(c['stats_json'])
+            except Exception:
+                return None
+
+            return cached_stats if isinstance(cached_stats, dict) else None
     except Exception:
         return None
 
@@ -116,13 +123,14 @@ def compute_statistics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
                 'improvementRate': '+0%'
             },
             'scoreTrend': [],
-            'weaknessEvolution': {}
+            'weaknessEvolution': {},
+            'computedAt': int(time.time() * 1000)
         }
 
     # Calculate summary statistics
     total_tests = len(results)
-    scores = [r['score'] for r in results]
-    total_questions = results[0]['totalQuestions'] if results else 10
+    scores = [int(r.get('score') or 0) for r in results]
+    total_questions = int(results[0].get('totalQuestions') or 10) if results else 10
 
     avg_score = sum(scores) / len(scores) if scores else 0
     avg_score_percentage = (avg_score / total_questions) * 100 if total_questions > 0 else 0
@@ -146,7 +154,7 @@ def compute_statistics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         score_trend.append({
             'testNumber': i + 1,
             'date': result['takenAt'],
-            'score': result['score'],
+            'score': int(result.get('score') or 0),
             'replays': sum(r.get('replays', 0) for r in result.get('responses', [])),
             'reactionTime': sum(r.get('reactionTimeMs', 0) for r in result.get('responses', [])) / total_questions if total_questions > 0 else 0
         })
@@ -249,8 +257,14 @@ def get_assessment_statistics():
     try:
         # Check cache first
         cached = get_cached_stats(window)
-        if cached and is_cache_fresh(cached, max_age=300):  # 5 minutes
-            return jsonify(cached)
+        cache_is_usable = False
+        if cached and is_cache_fresh(cached, max_age_seconds=300):  # 5 minutes
+            cached_total = 0
+            if isinstance(cached, dict):
+                cached_total = cached.get('summary', {}).get('totalTests', 0) or 0
+            if cached_total > 0:
+                cache_is_usable = True
+                return jsonify(cached)
 
         # Fetch results based on window
         with get_db() as conn:
@@ -277,7 +291,7 @@ def get_assessment_statistics():
                 results_raw = conn.execute(results_query).fetchall()
 
             if not results_raw:
-                return jsonify({
+                empty_stats = {
                     'summary': {
                         'totalTests': 0,
                         'avgScore': 0.0,
@@ -285,8 +299,11 @@ def get_assessment_statistics():
                         'improvementRate': '+0%'
                     },
                     'scoreTrend': [],
-                    'weaknessEvolution': {}
-                })
+                    'weaknessEvolution': {},
+                    'computedAt': int(time.time() * 1000)
+                }
+                # Don't cache empty stats - just return them
+                return jsonify(empty_stats)
 
             # Convert to dictionaries with responses
             results = []
@@ -312,17 +329,31 @@ def get_assessment_statistics():
                     for d in details
                 ]
 
+                analysis_data = None
+                if r.get('analysis_json'):
+                    try:
+                        analysis_data = json.loads(r['analysis_json'])
+                    except Exception:
+                        analysis_data = None
+
+                total_questions = r.get('total_questions') or len(responses) or 10
+
                 results.append({
                     'id': r['id'],
                     'takenAt': r['taken_at'],
-                    'score': r['score'],
-                    'totalQuestions': r['total_questions'],
-                    'analysis': json.loads(r['analysis_json']) if r['analysis_json'] else None,
+                    'score': r.get('score') or 0,
+                    'totalQuestions': total_questions,
+                    'analysis': analysis_data,
                     'responses': responses
                 })
 
             # Compute statistics
             stats = compute_statistics(results)
+
+            # Clear any stale caches before caching new stats
+            # This ensures old empty caches don't cause issues
+            conn.execute('DELETE FROM assessment_analytics WHERE time_window = ?', (window,))
+            conn.commit()
 
             # Cache the results
             cache_statistics(window, stats)

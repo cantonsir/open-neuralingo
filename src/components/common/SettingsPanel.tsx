@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Sun, Moon, Keyboard, Globe } from 'lucide-react';
 import { Theme } from '../../types';
+import { SUPPORTED_LANGUAGES } from '../../utils/languageOptions';
 
 interface SettingsPanelProps {
     isOpen: boolean;
@@ -19,24 +20,6 @@ const shortcuts = [
     { key: 'K / P', action: 'Play/Pause video' },
     { key: '←', action: 'Previous sentence' },
     { key: '→', action: 'Next sentence' },
-];
-
-// Common languages with emoji flags
-const SUPPORTED_LANGUAGES = [
-    { code: 'en', name: 'English', flag: '🇺🇸' },
-    { code: 'es', name: 'Spanish', flag: '🇪🇸' },
-    { code: 'fr', name: 'French', flag: '🇫🇷' },
-    { code: 'de', name: 'German', flag: '🇩🇪' },
-    { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-    { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-    { code: 'zh-CN', name: 'Simplified Chinese', flag: '🇨🇳' },
-    { code: 'zh-TW', name: 'Traditional Chinese', flag: '🇹🇼' },
-    { code: 'yue', name: 'Cantonese', flag: '🇭🇰' },
-    { code: 'pt', name: 'Portuguese', flag: '🇧🇷' },
-    { code: 'ru', name: 'Russian', flag: '🇷🇺' },
-    { code: 'it', name: 'Italian', flag: '🇮🇹' },
-    { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-    { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
 ];
 
 export default function SettingsPanel({

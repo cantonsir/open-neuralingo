@@ -9,9 +9,11 @@ import os
 
 class Config:
     """Base configuration class."""
-    
-    # Database
-    DB_FILE = os.environ.get('DB_FILE', 'echoloop.db')
+
+    # Database - use parent directory to share DB with frontend
+    # __file__ is backend/app/config.py, so go up 2 levels to get project root
+    _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    DB_FILE = os.environ.get('DB_FILE', os.path.join(_BASE_DIR, 'echoloop.db'))
     
     # File uploads
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')

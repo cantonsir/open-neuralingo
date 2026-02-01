@@ -1071,6 +1071,25 @@ export const api = {
         }
     },
 
+    /**
+     * Delete a specific assessment result and its details.
+     * @param resultId UUID of the result to delete
+     */
+    async deleteAssessmentResult(resultId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/assessment/results/${resultId}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to delete assessment result');
+            }
+        } catch (error) {
+            console.error('API deleteAssessmentResult error:', error);
+            throw error;
+        }
+    },
+
     // --- Practice Sessions API (AI-generated practice dialogues) ---
 
     /**

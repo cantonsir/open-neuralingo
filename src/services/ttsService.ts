@@ -1,14 +1,19 @@
 // Gemini TTS Service - Text-to-Speech using Gemini 2.5 Flash TTS
 
 import { TTSResult, Subtitle } from '../types';
-import { generateSubtitlesFromDuration, rescaleSubtitlesToDuration } from '../utils/subtitleGenerator';
+import { combineSubtitles, generateSubtitlesFromDuration, rescaleSubtitlesToDuration } from '../utils/subtitleGenerator';
 import { analyzeAudioForSubtitles, getAudioDuration } from '../utils/audioAnalyzer';
+import { getTtsLanguageCode } from '../utils/languageOptions';
 
 export interface TTSOptions {
     text: string;
     voiceName?: string;
     stylePrompt?: string;
+    languageCode?: string;
+    ssmlGender?: SsmlGender;
 }
+
+type SsmlGender = 'MALE' | 'FEMALE' | 'NEUTRAL';
 
 // Voice options from Gemini TTS
 // Voice options from Gemini TTS / Cloud TTS (Chirp 3 HD)
@@ -20,12 +25,92 @@ export const VOICE_OPTIONS = [
     'Fenrir',
     'Aoede',
     'Puck',
-    'Zephyr'
+    'Zephyr',
+    'Orus',
+    'Enceladus'
 ];
+
+const ENGLISH_MULTI_VOICES = ['Kore', 'Orus', 'Enceladus'];
+const MULTI_VOICE_GENDERS: SsmlGender[] = ['MALE', 'FEMALE', 'NEUTRAL'];
 
 // User provided API Key for Cloud TTS (Chirp 3 HD)
 // Loaded from .env.local
 const CLOUD_TTS_API_KEY = import.meta.env.VITE_CLOUD_TTS_API_KEY;
+
+interface VoiceConfig {
+    voiceName?: string;
+    ssmlGender?: SsmlGender;
+}
+
+function assignVoices(speakers: string[], ttsLanguageCode: string): Record<string, VoiceConfig> {
+    const voiceMap: Record<string, VoiceConfig> = {};
+    const isEnglish = ttsLanguageCode === 'en-US';
+    speakers.forEach((speaker, index) => {
+        if (isEnglish) {
+            voiceMap[speaker] = { voiceName: ENGLISH_MULTI_VOICES[index % ENGLISH_MULTI_VOICES.length] };
+        } else {
+            voiceMap[speaker] = { ssmlGender: MULTI_VOICE_GENDERS[index % MULTI_VOICE_GENDERS.length] };
+        }
+    });
+    return voiceMap;
+}
+
+async function requestCloudTtsAudio(
+    text: string,
+    ttsLanguageCode: string,
+    voiceConfig: VoiceConfig = {}
+): Promise<Blob> {
+    if (!CLOUD_TTS_API_KEY) {
+        throw new Error('Missing Cloud TTS API Key');
+    }
+
+    const voiceLabel = voiceConfig.voiceName || voiceConfig.ssmlGender || 'NEUTRAL';
+    console.log('[Cloud TTS] Lang:', ttsLanguageCode, 'Voice:', voiceLabel, 'Text:', text.substring(0, 80));
+
+    const voicePayload = voiceConfig.voiceName
+        ? {
+            languageCode: ttsLanguageCode,
+            name: `${ttsLanguageCode}-Chirp3-HD-${voiceConfig.voiceName}`
+        }
+        : {
+            languageCode: ttsLanguageCode,
+            ssmlGender: voiceConfig.ssmlGender || 'NEUTRAL'
+        };
+
+    const response = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CLOUD_TTS_API_KEY}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                input: { text },
+                voice: voicePayload,
+                audioConfig: {
+                    audioEncoding: 'MP3'
+                }
+            })
+        }
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud TTS API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.audioContent) {
+        throw new Error('No audio content in Cloud TTS response');
+    }
+
+    const binaryString = atob(data.audioContent);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: 'audio/mp3' });
+}
 
 /**
  * Generate speech audio from text using Cloud TTS (Chirp 3 HD) first,
@@ -51,49 +136,15 @@ export async function generateSpeech(options: TTSOptions): Promise<TTSResult> {
 async function generateCloudSpeech(options: TTSOptions): Promise<TTSResult> {
     const { text, voiceName = 'Kore' } = options;
 
-    if (!CLOUD_TTS_API_KEY) {
-        throw new Error('Missing Cloud TTS API Key');
-    }
+    const ttsLanguageCode = getTtsLanguageCode(options.languageCode);
+    const useNamedVoice = ttsLanguageCode === 'en-US' && !!voiceName;
+    const voiceConfig: VoiceConfig = useNamedVoice
+        ? { voiceName }
+        : { ssmlGender: options.ssmlGender || 'NEUTRAL' };
 
-    const response = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${CLOUD_TTS_API_KEY}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                input: { text },
-                voice: {
-                    languageCode: 'en-US',
-                    // Construct the full Chirp 3 HD voice ID (e.g. 'en-US-Chirp3-HD-Kore')
-                    name: `en-US-Chirp3-HD-${voiceName}`
-                },
-                audioConfig: {
-                    audioEncoding: 'MP3'
-                },
-                // Request word-level timing info
-                enableTimePointing: ['TIMEPOINT_TYPE_SSML']
-            })
-        }
-    );
+    console.log('[Single Voice] Cloud TTS lang:', ttsLanguageCode, 'voice:', voiceConfig.voiceName || voiceConfig.ssmlGender);
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Cloud TTS API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.audioContent) {
-        throw new Error('No audio content in Cloud TTS response');
-    }
-
-    // Convert base64 MP3 to Blob URL
-    const binaryString = atob(data.audioContent);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'audio/mp3' });
+    const blob = await requestCloudTtsAudio(text, ttsLanguageCode, voiceConfig);
     const audioUrl = URL.createObjectURL(blob);
     
     // For now, use duration-based estimation for Cloud TTS too
@@ -104,10 +155,12 @@ async function generateCloudSpeech(options: TTSOptions): Promise<TTSResult> {
         audio.load();
     });
     
-    const subtitles = generateSubtitlesFromDuration(text, audio.duration, 'cloud-tts');
-    
+    const duration = audio.duration;
+    const subtitles = generateSubtitlesFromDuration(text, duration, 'cloud-tts');
+
     return {
         audioUrl,
+        duration,
         subtitles,
         source: 'cloud-tts',
         accuracy: 'duration-based'
@@ -118,7 +171,154 @@ async function generateCloudSpeech(options: TTSOptions): Promise<TTSResult> {
  * Generate dialogue audio using Gemini 2.5 Flash TTS (Multi-speaker capable)
  */
 export async function generateDialogue(text: string, voiceName: string = 'Aoede'): Promise<TTSResult> {
+    console.log('[Single Voice] Gemini TTS voice:', voiceName);
     return await generateGeminiSpeech({ text, voiceName });
+}
+
+interface MultiVoiceOptions {
+    pauseSeconds?: number;
+    languageCode?: string;
+}
+
+export async function generateMultiVoiceDialogue(
+    lines: Array<{ speaker: string; text: string }>,
+    options: MultiVoiceOptions = {}
+): Promise<TTSResult> {
+    if (lines.length === 0) {
+        throw new Error('No dialogue lines provided');
+    }
+
+    if (!CLOUD_TTS_API_KEY) {
+        console.warn('Multi-voice requires Cloud TTS API key. Falling back to single voice.');
+        const fallbackTranscript = lines.map(line => `${line.speaker}: ${line.text}`).join('\n');
+        return await generateSpeech({ text: fallbackTranscript, voiceName: 'Kore', languageCode: options.languageCode });
+    }
+
+    const pauseSeconds = options.pauseSeconds ?? 0.35;
+    const ttsLanguageCode = getTtsLanguageCode(options.languageCode);
+    const speakers = Array.from(new Set(lines.map(line => line.speaker)));
+    const voiceMap = assignVoices(speakers, ttsLanguageCode);
+
+    const audioContext = new AudioContext();
+    const audioBuffers: AudioBuffer[] = [];
+    const subtitleArrays: Subtitle[][] = [];
+    const segmentDurations: number[] = [];
+
+    try {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const voiceConfig = voiceMap[line.speaker] || { ssmlGender: 'NEUTRAL' };
+            console.log('[Multi-Voice] Lang:', ttsLanguageCode, 'Speaker:', line.speaker, 'Voice:', voiceConfig.voiceName || voiceConfig.ssmlGender);
+            const audioBlob = await requestCloudTtsAudio(line.text, ttsLanguageCode, voiceConfig);
+            const audioBuffer = await decodeBlobToAudioBuffer(audioBlob, audioContext);
+
+            audioBuffers.push(audioBuffer);
+
+            const lineDuration = audioBuffer.duration;
+            subtitleArrays.push(generateSubtitlesFromDuration(line.text, lineDuration, `cloud-tts-${i}`));
+
+            const pause = i < lines.length - 1 ? pauseSeconds : 0;
+            segmentDurations.push(lineDuration + pause);
+        }
+
+        const combinedBuffer = concatAudioBuffers(audioContext, audioBuffers, pauseSeconds);
+        const combinedBlob = audioBufferToWavBlob(combinedBuffer);
+        const audioUrl = URL.createObjectURL(combinedBlob);
+
+        return {
+            audioUrl,
+            duration: combinedBuffer.duration,
+            subtitles: combineSubtitles(subtitleArrays, segmentDurations),
+            source: 'cloud-tts',
+            accuracy: 'duration-based'
+        };
+    } catch (error) {
+        console.error('Multi-voice generation failed, falling back to single voice:', error);
+        const fallbackTranscript = lines.map(line => `${line.speaker}: ${line.text}`).join('\n');
+        return await generateSpeech({ text: fallbackTranscript, voiceName: 'Kore', languageCode: options.languageCode });
+    } finally {
+        await audioContext.close();
+    }
+}
+
+async function decodeBlobToAudioBuffer(blob: Blob, audioContext: AudioContext): Promise<AudioBuffer> {
+    const arrayBuffer = await blob.arrayBuffer();
+    return await audioContext.decodeAudioData(arrayBuffer);
+}
+
+function concatAudioBuffers(
+    audioContext: AudioContext,
+    buffers: AudioBuffer[],
+    pauseSeconds: number
+): AudioBuffer {
+    if (buffers.length === 0) {
+        return audioContext.createBuffer(1, 1, audioContext.sampleRate);
+    }
+
+    const sampleRate = audioContext.sampleRate;
+    const pauseSamples = Math.round(pauseSeconds * sampleRate);
+    const numberOfChannels = Math.max(...buffers.map(buffer => buffer.numberOfChannels));
+    const totalLength = buffers.reduce((sum, buffer) => sum + buffer.length, 0)
+        + pauseSamples * Math.max(0, buffers.length - 1);
+
+    const output = audioContext.createBuffer(numberOfChannels, totalLength, sampleRate);
+    let offset = 0;
+
+    buffers.forEach((buffer, index) => {
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+            const outputData = output.getChannelData(channel);
+            const inputData = buffer.getChannelData(Math.min(channel, buffer.numberOfChannels - 1));
+            outputData.set(inputData, offset);
+        }
+
+        offset += buffer.length;
+        if (index < buffers.length - 1) {
+            offset += pauseSamples;
+        }
+    });
+
+    return output;
+}
+
+function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const bitsPerSample = 16;
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = buffer.length * blockAlign;
+    const headerSize = 44;
+    const fileSize = headerSize + dataSize - 8;
+
+    const wavBuffer = new ArrayBuffer(headerSize + dataSize);
+    const view = new DataView(wavBuffer);
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, fileSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < buffer.length; i++) {
+        for (let channel = 0; channel < numChannels; channel++) {
+            let sample = buffer.getChannelData(channel)[i];
+            sample = Math.max(-1, Math.min(1, sample));
+            const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(offset, intSample, true);
+            offset += 2;
+        }
+    }
+
+    return new Blob([wavBuffer], { type: 'audio/wav' });
 }
 
 /**

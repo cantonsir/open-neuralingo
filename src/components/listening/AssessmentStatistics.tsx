@@ -5,7 +5,7 @@
  * of assessment test results.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -94,7 +94,16 @@ const CustomDot = (props: any) => {
 
 const AssessmentStatistics: React.FC = () => {
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('last_10');
-  const { stats, loading } = useAssessmentStats(timeWindow);
+  const { stats, loading, refetch } = useAssessmentStats(timeWindow);
+  const [hasRetried, setHasRetried] = useState(false);
+
+  // If we get empty stats but haven't retried yet, refetch to ensure fresh data
+  useEffect(() => {
+    if (!loading && (!stats || stats.summary.totalTests === 0) && !hasRetried) {
+      setHasRetried(true);
+      refetch();
+    }
+  }, [stats, loading, hasRetried, refetch]);
 
   if (loading) {
     return (
