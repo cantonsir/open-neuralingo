@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { YouTubePlayer } from 'react-youtube';
-import { ChevronLeft, ChevronRight, List, Mic, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import Timeline from './Timeline';
 import MarkerList from './MarkerList';
@@ -8,7 +8,6 @@ import VideoControls from './VideoControls';
 import VideoUrlInput from './VideoUrlInput';
 import CurrentLinePanel from './CurrentLinePanel';
 import { FocusedSegment, Marker, Subtitle, PlayerState, TagType, PracticeMode } from '../../types';
-import { checkSubtitleConfig, SubtitleConfigStatus, getConfigStatusMessage } from '../../services/subtitleGenerationService';
 
 interface LoopViewProps {
   // Video state
@@ -109,21 +108,6 @@ export default function LoopView({
     return (window.localStorage.getItem('listeningPracticeMode') as PracticeMode) || 'loop';
   });
   
-  // Subtitle generation config status
-  const [subtitleConfig, setSubtitleConfig] = useState<SubtitleConfigStatus | null>(null);
-  const [configChecked, setConfigChecked] = useState(false);
-  
-  // Check subtitle generation config when video loads without subtitles
-  useEffect(() => {
-    if (videoId && !audioUrl && subtitles.length === 0 && !configChecked) {
-      checkSubtitleConfig().then(config => {
-        setSubtitleConfig(config);
-        setConfigChecked(true);
-        console.log('[LoopView] Subtitle config:', config);
-      });
-    }
-  }, [videoId, audioUrl, subtitles.length, configChecked]);
-
   const activeSegment = useMemo(() => {
     if (focusedSegment && focusedSegment.text.trim()) return focusedSegment;
     if (!currentSubtitle) return null;
@@ -206,80 +190,6 @@ export default function LoopView({
                   showTitle={!!audioUrl && !subtitlesVisible}
                 />
 
-                {/* No Subtitles Banner - Show when video loaded but no subtitles */}
-                {videoId && !audioUrl && subtitles.length === 0 && (
-                  <div className="mt-4 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/30 rounded-xl p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                          <Mic className="w-5 h-5 text-amber-500" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">No Subtitles Available</p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            Generate subtitles using AI speech recognition
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => onGenerateSubtitles?.(videoId)}
-                        disabled={isGeneratingSubtitles || !onGenerateSubtitles || (subtitleConfig?.overallStatus === 'not_ready')}
-                        className={`
-                          flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
-                          ${isGeneratingSubtitles || subtitleConfig?.overallStatus === 'not_ready'
-                            ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
-                            : 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20'
-                          }
-                        `}
-                      >
-                        {isGeneratingSubtitles ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Generating...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Mic className="w-4 h-4" />
-                            <span>Generate Subtitles</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    
-                    {/* Config Status */}
-                    {subtitleConfig && (
-                      <div className="mt-3 pt-3 border-t border-amber-500/20">
-                        <div className="flex items-center gap-2 text-sm">
-                          {subtitleConfig.overallStatus === 'ready' ? (
-                            <>
-                              <CheckCircle className="w-4 h-4 text-green-500" />
-                              <span className="text-green-600 dark:text-green-400">
-                                Ready ({subtitleConfig.readyServices.join(' + ')})
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <AlertCircle className="w-4 h-4 text-amber-500" />
-                              <span className="text-amber-600 dark:text-amber-400">
-                                {getConfigStatusMessage(subtitleConfig)}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {isGeneratingSubtitles && (
-                      <div className="mt-3 pt-3 border-t border-amber-500/20">
-                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                          <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                          <span>Processing audio with speech-to-text... This may take 30-60 seconds.</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 <Timeline
                   duration={state.duration}
                   currentTime={state.currentTime}
@@ -302,6 +212,9 @@ export default function LoopView({
                 onNextSubtitle={onNextSubtitle}
                 onToggleSubtitles={() => setSubtitlesVisible(!subtitlesVisible)}
                 onChangePlaybackRate={onChangePlaybackRate}
+                onGenerateSubtitles={() => onGenerateSubtitles?.(videoId)}
+                isGeneratingSubtitles={isGeneratingSubtitles}
+                showGenerateButton={!!videoId && !audioUrl}
               />
             </div>
 

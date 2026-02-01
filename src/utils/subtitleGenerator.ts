@@ -117,3 +117,119 @@ export function combineSubtitles(
   
   return combined;
 }
+
+export interface RescaleOptions {
+  offsetSeconds?: number;
+  anchor?: 'start' | 'zero';
+  minDurationSeconds?: number;
+  clampToDuration?: boolean;
+}
+
+export interface RescaleResult {
+  subtitles: Subtitle[];
+  scale: number;
+  offset: number;
+  anchor: number;
+  duration: number;
+  changed: boolean;
+}
+
+/**
+ * Rescale subtitle timings to match audio duration
+ * Preserves existing segmentation and relative spacing
+ */
+export function rescaleSubtitlesToDuration(
+  subtitles: Subtitle[],
+  audioDuration: number,
+  options: RescaleOptions = {}
+): RescaleResult {
+  const validSubs = subtitles.filter(
+    (sub) => Number.isFinite(sub.start) && Number.isFinite(sub.end) && sub.end > sub.start
+  );
+
+  if (validSubs.length === 0 || !Number.isFinite(audioDuration) || audioDuration <= 0) {
+    return {
+      subtitles,
+      scale: 1,
+      offset: 0,
+      anchor: 0,
+      duration: audioDuration,
+      changed: false,
+    };
+  }
+
+  const firstStart = validSubs.reduce((min, sub) => Math.min(min, sub.start), validSubs[0].start);
+  const lastEnd = validSubs.reduce((max, sub) => Math.max(max, sub.end), validSubs[0].end);
+
+  const anchor = options.anchor === 'zero' ? 0 : firstStart;
+  const denominator = lastEnd - anchor;
+
+  if (!Number.isFinite(denominator) || denominator <= 0) {
+    return {
+      subtitles,
+      scale: 1,
+      offset: 0,
+      anchor,
+      duration: audioDuration,
+      changed: false,
+    };
+  }
+
+  const scale = (audioDuration - anchor) / denominator;
+
+  if (!Number.isFinite(scale) || scale <= 0) {
+    return {
+      subtitles,
+      scale: 1,
+      offset: 0,
+      anchor,
+      duration: audioDuration,
+      changed: false,
+    };
+  }
+
+  const offset = options.offsetSeconds ?? 0;
+  const minDuration = options.minDurationSeconds ?? 0.08;
+  const clampToDuration = options.clampToDuration ?? true;
+
+  const rescaled = subtitles.map((sub) => {
+    if (!Number.isFinite(sub.start) || !Number.isFinite(sub.end)) {
+      return sub;
+    }
+
+    const rawStart = anchor + (sub.start - anchor) * scale + offset;
+    const rawEnd = anchor + (sub.end - anchor) * scale + offset;
+
+    let start = Math.max(0, rawStart);
+    let end = Math.max(start + minDuration, rawEnd);
+
+    if (clampToDuration && Number.isFinite(audioDuration)) {
+      if (end > audioDuration) {
+        end = audioDuration;
+      }
+      if (start > audioDuration - minDuration) {
+        start = Math.max(0, audioDuration - minDuration);
+      }
+      if (end < start + minDuration) {
+        end = Math.min(audioDuration, start + minDuration);
+      }
+    }
+
+    return {
+      ...sub,
+      start,
+      end,
+    };
+  });
+
+  const changed = Math.abs(scale - 1) > 0.001 || Math.abs(offset) > 0.001;
+
+  return {
+    subtitles: rescaled,
+    scale,
+    offset,
+    anchor,
+    duration: audioDuration,
+    changed,
+  };
+}

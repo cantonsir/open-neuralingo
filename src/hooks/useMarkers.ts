@@ -26,14 +26,32 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
   };
 
   const addMarker = useCallback(async (source: 'loop' | 'shadow' = 'loop') => {
-    if (!player) return;
+    if (!player) {
+      console.warn('[addMarker] No player available');
+      return;
+    }
+
+    // Validate subtitles availability
+    if (subtitles.length === 0) {
+      console.warn('[addMarker] ⚠️ No subtitles available. Using time-based fallback.');
+    }
 
     const t = await player.getCurrentTime();
     const now = Date.now();
 
+    // Add detailed logging
+    console.log('[addMarker] Creating marker at time:', t.toFixed(2), 's with', subtitles.length, 'subtitles');
+
     setMarkers(prevMarkers => {
       // 1. Find EXACT current subtitle
       let sub = subtitles.find(s => t >= s.start && t <= s.end);
+
+      // Log subtitle matching result
+      if (sub) {
+        console.log('[addMarker] ✅ Found subtitle:', sub.text.substring(0, 50));
+      } else {
+        console.log('[addMarker] ⚠️ No exact match, trying closest...');
+      }
 
       // 2. Strict Fallback: If no exact match, find the CLOSEST one within 1s
       if (!sub && subtitles.length > 0) {
@@ -44,6 +62,7 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         });
         if (Math.min(Math.abs(t - closest.start), Math.abs(t - closest.end)) < 1.0) {
           sub = closest;
+          console.log('[addMarker] ✅ Found closest subtitle:', sub.text.substring(0, 50));
         }
       }
 
@@ -57,6 +76,7 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         // IDEMPOTENCY check: increment pressCount if same subtitle
         const lastMarker = prevMarkers[prevMarkers.length - 1];
         if (lastMarker && Math.abs(lastMarker.start - start) < 0.1 && Math.abs(lastMarker.end - end) < 0.1) {
+          console.log('[addMarker] 🔄 Incrementing press count for existing marker');
           const updatedMarker = {
             ...lastMarker,
             pressCount: (lastMarker.pressCount || 1) + 1
@@ -64,6 +84,7 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
           return [...prevMarkers.slice(0, -1), updatedMarker];
         }
       } else {
+        console.log('[addMarker] ⚠️ Using time-based fallback (±2s)');
         start = Math.max(0, t - 2);
         end = t + 2;
         subtitleText = undefined;
@@ -80,6 +101,7 @@ export function useMarkers({ player, videoId, subtitles }: UseMarkersOptions) {
         source,
       };
 
+      console.log('[addMarker] ✅ Created marker:', newMarker.id, 'with text:', subtitleText?.substring(0, 30) || 'time-based');
       return [...prevMarkers, newMarker];
     });
   }, [player, subtitles, videoId]);

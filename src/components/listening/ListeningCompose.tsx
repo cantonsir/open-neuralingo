@@ -163,16 +163,16 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
 
         // Generate audio with subtitles
         const ttsResult = await generateDialogue(fullTranscript, 'Aoede');
-        
+
         // Use result subtitles if available, otherwise estimate
         let subtitles: Subtitle[] = ttsResult.subtitles || [];
-        
+
         // Estimate duration
         let totalDuration = 0;
         if (ttsResult.duration) {
             totalDuration = ttsResult.duration;
         } else {
-             try {
+            try {
                 totalDuration = await getAudioDuration(ttsResult.audioUrl);
             } catch (e) {
                 // Fallback estimation
@@ -184,7 +184,7 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
         // Convert blob URL to data URL for persistence
         console.log('[ListeningCompose] Converting audio blob to data URL for persistence...');
         let persistentAudioUrl = ttsResult.audioUrl;
-        
+
         if (ttsResult.audioUrl.startsWith('blob:')) {
             try {
                 persistentAudioUrl = await blobUrlToDataUrl(ttsResult.audioUrl);
@@ -339,7 +339,7 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
                                     >
                                         <Download className="w-4 h-4" />
                                     </button>
-                                    
+
                                     {/* Dropdown menu */}
                                     <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
                                         <button
@@ -427,10 +427,10 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
     );
 
     return (
-        <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden relative">
+        <div className="flex flex-1 bg-gray-50 dark:bg-gray-900 overflow-hidden relative">
 
             {/* Sidebar (History) */}
-            <div className={`flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 ${isSidebarOpen ? 'w-80' : 'w-0 opacity-0 overflow-hidden'}`}>
+            <div className={`flex flex-col border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-300 flex-shrink-0 ${isSidebarOpen ? 'w-72' : 'w-0 opacity-0 overflow-hidden'}`}>
                 <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <h2 className="font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
                         <Clock className="w-4 h-4" />
@@ -456,41 +456,43 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0 relative">
                 {/* Header & Toggle */}
-                <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10 shadow-sm">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors"
-                        >
-                            <div className="space-y-1">
-                                <span className="block w-5 h-0.5 bg-current"></span>
-                                <span className="block w-5 h-0.5 bg-current"></span>
-                                <span className="block w-5 h-0.5 bg-current"></span>
+                <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shadow-sm">
+                    <div className="w-full px-4 md:px-8 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors"
+                            >
+                                <div className="space-y-1">
+                                    <span className="block w-5 h-0.5 bg-current"></span>
+                                    <span className="block w-5 h-0.5 bg-current"></span>
+                                    <span className="block w-5 h-0.5 bg-current"></span>
+                                </div>
+                            </button>
+                            <div>
+                                <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 dark:from-amber-400 dark:to-orange-400">
+                                    Listening Practice
+                                </h1>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">AI Audio Generator</p>
                             </div>
-                        </button>
-                        <div>
-                            <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 dark:from-amber-400 dark:to-orange-400">
-                                Listening Practice
-                            </h1>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">AI Audio Generator</p>
                         </div>
-                    </div>
 
-                    {/* Generate Button (Plan Mode Only) */}
-                    {mode === 'plan' && messages.length > 0 && (
-                        <button
-                            onClick={triggerGenerationFromPlan}
-                            disabled={isGenerating}
-                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm animate-pulse"
-                        >
-                            <Sparkles className="w-4 h-4" />
-                            {isGenerating ? 'Generating...' : 'Create Session'}
-                        </button>
-                    )}
+                        {/* Generate Button (Plan Mode Only) */}
+                        {mode === 'plan' && messages.length > 0 && (
+                            <button
+                                onClick={triggerGenerationFromPlan}
+                                disabled={isGenerating}
+                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm animate-pulse"
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                {isGenerating ? 'Generating...' : 'Create Session'}
+                            </button>
+                        )}
+                    </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4">
-                    <div className="max-w-4xl mx-auto flex flex-col justify-end min-h-0">
+                <div className="flex-1 overflow-y-auto">
+                    <div className={`w-full h-full flex flex-col p-4 md:p-8 ${messages.length === 0 ? 'justify-center' : 'justify-end'}`}>
                         {messages.length === 0 && (
                             <div className="text-center py-20 opacity-50">
                                 <Sparkles className="w-12 h-12 mx-auto text-gray-400 mb-4" />
@@ -521,7 +523,7 @@ export default function ListeningCompose({ setView, onLoadSession }: ListeningCo
 
                 {/* Sticky Input Area */}
                 <div className="flex-shrink-0 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-                    <div className="max-w-4xl mx-auto">
+                    <div className="w-full">
                         <UnifiedInput
                             value={prompt}
                             onChange={setPrompt}

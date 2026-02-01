@@ -12,29 +12,13 @@ import {
 import { api, HistoryItem } from '../../db';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
+import { formatTimeAgo } from '../../utils/formatters';
 
 interface DashboardViewProps {
     onPlayVideo: (videoId: string) => void;
     onNavigate: (view: View) => void;
     savedCardsCount: number;
     markersCount: number;
-}
-
-// Mock stats data (to be replaced with real data later)
-// wrapper for future extensions if needed
-
-function formatTimeAgo(timestamp: number): string {
-    const now = Date.now();
-    const diffMs = now - timestamp;
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
 }
 
 export default function DashboardView({

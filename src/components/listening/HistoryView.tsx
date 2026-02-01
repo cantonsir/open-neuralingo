@@ -1,20 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Clock, BookOpen, Layers, TrendingUp, Trash2, X, Check } from 'lucide-react';
 import { api, HistoryItem } from '../../db';
-
-function formatTimeAgo(timestamp: number): string {
-    const now = Date.now();
-    const diffMs = now - timestamp;
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays === 1) return 'Yesterday';
-    return `${diffDays} days ago`;
-}
+import { formatTimeAgo } from '../../utils/formatters';
 
 interface HistoryViewProps {
     onPlayVideo: (videoId: string) => void;

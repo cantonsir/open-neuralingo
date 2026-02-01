@@ -111,7 +111,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         pauseVideo: () => audio.pause(),
         seekTo: (seconds: number) => { audio.currentTime = seconds; },
         getDuration: () => audio.duration,
-        getCurrentTime: () => audio.currentTime,
+        getCurrentTime: () => Promise.resolve(audio.currentTime),
         setPlaybackRate: (rate: number) => { audio.playbackRate = rate; },
         getPlaybackRate: () => audio.playbackRate,
       };
@@ -144,6 +144,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       };
     }
   }, [audioUrl, onReady, onStateChange]);
+
+  // Cleanup audio element when switching from audio mode to video mode
+  useEffect(() => {
+    if (!audioUrl && audioRef.current) {
+      const audio = audioRef.current;
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+
+      // Clear mock player reference to force fresh YouTube player initialization
+      playerRef.current = null;
+
+      console.log('[VideoPlayer] Audio cleanup complete, ready for video');
+    }
+  }, [audioUrl]);
 
   return (
     <div

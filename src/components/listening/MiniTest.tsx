@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Play,
     RotateCcw,
@@ -10,12 +10,11 @@ import {
     Trophy,
     Target,
     Zap,
-    TrendingUp,
-    Eye
+    TrendingUp
 } from 'lucide-react';
 import { generateTestSentences, TestSentence, analyzeListeningResults, TestResult, ListeningAnalysis } from '../../services/geminiService';
-import ListeningFeedbackSliders, { SliderValues, DEFAULT_SLIDER_VALUES } from './ListeningFeedbackSliders';
-import { useAudioPlayer } from '../../hooks/useAudioPlayer';
+import ListeningFeedbackSliders from './ListeningFeedbackSliders';
+import { useListeningTest, TestResponseData } from '../../hooks/useListeningTest';
 
 interface AssessmentResult {
     targetLanguage: string;
@@ -23,20 +22,6 @@ interface AssessmentResult {
     listeningLevel: number;
     subtitleDependence: number;
     difficulties: string[];
-}
-
-interface TestResponseData {
-    sentenceId: number;
-    sentence: string;
-    understood: boolean;
-    replays: number;
-    reactionTimeMs: number;
-    markedIndices: number[];
-    // Detailed feedback for "Not Sure" responses
-    wordBoundaries?: number;
-    familiarity?: number;
-    meaningClarity?: number;
-    wordConfusion?: number;
 }
 
 interface MiniTestProps {
@@ -48,24 +33,80 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0, phase: 'sentences' as 'sentences' | 'audio' | 'analyzing' });
     const [sentences, setSentences] = useState<TestSentence[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [showTranscript, setShowTranscript] = useState(false);
-    const [responses, setResponses] = useState<TestResponseData[]>([]);
-    const [replays, setReplays] = useState(0);
-    const [markedIndices, setMarkedIndices] = useState<Set<number>>(new Set());
     const [testComplete, setTestComplete] = useState(false);
     const [analysis, setAnalysis] = useState<ListeningAnalysis | null>(null);
-    const [thinkingTimeSum, setThinkingTimeSum] = useState<number>(0);
+    const [finalResponses, setFinalResponses] = useState<TestResponseData[]>([]);
 
-    // Slider state for "Not Sure" feedback
-    const [showSliders, setShowSliders] = useState(false);
-    const [sliderValues, setSliderValues] = useState<SliderValues>(DEFAULT_SLIDER_VALUES);
+    // Handle test completion
+    const handleTestComplete = async (responses: TestResponseData[]) => {
+        setFinalResponses(responses);
+        setLoading(true);
+        setLoadingProgress({ current: 0, total: 0, phase: 'analyzing' });
 
-    // Use the shared audio player hook
-    const audioPlayer = useAudioPlayer({ voiceName: 'Kore' });
-    const { isPlaying, audioProgress, speak, speakSlow, stopAll, preloadAudio, clearCache, getThinkingGap, resetThinkingTimer, isExiting } = audioPlayer;
+        // Convert to TestResult format for analysis
+        const testResults: TestResult[] = responses.map(r => ({
+            sentence: r.sentence,
+            understood: r.understood,
+            replays: r.replays,
+            reactionTimeMs: r.reactionTimeMs,
+            markedWordIndices: r.markedIndices,
+            wordBoundaries: r.wordBoundaries,
+            familiarity: r.familiarity,
+            meaningClarity: r.meaningClarity,
+            wordConfusion: r.wordConfusion,
+        }));
 
-    const currentSentence = sentences[currentIndex];
+        const analysisResult = await analyzeListeningResults(testResults);
+        setAnalysis(analysisResult);
+
+        // Save results to API
+        try {
+            await fetch('/api/assessment/results', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    responses,
+                    analysis: analysisResult
+                })
+            });
+        } catch (error) {
+            console.error("Failed to save results:", error);
+        }
+
+        setLoading(false);
+        setTestComplete(true);
+    };
+
+    // Use shared listening test hook
+    const test = useListeningTest({
+        sentences,
+        onComplete: handleTestComplete,
+        autoPlay: !loading && !testComplete,
+    });
+
+    const {
+        currentIndex,
+        currentSentence,
+        showTranscript,
+        replays,
+        markedIndices,
+        showSliders,
+        sliderValues,
+        isPlaying,
+        audioProgress,
+        handleReplay,
+        handleSlowPlay,
+        toggleWordMark,
+        revealTranscript,
+        handleNotSure,
+        handleResponse,
+        handleSliderSubmit,
+        setSliderValues,
+        stopAll,
+        preloadAudio,
+        clearCache,
+        isExiting,
+    } = test;
 
     // Load assessment and generate sentences
     useEffect(() => {
@@ -119,152 +160,6 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
         };
     }, [clearCache, preloadAudio, isExiting]);
 
-    // Play current sentence
-    const playSentence = async () => {
-        if (!currentSentence) return;
-
-        // Add thinking time gap
-        const gap = getThinkingGap();
-        if (gap > 0) {
-            setThinkingTimeSum(prev => prev + gap);
-            resetThinkingTimer();
-        }
-
-        await speak(currentSentence);
-    };
-
-    const handleReplay = () => {
-        setReplays(prev => prev + 1);
-        playSentence();
-    };
-
-    const handleSlowPlay = async () => {
-        setReplays(prev => prev + 1);
-        if (!currentSentence) return;
-
-        // Add thinking time gap
-        const gap = getThinkingGap();
-        if (gap > 0) {
-            setThinkingTimeSum(prev => prev + gap);
-            resetThinkingTimer();
-        }
-
-        await speakSlow(currentSentence, 0.7);
-    };
-
-    // Handle response: simplified to understood (true) or not sure (false)
-    const handleResponse = async (understood: boolean, sliderData?: SliderValues) => {
-        const responseData: TestResponseData = {
-            sentenceId: currentSentence.id,
-            sentence: currentSentence.sentence,
-            understood,
-            replays,
-            reactionTimeMs: thinkingTimeSum,
-            markedIndices: Array.from(markedIndices),
-            // Only include non-null slider values (selected categories)
-            ...(sliderData && sliderData.wordBoundaries !== null && { wordBoundaries: sliderData.wordBoundaries }),
-            ...(sliderData && sliderData.familiarity !== null && { familiarity: sliderData.familiarity }),
-            ...(sliderData && sliderData.meaningClarity !== null && { meaningClarity: sliderData.meaningClarity }),
-            ...(sliderData && sliderData.wordConfusion !== null && { wordConfusion: sliderData.wordConfusion }),
-        };
-
-        const newResponses = [...responses, responseData];
-        setResponses(newResponses);
-
-        // Reset slider state
-        setShowSliders(false);
-        setSliderValues(DEFAULT_SLIDER_VALUES);
-
-        if (currentIndex < sentences.length - 1) {
-            // Next question
-            const nextIndex = currentIndex + 1;
-            setCurrentIndex(nextIndex);
-            setShowTranscript(false);
-            setReplays(0);
-            setMarkedIndices(new Set());
-            setThinkingTimeSum(0);
-            resetThinkingTimer();
-
-            // Background pre-fetch for the one after next
-            if (nextIndex + 1 < sentences.length) {
-                preloadAudio(sentences[nextIndex + 1]);
-            }
-        } else {
-            // Test complete - stop audio and run AI analysis
-            stopAll();
-
-            setLoading(true);
-            setLoadingProgress({ current: 0, total: 0, phase: 'analyzing' });
-
-            // Convert to TestResult format for analysis (including slider data)
-            const testResults: TestResult[] = newResponses.map(r => ({
-                sentence: r.sentence,
-                understood: r.understood,
-                replays: r.replays,
-                reactionTimeMs: r.reactionTimeMs,
-                markedWordIndices: r.markedIndices,
-                wordBoundaries: r.wordBoundaries,
-                familiarity: r.familiarity,
-                meaningClarity: r.meaningClarity,
-                wordConfusion: r.wordConfusion,
-            }));
-
-            const analysisResult = await analyzeListeningResults(testResults);
-            setAnalysis(analysisResult);
-
-            // Save results to API
-            try {
-                await fetch('/api/assessment/results', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        responses: newResponses,
-                        analysis: analysisResult
-                    })
-                });
-            } catch (error) {
-                console.error("Failed to save results:", error);
-            }
-
-            setLoading(false);
-            setTestComplete(true);
-        }
-    };
-
-    // Handle "Not Sure" click - show sliders
-    const handleNotSure = () => {
-        setShowSliders(true);
-    };
-
-    // Confirm slider values and submit response
-    const handleSliderSubmit = () => {
-        handleResponse(false, sliderValues);
-    };
-
-    const toggleWordMark = (index: number) => {
-        setMarkedIndices(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(index)) {
-                newSet.delete(index);
-            } else {
-                newSet.add(index);
-            }
-            return newSet;
-        });
-    };
-
-    // Auto-play on new sentence
-    useEffect(() => {
-        if (currentSentence && !loading && !testComplete && !isExiting.current) {
-            const timer = setTimeout(() => {
-                if (!isExiting.current) {
-                    playSentence();
-                }
-            }, 500);
-            return () => clearTimeout(timer);
-        }
-    }, [currentIndex, loading, testComplete]);
-
     // Loading state with progress
     if (loading) {
         return (
@@ -300,9 +195,9 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
 
     // Results screen with AI Analysis
     if (testComplete) {
-        const understoodCount = responses.filter(r => r.understood).length;
-        const totalReplays = responses.reduce((sum, r) => sum + r.replays, 0);
-        const avgReactionTime = responses.reduce((sum, r) => sum + r.reactionTimeMs, 0) / responses.length;
+        const understoodCount = finalResponses.filter(r => r.understood).length;
+        const totalReplays = finalResponses.reduce((sum, r) => sum + r.replays, 0);
+        const avgReactionTime = finalResponses.reduce((sum, r) => sum + r.reactionTimeMs, 0) / finalResponses.length;
 
         return (
             <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50 via-gray-50 to-green-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-green-900/10">
@@ -479,15 +374,7 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
                                 </div>
 
                                 <button
-                                    onClick={() => {
-                                        // Add the final thinking gap before revealing
-                                        const gap = getThinkingGap();
-                                        if (gap > 0) {
-                                            setThinkingTimeSum(prev => prev + gap);
-                                            resetThinkingTimer();
-                                        }
-                                        setShowTranscript(true);
-                                    }}
+                                    onClick={revealTranscript}
                                     className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
                                 >
                                     Show Transcript

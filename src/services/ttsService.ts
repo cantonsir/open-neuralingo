@@ -1,8 +1,8 @@
 // Gemini TTS Service - Text-to-Speech using Gemini 2.5 Flash TTS
 
 import { TTSResult, Subtitle } from '../types';
-import { generateSubtitlesFromDuration } from '../utils/subtitleGenerator';
-import { analyzeAudioForSubtitles } from '../utils/audioAnalyzer';
+import { generateSubtitlesFromDuration, rescaleSubtitlesToDuration } from '../utils/subtitleGenerator';
+import { analyzeAudioForSubtitles, getAudioDuration } from '../utils/audioAnalyzer';
 
 export interface TTSOptions {
     text: string;
@@ -289,4 +289,24 @@ function writeString(view: DataView, offset: number, str: string): void {
  */
 export function revokeAudioUrl(url: string): void {
     URL.revokeObjectURL(url);
+}
+
+/**
+ * Upgrade subtitles using timing rescale based on audio duration
+ * Preserves existing subtitle segmentation while fixing drift
+ */
+export async function upgradeSubtitlesWithWebSpeech(
+    videoId: string,
+    audioUrl: string,
+    currentSubtitles: Subtitle[]
+): Promise<{ subtitles: Subtitle[]; accuracy: string }> {
+    const duration = await getAudioDuration(audioUrl);
+    const { subtitles, scale, changed } = rescaleSubtitlesToDuration(currentSubtitles, duration, {
+        anchor: 'start',
+        clampToDuration: true,
+    });
+
+    const accuracy = changed ? `rescaled (x${scale.toFixed(3)})` : 'no change';
+
+    return { subtitles, accuracy };
 }
