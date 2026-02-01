@@ -47,6 +47,7 @@ def create_app(config_class=Config):
     from app.routes.reading import reading_bp
     from app.routes.practice_sessions import practice_sessions_bp
     from app.routes.subtitle_generation import subtitle_gen_bp
+    from app.routes.proxy import proxy_bp
 
     app.register_blueprint(transcript_bp, url_prefix='/api')
     app.register_blueprint(flashcards_bp, url_prefix='/api')
@@ -63,5 +64,6 @@ def create_app(config_class=Config):
     app.register_blueprint(reading_bp, url_prefix='/api')
     app.register_blueprint(practice_sessions_bp, url_prefix='/api')
     app.register_blueprint(subtitle_gen_bp, url_prefix='/api')
+    app.register_blueprint(proxy_bp, url_prefix='/api')
 
     return app

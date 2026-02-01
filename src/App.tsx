@@ -16,6 +16,7 @@ import ReadingLibrary from './components/reading/ReadingLibrary';
 import ReadingLessons from './components/reading/ReadingLessons';
 import ReadingAssessmentPage from './components/reading/ReadingAssessmentPage';
 import ReadingCompose from './components/reading/ReadingCompose';
+import ReadingWebPage from './components/reading/ReadingWebPage';
 import SpeakingDashboard from './components/speaking/SpeakingDashboard';
 import SpeakingScenario from './components/speaking/SpeakingScenario';
 import SpeakingLessons from './components/speaking/SpeakingLessons';
@@ -163,47 +164,57 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Reading Module */}
         {activeModule === 'reading' && (
-          view === 'learning' ? <ReadingLessons /> :
-            view === 'assessment' ? <ReadingAssessmentPage /> :
-              view === 'vocab' ? (
-                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                  <VocabularyManager
-                    module="reading"
-                    markers={readingMarkers}
-                    savedCards={savedCards}
-                    onRemoveWord={() => { }}
-                    onUpdateVocabData={() => { }}
-                    onPlaySegment={() => { }}
-                    onSaveToDeck={handleSaveToDeck}
-                    onDeleteCard={handleDeleteFromDeck}
-                    onUpdateCard={handleUpdateCard}
-                  />
-                </div>
-              ) :
-                view === 'flashcards' ? (
-                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                    <FlashcardPractice
-                      module="reading"
-                      savedCards={savedCards}
-                      onExit={() => setView('home')}
-                      onPlayAudio={() => { }}
-                    />
-                  </div>
-                ) :
-                  view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
-                view === 'generator' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
-                  view === 'library' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
-                    view === 'reader' && readingData ? (
-                      <ReadingView
-                        libraryId={readingData.libraryId}
-                        title={readingData.title}
-                        onNavigate={setView}
-                        onMarkersUpdate={setReadingMarkers}
-                        firstLanguage={firstLanguage}
+          <>
+            {/* Persist WebPage in background to avoid reload - MOVED OUTSIDE TERNARY */}
+            <div className={view === 'webpage' ? 'flex-1 flex flex-col h-full overflow-hidden' : 'hidden'}>
+              <ReadingWebPage onNavigate={setView} firstLanguage={firstLanguage} onMarkersUpdate={setReadingMarkers} />
+            </div>
+
+            {view !== 'webpage' && (
+              view === 'learning' ? <ReadingLessons /> :
+                view === 'assessment' ? <ReadingAssessmentPage /> :
+                  view === 'vocab' ? (
+                    <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                      <VocabularyManager
+                        module="reading"
+                        markers={readingMarkers}
+                        savedCards={savedCards}
+                        onRemoveWord={() => { }}
+                        onUpdateVocabData={() => { }}
+                        onPlaySegment={() => { }}
+                        onSaveToDeck={handleSaveToDeck}
+                        onDeleteCard={handleDeleteFromDeck}
+                        onUpdateCard={handleUpdateCard}
                       />
-                    ) : (
-                      <ReadingDashboard onNavigate={setView} />
-                    )
+                    </div>
+                  ) :
+                    view === 'flashcards' ? (
+                      <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                        <FlashcardPractice
+                          module="reading"
+                          savedCards={savedCards}
+                          onExit={() => setView('home')}
+                          onPlayAudio={() => { }}
+                        />
+                      </div>
+                    ) :
+                      view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
+                        view === 'generator' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
+                          view === 'library' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
+                            // view === 'webpage' is handled above
+                            view === 'reader' && readingData ? (
+                              <ReadingView
+                                libraryId={readingData.libraryId}
+                                title={readingData.title}
+                                onNavigate={setView}
+                                onMarkersUpdate={setReadingMarkers}
+                                firstLanguage={firstLanguage}
+                              />
+                            ) : (
+                              <ReadingDashboard onNavigate={setView} />
+                            )
+            )}
+          </>
         )}
 
         {/* Speaking Module */}

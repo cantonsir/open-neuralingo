@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2 } from 'lucide-react';
+import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, Globe } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
 import { api, FlashcardModule } from '../../db';
 
@@ -370,6 +370,14 @@ export default function Sidebar({
                             isActive={view === 'library'}
                             collapsed={collapsed}
                             onClick={() => setView('library')}
+                            activeColorTheme="blue"
+                        />
+                        <NavItem
+                            icon={<Globe size={20} />}
+                            label="Online Webpage"
+                            isActive={view === 'webpage'}
+                            collapsed={collapsed}
+                            onClick={() => setView('webpage')}
                             activeColorTheme="blue"
                         />
                         <SectionHeader label="DATABASE" collapsed={collapsed} />

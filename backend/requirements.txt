@@ -18,6 +18,9 @@ EbookLib>=0.18
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 
+# Article Extraction (for Reader Mode)
+newspaper3k>=0.2.8
+
 # AI Integration (optional, used by frontend)
 google-generativeai>=0.5.0
 

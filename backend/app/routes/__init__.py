@@ -15,6 +15,7 @@ from app.routes.library import library_bp
 from app.routes.speaking import speaking_bp
 from app.routes.writing import writing_bp
 from app.routes.subtitle_generation import subtitle_gen_bp
+from app.routes.proxy import proxy_bp
 
 __all__ = [
     'transcript_bp',
@@ -28,4 +29,5 @@ __all__ = [
     'speaking_bp',
     'writing_bp',
     'subtitle_gen_bp',
+    'proxy_bp',
 ]

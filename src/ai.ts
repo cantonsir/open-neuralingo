@@ -112,7 +112,8 @@ export const generateBilingualDefinition = async (
         let prompt = `Provide a bilingual definition for the English word or phrase: "${text}".
 
 Format your response as a JSON object with these keys:
-- "english": A brief English explanation (1 sentence)
+- "pronunciation": IPA phonetic transcription (e.g., "/rɪˈmɑːrkəbl/")
+- "english": A brief English explanation (1-2 sentences, include the part of speech)
 - "native": The ${nativeLangName} translation and explanation
 
 Return ONLY valid JSON. No markdown formatting.`;
