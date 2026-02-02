@@ -299,8 +299,8 @@ const analyzeWeaknessBreakdown = (analysis: any): { category: string; percentage
     return breakdown;
 };
 
-export default function SelfAssessment({ 
-    onComplete, 
+export default function SelfAssessment({
+    onComplete,
     onStartTest,
     cachedProfile,
     cachedResults,
@@ -488,13 +488,12 @@ export default function SelfAssessment({
                                     <div className="flex-1">
                                         <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                             <div
-                                                className={`h-full transition-all ${
-                                                    savedAssessment.listeningLevel <= 2
+                                                className={`h-full transition-all ${savedAssessment.listeningLevel <= 2
                                                         ? 'bg-red-500'
                                                         : savedAssessment.listeningLevel <= 4
-                                                        ? 'bg-yellow-500'
-                                                        : 'bg-green-500'
-                                                }`}
+                                                            ? 'bg-yellow-500'
+                                                            : 'bg-green-500'
+                                                    }`}
                                                 style={{ width: `${(savedAssessment.listeningLevel / 5) * 100}%` }}
                                             />
                                         </div>
@@ -648,11 +647,10 @@ export default function SelfAssessment({
                                                             Your Score: {understoodCount}/10 {isOnTrack ? '✓' : '⚠️'}
                                                         </div>
                                                     </div>
-                                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                                        isOnTrack
+                                                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${isOnTrack
                                                             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                                                             : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                                                    }`}>
+                                                        }`}>
                                                         {isOnTrack ? 'On Track!' : 'Keep Practicing'}
                                                     </div>
                                                 </div>
@@ -683,13 +681,12 @@ export default function SelfAssessment({
                                                         </div>
                                                         <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                                             <div
-                                                                className={`h-full transition-all ${
-                                                                    item.percentage >= 60
+                                                                className={`h-full transition-all ${item.percentage >= 60
                                                                         ? 'bg-red-500'
                                                                         : item.percentage >= 40
-                                                                        ? 'bg-orange-500'
-                                                                        : 'bg-blue-500'
-                                                                }`}
+                                                                            ? 'bg-orange-500'
+                                                                            : 'bg-blue-500'
+                                                                    }`}
                                                                 style={{ width: `${item.percentage}%` }}
                                                             />
                                                         </div>
@@ -763,16 +760,16 @@ export default function SelfAssessment({
                                                 <Sparkles size={18} className="text-purple-500" />
                                                 AI Feedback
                                             </span>
-                                            <ChevronDown 
-                                                size={20} 
-                                                className={`text-gray-400 transition-transform duration-200 ${isAIFeedbackExpanded ? 'rotate-180' : ''}`} 
+                                            <ChevronDown
+                                                size={20}
+                                                className={`text-gray-400 transition-transform duration-200 ${isAIFeedbackExpanded ? 'rotate-180' : ''}`}
                                             />
                                         </button>
 
                                         {isAIFeedbackExpanded && (
                                             <>
-                                                <div className="bg-purple-50 dark:bg-purple-900/10 rounded-xl p-4 mb-4">
-                                                    <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                                                <div className="bg-purple-50 dark:bg-purple-900/10 rounded-xl p-4 mb-4 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-purple-200 dark:scrollbar-thumb-purple-900 pr-2">
+                                                    <p className="text-sm text-gray-700 dark:text-gray-300 italic whitespace-pre-wrap">
                                                         "{latestResult.analysis.summary}"
                                                     </p>
                                                 </div>
@@ -817,12 +814,12 @@ export default function SelfAssessment({
                                                 Detailed Review
                                                 <span className="text-xs font-normal text-gray-400">({latestResult.responses.length} questions)</span>
                                             </span>
-                                            <ChevronDown 
-                                                size={20} 
-                                                className={`text-gray-400 transition-transform duration-200 ${isDetailedReviewExpanded ? 'rotate-180' : ''}`} 
+                                            <ChevronDown
+                                                size={20}
+                                                className={`text-gray-400 transition-transform duration-200 ${isDetailedReviewExpanded ? 'rotate-180' : ''}`}
                                             />
                                         </button>
-                                        
+
                                         {isDetailedReviewExpanded && (
                                             <div className="space-y-3">
                                                 {latestResult.responses.map((resp: any, i: number) => (
@@ -1268,11 +1265,10 @@ export default function SelfAssessment({
                                         <button
                                             key={goal.id}
                                             onClick={() => setAnswers(prev => ({ ...prev, learningGoal: goal.id }))}
-                                            className={`flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all ${
-                                                answers.learningGoal === goal.id
+                                            className={`flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all ${answers.learningGoal === goal.id
                                                     ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
                                                     : 'border-gray-200 dark:border-gray-700 hover:border-teal-300 dark:hover:border-teal-700'
-                                            }`}
+                                                }`}
                                         >
                                             <span className="text-3xl">{goal.emoji}</span>
                                             <span className="font-medium text-gray-900 dark:text-white text-sm text-center">{goal.label}</span>
@@ -1316,13 +1312,12 @@ export default function SelfAssessment({
                                                     });
                                                 }}
                                                 disabled={isDisabled}
-                                                className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
-                                                    isSelected
+                                                className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${isSelected
                                                         ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                                                         : isDisabled
                                                             ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
                                                             : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
-                                                }`}
+                                                    }`}
                                             >
                                                 <span className="text-xl">{skill.icon}</span>
                                                 <span className="font-medium text-gray-900 dark:text-white text-sm">{skill.label}</span>

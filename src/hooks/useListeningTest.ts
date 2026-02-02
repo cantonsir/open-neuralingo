@@ -121,6 +121,34 @@ export function useListeningTest({
         });
     }, []);
 
+    // Toggle word range (for phrase selection with Shift + Click)
+    const toggleWordRange = useCallback((start: number, end: number) => {
+        setMarkedIndices(prev => {
+            const newSet = new Set(prev);
+            const [min, max] = start < end ? [start, end] : [end, start];
+
+            // Check if all words in range are already marked
+            let allMarked = true;
+            for (let i = min; i <= max; i++) {
+                if (!newSet.has(i)) {
+                    allMarked = false;
+                    break;
+                }
+            }
+
+            // If all marked, unmark the range; otherwise, mark the range
+            for (let i = min; i <= max; i++) {
+                if (allMarked) {
+                    newSet.delete(i);
+                } else {
+                    newSet.add(i);
+                }
+            }
+
+            return newSet;
+        });
+    }, []);
+
     // Record final thinking time before revealing transcript
     const revealTranscript = useCallback(() => {
         const gap = getThinkingGap();
@@ -243,6 +271,7 @@ export function useListeningTest({
         handleReplay,
         handleSlowPlay,
         toggleWordMark,
+        toggleWordRange,
         revealTranscript,
         handleNotSure,
         handleResponse,

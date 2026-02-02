@@ -17,6 +17,7 @@ import {
     X
 } from 'lucide-react';
 import ListeningFeedbackSliders from './ListeningFeedbackSliders';
+import VocabularyBreakdown from './VocabularyBreakdown';
 import { useListeningTest, TestResponseData } from '../../hooks/useListeningTest';
 import { api, SegmentMastery, SegmentTestResult, SegmentLesson } from '../../db';
 import {
@@ -140,6 +141,7 @@ export default function LearningSession({
         handleReplay,
         handleSlowPlay,
         toggleWordMark,
+        toggleWordRange,
         revealTranscript,
         handleNotSure,
         handleResponse,
@@ -963,22 +965,14 @@ export default function LearningSession({
                         </div>
                     ) : (
                         <div className="py-4">
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 text-center">
-                                Tap words you couldn't catch:
-                            </p>
-                            <div className="flex flex-wrap justify-center gap-2 mb-8">
-                                {currentSentence?.sentence.split(' ').map((word, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => toggleWordMark(idx)}
-                                        className={`px-3 py-2 rounded-lg text-lg font-medium transition-all ${markedIndices.has(idx)
-                                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 ring-2 ring-red-500'
-                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
-                                            }`}
-                                    >
-                                        {word}
-                                    </button>
-                                ))}
+                            <div className="mb-8">
+                                <VocabularyBreakdown
+                                    text={currentSentence?.sentence || ''}
+                                    markedIndices={Array.from(markedIndices)}
+                                    onToggleWord={toggleWordMark}
+                                    onToggleRange={toggleWordRange}
+                                    compact={false}
+                                />
                             </div>
 
                             {/* Slider Panel for "Not Sure" */}
