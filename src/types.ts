@@ -35,7 +35,7 @@ export interface FocusedSegment {
   subtitleId?: string;
 }
 
-export type Module = 'listening' | 'reading' | 'speaking' | 'writing';
+export type Module = 'landing' | 'listening' | 'reading' | 'speaking' | 'writing';
 
 export type Theme = 'dark' | 'light';
 

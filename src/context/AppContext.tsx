@@ -45,7 +45,7 @@ export function AppProvider({ children }: AppProviderProps) {
   const { theme, toggleTheme } = useTheme();
   const { targetLanguage, setTargetLanguage } = useTargetLanguage();
   
-  const [activeModule, setActiveModule] = useState<Module>('listening');
+  const [activeModule, setActiveModule] = useState<Module>('landing');
   const [view, setView] = useState<View>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 

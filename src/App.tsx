@@ -25,6 +25,7 @@ import WritingDashboard from './components/writing/WritingDashboard';
 import WritingCompose from './components/writing/WritingCompose';
 import WritingLessons from './components/writing/WritingLessons';
 import WritingAssessmentPage from './components/writing/WritingAssessmentPage';
+import ModuleLandingPage from './components/common/ModuleLandingPage';
 
 // Hooks
 import { useTheme } from './hooks/useTheme';
@@ -39,7 +40,7 @@ import { useDeck } from './hooks/useDeck';
 
 function App() {
   // --- Core App State ---
-  const [activeModule, setActiveModule] = useState<Module>('listening');
+  const [activeModule, setActiveModule] = useState<Module>('landing');
   const [view, setView] = useState<View>('home');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -135,18 +136,20 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 overflow-hidden transition-colors">
-      {/* Left Sidebar */}
-      <Sidebar
-        view={view}
-        setView={setView}
-        theme={theme}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        savedCardsCount={savedCards.length}
-        markersCount={markersHook.markers.length}
-        videoId={videoPlayer.videoId}
-        activeModule={activeModule}
-        setActiveModule={setActiveModule}
-      />
+      {/* Left Sidebar - Hidden on landing page */}
+      {activeModule !== 'landing' && (
+        <Sidebar
+          view={view}
+          setView={setView}
+          theme={theme}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          savedCardsCount={savedCards.length}
+          markersCount={markersHook.markers.length}
+          videoId={videoPlayer.videoId}
+          activeModule={activeModule}
+          setActiveModule={setActiveModule}
+        />
+      )}
 
       {/* Settings Panel */}
       <SettingsPanel
@@ -162,6 +165,14 @@ function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Landing Page */}
+        {activeModule === 'landing' && (
+          <ModuleLandingPage
+            onSelectModule={setActiveModule}
+            theme={theme}
+          />
+        )}
+
         {/* Reading Module */}
         {activeModule === 'reading' && (
           <>

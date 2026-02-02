@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, Globe } from 'lucide-react';
+import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, Globe, Home } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
 import { api, FlashcardModule } from '../../db';
 
@@ -212,6 +212,20 @@ export default function Sidebar({
                     <>
                         <div className="fixed inset-0 z-10" onClick={() => setIsModuleMenuOpen(false)} />
                         <div className="absolute top-14 left-4 right-4 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-1.5 z-20 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
+                            {/* Home Button */}
+                            <button
+                                onClick={() => {
+                                    setActiveModule('landing');
+                                    setIsModuleMenuOpen(false);
+                                }}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                                    text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-750 hover:text-gray-900 dark:hover:text-gray-200 border-b border-gray-100 dark:border-gray-700 mb-1"
+                            >
+                                <Home size={18} className="text-gray-400 dark:text-gray-500" />
+                                Home
+                            </button>
+
+                            {/* Module List */}
                             {modules.map(m => (
                                 <button
                                     key={m.id}
