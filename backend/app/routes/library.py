@@ -158,18 +158,48 @@ def import_youtube_to_library():
     try:
         # Fetch transcript
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            try:
-                transcript = transcript_list.find_transcript(['en'])
-            except:
-                transcript = transcript_list.find_transcript(['en-US', 'en-GB'])
-            text_content = " ".join([p.text for p in transcript.fetch()])
-        except:
-            try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                text_content = "\n".join([t['text'] for t in transcript])
-            except Exception as e:
-                return jsonify({'error': f'Failed to fetch transcript: {str(e)}'}), 500
+            ytt_api = YouTubeTranscriptApi()
+            transcript_list = ytt_api.list(video_id)
+            
+            # Filter for English transcripts
+            english_transcripts = [t for t in transcript_list if t.language_code.startswith('en')]
+            
+            # Segregate into manual and auto-generated
+            manual_en = [t for t in english_transcripts if not t.is_generated]
+            auto_en = [t for t in english_transcripts if t.is_generated]
+            
+            selected_transcript = None
+            
+            if manual_en:
+                # Priority: en-US > en > en-GB > any other manual
+                prioritized_codes = ['en-US', 'en', 'en-GB']
+                for code in prioritized_codes:
+                    found = next((t for t in manual_en if t.language_code == code), None)
+                    if found:
+                        selected_transcript = found
+                        break
+                
+                if not selected_transcript:
+                    selected_transcript = manual_en[0]
+            
+            elif auto_en:
+                selected_transcript = auto_en[0]
+            
+            if selected_transcript:
+                transcript_data = selected_transcript.fetch().to_raw_data()
+            else:
+                 # Fallback to old behavior behavior if no English list found (unlikely if we are here)
+                 # But sticking to previous logic: try strict fetch
+                 try:
+                    transcript_obj = ytt_api.fetch(video_id, languages=['en', 'en-US', 'en-GB'])
+                    transcript_data = transcript_obj.to_raw_data()
+                 except:
+                    transcript_obj = ytt_api.fetch(video_id)
+                    transcript_data = transcript_obj.to_raw_data()
+
+            text_content = " ".join([t['text'] for t in transcript_data])
+        except Exception as e:
+            return jsonify({'error': f'Failed to fetch transcript: {str(e)}'}), 500
 
         if not title:
             title = f"YouTube Import ({video_id})"
@@ -341,18 +371,46 @@ def import_url_to_library():
         if is_youtube:
             # Handle YouTube video
             try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                try:
-                    transcript = transcript_list.find_transcript(['en'])
-                except:
-                    transcript = transcript_list.find_transcript(['en-US', 'en-GB'])
-                text_content = " ".join([p.text for p in transcript.fetch()])
-            except:
-                try:
-                    transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                    text_content = "\n".join([t['text'] for t in transcript])
-                except Exception as e:
-                    return jsonify({'error': f'Failed to fetch YouTube transcript: {str(e)}'}), 500
+                ytt_api = YouTubeTranscriptApi()
+                transcript_list = ytt_api.list(video_id)
+                
+                # Filter for English transcripts
+                english_transcripts = [t for t in transcript_list if t.language_code.startswith('en')]
+                
+                # Segregate into manual and auto-generated
+                manual_en = [t for t in english_transcripts if not t.is_generated]
+                auto_en = [t for t in english_transcripts if t.is_generated]
+                
+                selected_transcript = None
+                
+                if manual_en:
+                    # Priority: en-US > en > en-GB > any other manual
+                    prioritized_codes = ['en-US', 'en', 'en-GB']
+                    for code in prioritized_codes:
+                        found = next((t for t in manual_en if t.language_code == code), None)
+                        if found:
+                            selected_transcript = found
+                            break
+                    
+                    if not selected_transcript:
+                        selected_transcript = manual_en[0]
+                
+                elif auto_en:
+                    selected_transcript = auto_en[0]
+                
+                if selected_transcript:
+                    transcript_data = selected_transcript.fetch().to_raw_data()
+                else:
+                    try:
+                        transcript_obj = ytt_api.fetch(video_id, languages=['en', 'en-US', 'en-GB'])
+                        transcript_data = transcript_obj.to_raw_data()
+                    except:
+                        transcript_obj = ytt_api.fetch(video_id)
+                        transcript_data = transcript_obj.to_raw_data()
+
+                text_content = " ".join([t['text'] for t in transcript_data])
+            except Exception as e:
+                return jsonify({'error': f'Failed to fetch YouTube transcript: {str(e)}'}), 500
             
             title = f"YouTube: {video_id}"
             file_type = 'youtube'

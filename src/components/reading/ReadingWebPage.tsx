@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Search, RotateCw, Globe, FileText, Monitor, BookOpen, ChevronUp, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Search, RotateCw, Globe, FileText, Monitor, BookOpen, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { View, Marker } from '../../types';
 import VocabPopup from './VocabPopup';
 
@@ -35,13 +35,16 @@ export default function ReadingWebPage({
     const [mode, setMode] = useState<'full' | 'reader'>('full');
     const [readerContent, setReaderContent] = useState<ReaderContent | null>(null);
     const [readerError, setReaderError] = useState<string | null>(null);
+
+    // Navigation history state
+    const [navigationHistory, setNavigationHistory] = useState<string[]>(['https://en.wikipedia.org/wiki/Special:Random']);
+    const [historyIndex, setHistoryIndex] = useState(0);
+    const canGoBack = historyIndex > 0;
+    const canGoForward = historyIndex < navigationHistory.length - 1;
     
     // Vocabulary popup state
     const [vocabSelection, setVocabSelection] = useState<VocabSelection | null>(null);
     const [sessionMarkers, setSessionMarkers] = useState<Marker[]>([]);
-    
-    // Collapsed toolbar state
-    const [isToolbarCollapsed, setIsToolbarCollapsed] = useState(false);
     
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const readerContentRef = useRef<HTMLDivElement>(null);
@@ -245,21 +248,27 @@ export default function ReadingWebPage({
 
     const handleGo = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        
+
         let target = url.trim();
         if (!target) return;
-        
+
         if (!target.startsWith('http://') && !target.startsWith('https://')) {
             target = 'https://' + target;
         }
-        
+
+        // Add to navigation history (remove forward history)
+        const newHistory = navigationHistory.slice(0, historyIndex + 1);
+        newHistory.push(target);
+        setNavigationHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+
         setUrl(target);
         setIsLoading(true);
         setReaderError(null);
         setVocabSelection(null);
         readerRangeRef.current = null;
         pendingPopupPositionRef.current = null;
-        
+
         if (mode === 'full') {
             setCurrentSrc(`/api/proxy?url=${encodeURIComponent(target)}`);
         } else {
@@ -312,6 +321,47 @@ export default function ReadingWebPage({
         }
     };
 
+    const handleNavigateBack = () => {
+        if (!canGoBack) return;
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        const targetUrl = navigationHistory[newIndex];
+        setUrl(targetUrl);
+
+        // Load without adding to history
+        setIsLoading(true);
+        setReaderError(null);
+        setVocabSelection(null);
+        readerRangeRef.current = null;
+        pendingPopupPositionRef.current = null;
+
+        if (mode === 'full') {
+            setCurrentSrc(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+        } else {
+            fetchReaderContent(targetUrl);
+        }
+    };
+
+    const handleNavigateForward = () => {
+        if (!canGoForward) return;
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        const targetUrl = navigationHistory[newIndex];
+        setUrl(targetUrl);
+
+        setIsLoading(true);
+        setReaderError(null);
+        setVocabSelection(null);
+        readerRangeRef.current = null;
+        pendingPopupPositionRef.current = null;
+
+        if (mode === 'full') {
+            setCurrentSrc(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
+        } else {
+            fetchReaderContent(targetUrl);
+        }
+    };
+
     const handleReload = () => {
         setIsLoading(true);
         setVocabSelection(null);
@@ -331,155 +381,113 @@ export default function ReadingWebPage({
 
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 relative">
-            {/* Collapsible Toolbar */}
-            <div className={`bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 transition-all duration-300 ${isToolbarCollapsed ? 'py-0' : ''}`}>
-                {/* Collapsed Mini Bar */}
-                {isToolbarCollapsed ? (
-                    <div className="flex items-center justify-between px-4 py-2">
-                        <div className="flex items-center gap-3">
+            {/* Toolbar */}
+            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+                {/* Single Compact Row */}
+                <div className="flex items-center justify-between gap-2 px-4 py-2">
+                    {/* Left: Back button + Globe + Navigation */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => onNavigate('home')}
+                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            title="Back to Reading Dashboard"
+                        >
+                            <ArrowLeft size={18} className="text-gray-600 dark:text-gray-400" />
+                        </button>
+
+                        <Globe size={18} className="text-indigo-500" />
+
+                        {/* Back/Forward Navigation */}
+                        <div className="flex items-center gap-0.5 border-l border-gray-200 dark:border-gray-700 pl-2">
                             <button
-                                onClick={() => onNavigate('home')}
-                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                onClick={handleNavigateBack}
+                                disabled={!canGoBack}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                    canGoBack
+                                        ? 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                        : 'text-gray-300 dark:text-gray-700 cursor-not-allowed'
+                                }`}
+                                title="Go back"
                             >
-                                <ArrowLeft size={16} className="text-gray-600 dark:text-gray-400" />
+                                <ChevronLeft size={18} />
                             </button>
-                            <Globe size={16} className="text-indigo-500" />
-                            <span className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-md">{url}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {sessionMarkers.length > 0 && (
-                                <span className="text-xs text-indigo-600 dark:text-indigo-400">{sessionMarkers.length} saved</span>
-                            )}
-                            <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded p-0.5">
-                                <button
-                                    onClick={() => handleModeChange('full')}
-                                    className={`px-2 py-1 rounded text-xs font-medium ${mode === 'full' ? 'bg-white dark:bg-gray-700 text-indigo-600' : 'text-gray-500'}`}
-                                >
-                                    Full
-                                </button>
-                                <button
-                                    onClick={() => handleModeChange('reader')}
-                                    className={`px-2 py-1 rounded text-xs font-medium ${mode === 'reader' ? 'bg-white dark:bg-gray-700 text-indigo-600' : 'text-gray-500'}`}
-                                >
-                                    Reader
-                                </button>
-                            </div>
                             <button
-                                onClick={() => setIsToolbarCollapsed(false)}
-                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                                title="Expand toolbar"
+                                onClick={handleNavigateForward}
+                                disabled={!canGoForward}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                    canGoForward
+                                        ? 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                                        : 'text-gray-300 dark:text-gray-700 cursor-not-allowed'
+                                }`}
+                                title="Go forward"
                             >
-                                <Maximize2 size={16} className="text-gray-500" />
+                                <ChevronRight size={18} />
                             </button>
                         </div>
                     </div>
-                ) : (
-                    <>
-                        {/* Header */}
-                        <div className="flex items-center justify-between gap-4 px-6 py-4">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => onNavigate('home')}
-                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                                >
-                                    <ArrowLeft size={20} className="text-gray-600 dark:text-gray-400" />
-                                </button>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                                        <Globe size={18} className="text-indigo-500" />
-                                    </div>
-                                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">Online Webpage</h1>
-                                </div>
-                                
-                                {/* Saved words indicator */}
-                                {sessionMarkers.length > 0 && (
-                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-medium">
-                                        <BookOpen size={12} />
-                                        {sessionMarkers.length} saved
-                                    </div>
-                                )}
-                            </div>
 
-                            <div className="flex items-center gap-2">
-                                {/* Mode Toggle */}
-                                <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                                    <button
-                                        onClick={() => handleModeChange('full')}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                                            mode === 'full'
-                                                ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                        <Monitor size={16} />
-                                        Full Page
-                                    </button>
-                                    <button
-                                        onClick={() => handleModeChange('reader')}
-                                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                                            mode === 'reader'
-                                                ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                        <FileText size={16} />
-                                        Reader
-                                    </button>
-                                </div>
-                                
-                                {/* Collapse Button */}
-                                <button
-                                    onClick={() => setIsToolbarCollapsed(true)}
-                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                                    title="Collapse toolbar for more reading space"
-                                >
-                                    <Minimize2 size={18} className="text-gray-500" />
-                                </button>
+                    {/* Center: URL Bar */}
+                    <form onSubmit={handleGo} className="flex-1 max-w-2xl">
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                <Search size={14} className="text-gray-400" />
                             </div>
+                            <input
+                                type="text"
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="Enter URL..."
+                                className="block w-full pl-8 pr-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                            />
+                        </div>
+                    </form>
+
+                    {/* Right: Reload + Mode Toggle + Saved Words */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={handleReload}
+                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            title="Reload"
+                        >
+                            <RotateCw size={16} className="text-gray-600 dark:text-gray-400" />
+                        </button>
+
+                        {/* Compact Mode Toggle */}
+                        <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                            <button
+                                onClick={() => handleModeChange('full')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                    mode === 'full'
+                                        ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-400'
+                                }`}
+                                title="Full Page Mode"
+                            >
+                                Full
+                            </button>
+                            <button
+                                onClick={() => handleModeChange('reader')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                    mode === 'reader'
+                                        ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-400'
+                                }`}
+                                title="Reader Mode"
+                            >
+                                Reader
+                            </button>
                         </div>
 
-                        {/* Address Bar */}
-                        <div className="px-6 pb-4">
-                            <form onSubmit={handleGo} className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Search size={16} className="text-gray-400" />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        value={url}
-                                        onChange={(e) => setUrl(e.target.value)}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder="Enter website URL..."
-                                        className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
-                                    />
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleReload}
-                                    className="p-2.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                                    title="Reload"
-                                >
-                                    <RotateCw size={18} />
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 dark:shadow-none"
-                                >
-                                    Go
-                                </button>
-                            </form>
-                            
-                            {/* Helper text */}
-                            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                <span className="inline-flex items-center gap-1">
-                                    <BookOpen size={12} />
-                                    Highlight any word to see its definition and sentence translation
-                                </span>
+                        {sessionMarkers.length > 0 && (
+                            <div className="flex items-center gap-1 px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full text-xs font-medium">
+                                <BookOpen size={12} />
+                                {sessionMarkers.length}
                             </div>
-                        </div>
-                    </>
-                )}
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Content Area */}

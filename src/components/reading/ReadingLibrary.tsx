@@ -22,24 +22,27 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
     const [importUrl, setImportUrl] = useState('');
     const [isImporting, setIsImporting] = useState(false);
 
+    const fetchLibrary = async () => {
+        try {
+            const res = await fetch('/api/library');
+            if (res.ok) {
+                const data = await res.json();
+                setLibrary(data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch library:', error);
+        }
+    };
+
     useEffect(() => {
         const loadLibrary = async () => {
             setIsLoading(true);
-            try {
-                const res = await fetch('/api/library');
-                if (res.ok) {
-                    const data = await res.json();
-                    setLibrary(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch library:', error);
-            } finally {
-                setIsLoading(false);
-            }
+            await fetchLibrary();
+            setIsLoading(false);
         };
 
         loadLibrary();
-    }, []); // No dependencies, function is local to effect
+    }, []);
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -131,7 +134,7 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                                             type="text"
                                             value={importUrl}
                                             onChange={(e) => setImportUrl(e.target.value)}
-                                            placeholder="Paste YouTube or article URL..."
+                                            placeholder="Paste YouTube URL for subtitles, or article URL to read..."
                                             className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             onKeyDown={(e) => e.key === 'Enter' && handleUrlImport()}
                                             disabled={isImporting}
@@ -145,7 +148,7 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                                         </button>
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        Supports YouTube videos and news articles
+                                        Import YouTube subtitles or article content
                                     </p>
                                 </div>
                             )}
@@ -206,9 +209,16 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                                 <h3 className="font-semibold text-gray-900 dark:text-white truncate mb-1" title={item.title}>
                                     {item.title}
                                 </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">
-                                    {item.file_type}
-                                </p>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">
+                                        {item.file_type}
+                                    </p>
+                                    {item.file_type === 'youtube' && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                                            📺 YouTube
+                                        </span>
+                                    )}
+                                </div>
 
                                 <div className="mt-auto pt-4 flex items-center justify-between text-sm text-gray-400">
                                     <span>{new Date(item.created_at).toLocaleDateString()}</span>
