@@ -54,32 +54,67 @@ def get_transcript():
     try:
         ytt_api = YouTubeTranscriptApi()
 
-        # Try to fetch the specified language
-        try:
-            transcript_obj = ytt_api.fetch(video_id, languages=[language])
-        except Exception:
-            # Fallback: try to get any available transcript
-            transcript_obj = ytt_api.fetch(video_id)
+        # Default transcript object
+        transcript_obj = None
+        is_auto_generated = False
+        
+        # If language is English, try our prioritization logic
+        if language == 'en':
+            try:
+                transcript_list = ytt_api.list(video_id)
+                # Filter for English transcripts
+                english_transcripts = [t for t in transcript_list if t.language_code.startswith('en')]
+                
+                # Segregate into manual and auto-generated
+                manual_en = [t for t in english_transcripts if not t.is_generated]
+                auto_en = [t for t in english_transcripts if t.is_generated]
+                
+                selected_transcript = None
+                
+                if manual_en:
+                    # Priority: en-US > en > en-GB > any other manual
+                    prioritized_codes = ['en-US', 'en', 'en-GB']
+                    for code in prioritized_codes:
+                        found = next((t for t in manual_en if t.language_code == code), None)
+                        if found:
+                            selected_transcript = found
+                            break
+                    
+                    if not selected_transcript:
+                        selected_transcript = manual_en[0]
+                
+                elif auto_en:
+                    selected_transcript = auto_en[0]
+                
+                if selected_transcript:
+                    transcript_obj = selected_transcript.fetch()
+                    is_auto_generated = selected_transcript.is_generated
+            except Exception as e:
+                # Fallback if list/filter fails
+                print(f"Priority selection failed: {e}")
+                pass
 
+        # If no transcript selected yet (or not English), try standard fetch
+        if not transcript_obj:
+            try:
+                transcript_obj = ytt_api.fetch(video_id, languages=[language])
+            except Exception:
+                # Fallback: try to get any available transcript
+                transcript_obj = ytt_api.fetch(video_id)
+
+        # Convert to raw data (list of dicts)
         transcript_data = transcript_obj.to_raw_data()
 
-        # Detect if the transcript is auto-generated
-        transcript_list = ytt_api.list(video_id)
-        is_auto_generated = False
-
-        try:
-            # Check if the fetched transcript is auto-generated
-            for transcript in transcript_list:
-                if transcript.language_code == language:
-                    is_auto_generated = transcript.is_generated
-                    break
-        except Exception:
-            # Fallback: check the _generated_transcripts dictionary
+        # If we didn't determine auto-generated status yet, try to detect it
+        if not is_auto_generated:
             try:
-                is_auto_generated = language in transcript_list._generated_transcripts
+                transcript_list = ytt_api.list(video_id)
+                for transcript in transcript_list:
+                    if transcript.language_code == language:
+                        is_auto_generated = transcript.is_generated
+                        break
             except Exception:
-                # If both methods fail, assume not auto-generated (safer default)
-                is_auto_generated = False
+                pass
 
         return jsonify({
             'subtitles': transcript_data,
