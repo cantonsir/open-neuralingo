@@ -260,6 +260,14 @@ export default function ListeningModule({
   // Key to force MiniTest remount
   const [miniTestKey, setMiniTestKey] = useState(0);
 
+  // Audio Generator initial data from test results
+  const [audioGeneratorInitialData, setAudioGeneratorInitialData] = useState<{
+    markedWords: string[];
+    testSentences: string[];
+    aiFeedback: string;
+    context: string;
+  } | undefined>(undefined);
+
   const handleLoadVideo = () => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = inputUrl.match(regExp);
@@ -431,6 +439,7 @@ export default function ListeningModule({
           setView={setView}
           onLoadSession={handleLoadSession}
           targetLanguage={targetLanguage}
+          initialData={audioGeneratorInitialData}
         />
       </div>
 
@@ -532,6 +541,10 @@ export default function ListeningModule({
                 setSelectedSegmentData(null);
               }}
               onLoadSession={handleLoadSession}
+              onNavigateToAudioGenerator={(testData) => {
+                setAudioGeneratorInitialData(testData);
+                setView('compose');
+              }}
             />
           )}
         </div>

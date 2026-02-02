@@ -53,11 +53,12 @@ export default function UnifiedInput({
     // Context title helper
     const contextTitle = library.find(l => l.id === contextId)?.title || "Unknown Context";
 
-    // Auto-resize textarea
+    // Auto-resize textarea with max height
     useEffect(() => {
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
-            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+            const newHeight = Math.min(textareaRef.current.scrollHeight, 400); // Max 400px height
+            textareaRef.current.style.height = newHeight + 'px';
         }
     }, [value]);
 
@@ -188,7 +189,7 @@ export default function UnifiedInput({
                         }
                     }}
                     placeholder={placeholder}
-                    className="w-full p-4 bg-transparent border-none focus:ring-0 outline-none resize-none min-h-[80px] text-lg text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 leading-relaxed scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-700"
+                    className="w-full p-4 bg-transparent border-none focus:ring-0 outline-none resize-none min-h-[80px] max-h-[400px] overflow-y-auto text-lg text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 leading-relaxed scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500"
                     rows={1}
                 />
             </div>

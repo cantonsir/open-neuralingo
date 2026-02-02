@@ -353,11 +353,11 @@ def complete_segment_lesson(goal_id, segment_index, lesson_id):
 def mark_segment_watched(goal_id, segment_index):
     """
     Mark a segment as watched (video completed).
-    
+
     Path Parameters:
         goal_id: Goal video ID
         segment_index: Segment number
-    
+
     Returns:
         Success status
     """
@@ -368,30 +368,128 @@ def mark_segment_watched(goal_id, segment_index):
                 VALUES (?, ?, TRUE)
                 ON CONFLICT(goal_id, segment_index) DO UPDATE SET video_watched = TRUE
             ''', (goal_id, segment_index))
-            
+
             # Update overall progress
             mastery_records = conn.execute('''
-                SELECT COUNT(*) as watched FROM segment_mastery 
+                SELECT COUNT(*) as watched FROM segment_mastery
                 WHERE goal_id = ? AND video_watched = TRUE
             ''', (goal_id,)).fetchone()
-            
+
             goal = conn.execute('''
                 SELECT total_segments FROM goal_videos WHERE id = ?
             ''', (goal_id,)).fetchone()
-            
+
             if goal and goal['total_segments'] > 0:
                 progress = mastery_records['watched'] / goal['total_segments']
                 conn.execute('''
-                    UPDATE goal_videos SET 
+                    UPDATE goal_videos SET
                         overall_progress = ?,
                         completed_segments = ?,
                         last_studied_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 ''', (progress, mastery_records['watched'], goal_id))
-            
+
             conn.commit()
-            
+
             return jsonify({'status': 'success'})
-        
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@segment_learning_bp.route('/segment-learning/<goal_id>/vocabulary', methods=['GET'])
+def get_goal_vocabulary(goal_id):
+    """
+    Aggregate vocabulary from lessons across segments for practice generation.
+
+    Path Parameters:
+        goal_id: Goal video ID
+
+    Query Parameters:
+        filter: 'all' | 'recent' | 'unknown' | 'specific' (default: 'all')
+        limit: Number of recent segments to include (default: 3, used with 'recent' filter)
+        segment_index: Specific segment to load (used with 'specific' filter)
+
+    Returns:
+        {
+            vocabulary: string[],
+            patterns: string[],
+            source: {
+                segments: number[],
+                totalLessons: number,
+                totalWords: number
+            }
+        }
+    """
+    filter_type = request.args.get('filter', 'all')
+    limit = int(request.args.get('limit', 3))
+    specific_segment = request.args.get('segment_index')
+
+    try:
+        with get_db() as conn:
+            lessons = []
+
+            if filter_type == 'specific' and specific_segment is not None:
+                # Load from specific segment
+                lessons = conn.execute('''
+                    SELECT segment_index, content_json FROM segment_lessons
+                    WHERE goal_id = ? AND segment_index = ?
+                ''', (goal_id, int(specific_segment))).fetchall()
+
+            elif filter_type == 'recent':
+                # Load from last N segments with lessons
+                lessons = conn.execute('''
+                    SELECT DISTINCT segment_index, content_json, created_at
+                    FROM segment_lessons
+                    WHERE goal_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (goal_id, limit)).fetchall()
+
+            elif filter_type == 'unknown':
+                # Load only from vocabulary lessons (words user doesn't know)
+                lessons = conn.execute('''
+                    SELECT segment_index, content_json FROM segment_lessons
+                    WHERE goal_id = ? AND lesson_type = 'vocabulary'
+                ''', (goal_id,)).fetchall()
+
+            else:  # 'all'
+                # Load from all lessons
+                lessons = conn.execute('''
+                    SELECT segment_index, content_json FROM segment_lessons
+                    WHERE goal_id = ?
+                ''', (goal_id,)).fetchall()
+
+            # Extract vocabulary and patterns
+            vocabulary = []
+            patterns = []
+            segments = set()
+
+            for lesson in lessons:
+                segments.add(lesson['segment_index'])
+                content = json.loads(lesson['content_json'])
+
+                # Extract words
+                if content.get('words'):
+                    vocabulary.extend([w['word'] for w in content['words'] if w.get('word')])
+
+                # Extract patterns
+                if content.get('patterns'):
+                    patterns.extend([p['pattern'] for p in content['patterns'] if p.get('pattern')])
+
+            # Deduplicate
+            unique_vocabulary = list(set(vocabulary))
+            unique_patterns = list(set(patterns))
+
+            return jsonify({
+                'vocabulary': unique_vocabulary,
+                'patterns': unique_patterns,
+                'source': {
+                    'segments': sorted(list(segments)),
+                    'totalLessons': len(lessons),
+                    'totalWords': len(vocabulary)  # Before deduplication
+                }
+            })
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500

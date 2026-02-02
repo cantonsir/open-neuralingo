@@ -15,6 +15,12 @@ interface ListeningComposeProps {
     setView: (view: View) => void;
     onLoadSession: (session: ListeningSession) => void;
     targetLanguage: string;
+    initialData?: {
+        markedWords: string[];
+        testSentences: string[];
+        aiFeedback: string;
+        context: string;
+    };
 }
 
 interface Message {
@@ -25,7 +31,7 @@ interface Message {
     timestamp: number;
 }
 
-export default function ListeningCompose({ setView, onLoadSession, targetLanguage }: ListeningComposeProps) {
+export default function ListeningCompose({ setView, onLoadSession, targetLanguage, initialData }: ListeningComposeProps) {
     const [prompt, setPrompt] = useState('');
     const [contextId, setContextId] = useState('');
     const [library, setLibrary] = useState<LibraryItem[]>([]);
@@ -58,6 +64,23 @@ export default function ListeningCompose({ setView, onLoadSession, targetLanguag
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isGenerating]);
+
+    // Auto-populate prompt when initial data is provided
+    useEffect(() => {
+        if (initialData && initialData.markedWords.length > 0) {
+            const generatedPrompt = `Create listening practice for these words I struggled with: ${initialData.markedWords.join(', ')}.
+
+Test sentences I found difficult:
+${initialData.testSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+
+AI Feedback: ${initialData.aiFeedback}
+
+Context: ${initialData.context}`;
+
+            setPrompt(generatedPrompt);
+            setContextId('test-results'); // Mark as coming from test
+        }
+    }, [initialData]);
 
     const loadHistory = async () => {
         try {
@@ -592,8 +615,8 @@ export default function ListeningCompose({ setView, onLoadSession, targetLanguag
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
-                    <div className={`w-full h-full flex flex-col p-4 md:p-8 ${messages.length === 0 ? 'justify-center' : 'justify-end'}`}>
+                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500">
+                    <div className={`w-full min-h-full flex flex-col p-4 md:p-8 ${messages.length === 0 ? 'justify-center' : 'justify-start'}`}>
                         {messages.length === 0 && (
                             <div className="text-center py-20 opacity-50">
                                 <Sparkles className="w-12 h-12 mx-auto text-gray-400 mb-4" />
@@ -625,6 +648,18 @@ export default function ListeningCompose({ setView, onLoadSession, targetLanguag
                 {/* Sticky Input Area */}
                 <div className="flex-shrink-0 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
                     <div className="w-full">
+                        {/* Initial Data Indicator */}
+                        {initialData && initialData.markedWords.length > 0 && (
+                            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                    Loaded from test results
+                                </div>
+                                <div className="text-xs text-blue-700 dark:text-blue-300">
+                                    {initialData.markedWords.length} words marked, {initialData.testSentences.length} sentences
+                                </div>
+                            </div>
+                        )}
+
                         <UnifiedInput
                             value={prompt}
                             onChange={setPrompt}

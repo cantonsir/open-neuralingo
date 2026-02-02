@@ -17,9 +17,8 @@ import {
     X
 } from 'lucide-react';
 import ListeningFeedbackSliders from './ListeningFeedbackSliders';
-import LessonPracticeGenerator from './LessonPracticeGenerator';
 import { useListeningTest, TestResponseData } from '../../hooks/useListeningTest';
-import { api, SegmentMastery, SegmentTestResult, SegmentLesson, PracticeSession } from '../../db';
+import { api, SegmentMastery, SegmentTestResult, SegmentLesson } from '../../db';
 import {
     generateSegmentTestSentences,
     SegmentTestSentence,
@@ -40,9 +39,15 @@ interface LearningSessionProps {
     onExit: () => void;
     onComplete: () => void;
     onLoadSession?: (session: any) => void;
+    onNavigateToAudioGenerator?: (testData: {
+        markedWords: string[];
+        testSentences: string[];
+        aiFeedback: string;
+        context: string;
+    }) => void;
 }
 
-type Phase = 'loading' | 'test' | 'analyzing' | 'results' | 'learning' | 'practice' | 'watch' | 'summary';
+type Phase = 'loading' | 'test' | 'analyzing' | 'results' | 'learning' | 'watch' | 'summary';
 
 export default function LearningSession({
     goalId,
@@ -53,7 +58,8 @@ export default function LearningSession({
     segmentEndTime,
     onExit,
     onComplete,
-    onLoadSession
+    onLoadSession,
+    onNavigateToAudioGenerator
 }: LearningSessionProps) {
     // Phase state
     const [phase, setPhase] = useState<Phase>('loading');
@@ -75,9 +81,6 @@ export default function LearningSession({
     // Summary state (for viewing completed lessons)
     const [savedTests, setSavedTests] = useState<SegmentTestResult[]>([]);
     const [savedLessons, setSavedLessons] = useState<SegmentLesson[]>([]);
-
-    // Practice state
-    const [savedPracticeSessions, setSavedPracticeSessions] = useState<PracticeSession[]>([]);
 
     // Handle test completion - analyze results and transition to results phase
     const handleTestComplete = useCallback(async (responses: TestResponseData[]) => {
@@ -328,6 +331,37 @@ export default function LearningSession({
         setPhase('watch');
     };
 
+    // Extract marked words from test responses
+    const extractMarkedWords = (): string[] => {
+        const words: string[] = [];
+        testResponses.forEach(resp => {
+            const sentenceWords = resp.sentence.split(' ');
+            resp.markedIndices.forEach(idx => {
+                if (sentenceWords[idx]) {
+                    words.push(sentenceWords[idx]);
+                }
+            });
+        });
+        return [...new Set(words)]; // Deduplicate
+    };
+
+    // Navigate to Audio Generator with test data
+    const handleGoToAudioGenerator = () => {
+        if (!onNavigateToAudioGenerator) return;
+
+        const markedWords = extractMarkedWords();
+        const testSentences = testResponses
+            .filter(r => !r.understood)
+            .map(r => r.sentence);
+
+        onNavigateToAudioGenerator({
+            markedWords,
+            testSentences,
+            aiFeedback: analysis?.summary || '',
+            context: segmentSubtitle.join(' ')
+        });
+    };
+
     // Handle exit
     const handleExit = () => {
         stopAll();
@@ -432,6 +466,22 @@ export default function LearningSession({
 
                     {/* Action Buttons */}
                     <div className="flex flex-col gap-3">
+                        {/* Go to Audio Generator button */}
+                        {onNavigateToAudioGenerator && (
+                            <button
+                                onClick={handleGoToAudioGenerator}
+                                className="w-full py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl hover:from-orange-400 hover:to-amber-400 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Volume2 size={20} />
+                                Go to Audio Generator
+                                {extractMarkedWords().length > 0 && (
+                                    <span className="text-xs opacity-75">
+                                        ({extractMarkedWords().length} words marked)
+                                    </span>
+                                )}
+                            </button>
+                        )}
+
                         {isMastered ? (
                             <button
                                 onClick={goToWatch}
@@ -579,44 +629,17 @@ export default function LearningSession({
                                 </button>
                             ) : (
                                 <button
-                                    onClick={() => setPhase('practice')}
-                                    className="flex-1 py-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-semibold rounded-xl hover:from-yellow-400 hover:to-orange-400 transition-all flex items-center justify-center gap-2"
+                                    onClick={handleGoToAudioGenerator}
+                                    className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold rounded-xl hover:from-orange-400 hover:to-amber-400 transition-all flex items-center justify-center gap-2"
                                 >
-                                    <Play size={20} />
-                                    Practice with AI Dialogue
+                                    <Volume2 size={20} />
+                                    Go to Audio Generator
                                 </button>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
-        );
-    }
-
-    // Practice phase
-    if (phase === 'practice') {
-        // Extract vocabulary from lessons
-        const extractedVocabulary = lessons
-            .filter(l => l.content.words)
-            .flatMap(l => l.content.words?.map(w => w.word) || []);
-
-        // Extract patterns from lessons
-        const extractedPatterns = lessons
-            .filter(l => l.content.patterns)
-            .flatMap(l => l.content.patterns?.map(p => p.pattern) || []);
-
-        return (
-            <LessonPracticeGenerator
-                goalId={goalId}
-                segmentIndex={segmentIndex}
-                vocabulary={extractedVocabulary}
-                patterns={extractedPatterns}
-                segmentContext={segmentSubtitle.join(' ')}
-                onComplete={() => setPhase('watch')}
-                onBack={() => setPhase('learning')}
-                onExit={handleExit}
-                onLoadSession={onLoadSession}
-            />
         );
     }
 
