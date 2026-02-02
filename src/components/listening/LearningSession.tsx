@@ -44,6 +44,9 @@ interface LearningSessionProps {
         markedWords: string[];
         testSentences: string[];
         aiFeedback: string;
+        strengths?: string[];
+        weaknesses?: string[];
+        recommendations?: string[];
         context: string;
     }) => void;
 }
@@ -160,7 +163,6 @@ export default function LearningSession({
 
         const initTest = async () => {
             setPhase('loading');
-            setLoadingMessage('Loading lesson data...');
 
             // Reset test state
             resetTest();
@@ -171,27 +173,48 @@ export default function LearningSession({
                 if (cancelled) return; // Exit if component unmounted
                 setMastery(masteryData);
 
-                // If lesson is completed, show summary view
-                if (masteryData && masteryData.videoWatched) {
-                    setLoadingMessage('Loading your results...');
+                // Check for ANY saved tests first
+                setLoadingMessage('Checking for previous results...');
+                const [tests, lessonData] = await Promise.all([
+                    api.getSegmentTests(goalId, segmentIndex),
+                    api.getSegmentLessons(goalId, segmentIndex)
+                ]);
 
-                    // Fetch saved test results and lessons
-                    const [tests, lessonData] = await Promise.all([
-                        api.getSegmentTests(goalId, segmentIndex),
-                        api.getSegmentLessons(goalId, segmentIndex)
-                    ]);
+                if (cancelled) return;
 
-                    if (cancelled) return;
+                // Restoring saved state if available
+                if (tests.length > 0) {
+                    const latestTest = tests[0];
                     setSavedTests(tests);
                     setSavedLessons(lessonData);
 
-                    // Set analysis from the most recent test
-                    if (tests.length > 0 && tests[0].analysis) {
-                        setAnalysis(tests[0].analysis as ListeningAnalysis);
-                        setTestAccuracy(tests[0].accuracy);
+                    // Restore analysis and accuracy
+                    if (latestTest.analysis) {
+                        setAnalysis(latestTest.analysis as ListeningAnalysis);
+                        setTestAccuracy(latestTest.accuracy);
                     }
 
-                    setPhase('summary');
+                    // Restore responses for "Results" view
+                    const restoredResponses: TestResponseData[] = latestTest.responses.map(r => ({
+                        sentence: r.sentence,
+                        understood: r.understood,
+                        replays: r.replays,
+                        reactionTimeMs: r.reactionTimeMs,
+                        markedIndices: r.markedIndices,
+                        // Defaults for fields not saved in simplified structure if needed
+                        wordBoundaries: 0,
+                        familiarity: 50,
+                        meaningClarity: 50
+                    }));
+                    setTestResponses(restoredResponses);
+
+                    // If lesson is fully completed (video watched), go to summary
+                    if (masteryData && masteryData.videoWatched) {
+                        setPhase('summary');
+                    } else {
+                        // Otherwise go to results view (allow retake or continue)
+                        setPhase('results');
+                    }
                     return;
                 }
 
@@ -334,17 +357,45 @@ export default function LearningSession({
     };
 
     // Extract marked words from test responses
+    // Extract marked words from test responses (grouping contiguous indices into phrases)
     const extractMarkedWords = (): string[] => {
-        const words: string[] = [];
+        const collectedPhrases: string[] = [];
+
         testResponses.forEach(resp => {
+            if (!resp.markedIndices || resp.markedIndices.length === 0) return;
+
             const sentenceWords = resp.sentence.split(' ');
-            resp.markedIndices.forEach(idx => {
-                if (sentenceWords[idx]) {
-                    words.push(sentenceWords[idx]);
+            // Sort indices numerically
+            const sortedIndices = [...resp.markedIndices].sort((a, b) => a - b);
+
+            let currentPhrase: string[] = [];
+            let lastIndex = -2; // Disjoint from any valid 0+ index
+
+            sortedIndices.forEach(idx => {
+                if (idx === lastIndex + 1) {
+                    // Contiguous: Add to current phrase
+                    if (sentenceWords[idx]) currentPhrase.push(sentenceWords[idx]);
+                } else {
+                    // Not contiguous: Push previous phrase if exists
+                    if (currentPhrase.length > 0) {
+                        // Clean punctuation from phrase if needed, or keep as is? 
+                        // User example: 'really cost me.' keeps mark. Let's keep raw words.
+                        collectedPhrases.push(currentPhrase.join(' '));
+                    }
+                    // Start new phrase
+                    currentPhrase = [];
+                    if (sentenceWords[idx]) currentPhrase.push(sentenceWords[idx]);
                 }
+                lastIndex = idx;
             });
+
+            // Push the final phrase
+            if (currentPhrase.length > 0) {
+                collectedPhrases.push(currentPhrase.join(' '));
+            }
         });
-        return [...new Set(words)]; // Deduplicate
+
+        return [...new Set(collectedPhrases)]; // Deduplicate
     };
 
     // Navigate to Audio Generator with test data
@@ -360,6 +411,9 @@ export default function LearningSession({
             markedWords,
             testSentences,
             aiFeedback: analysis?.summary || '',
+            strengths: analysis?.strengths || [],
+            weaknesses: analysis?.weaknesses || [],
+            recommendations: analysis?.recommendations || [],
             context: segmentSubtitle.join(' ')
         });
     };
@@ -704,8 +758,8 @@ export default function LearningSession({
                                     <p className="text-sm text-gray-500 font-medium mb-2">Test Sentences:</p>
                                     {latestTest.responses.map((resp, i) => (
                                         <div key={i} className={`p-3 rounded-lg flex items-start gap-3 ${resp.understood
-                                                ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30'
-                                                : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30'
+                                            ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30'
+                                            : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30'
                                             }`}>
                                             <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${resp.understood ? 'bg-green-500' : 'bg-red-500'
                                                 }`}>

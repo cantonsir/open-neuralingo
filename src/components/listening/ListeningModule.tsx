@@ -179,19 +179,19 @@ export default function ListeningModule({
   const handleGenerateSubtitles = useCallback(async (targetVideoId: string) => {
     console.log('[ListeningModule] Starting subtitle generation for:', targetVideoId);
     setIsGeneratingSubtitles(true);
-    
+
     try {
       const generatedSubs = await generateSubtitles(targetVideoId);
       console.log('[ListeningModule] Generated subtitles:', generatedSubs.length);
-      
+
       // Update both parent and local subtitles
       setSubtitles(generatedSubs);
       setLocalSubtitles(generatedSubs);
-      
+
     } catch (error) {
       console.error('[ListeningModule] Subtitle generation failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       // Show detailed error with setup instructions if needed
       if (errorMessage.includes('not configured') || errorMessage.includes('not installed')) {
         alert(`Subtitle Generation Setup Required:\n\n${errorMessage}\n\nSetup Instructions:\n1. pip install google-cloud-speech yt-dlp\n2. Set GOOGLE_APPLICATION_CREDENTIALS environment variable\n3. Restart the backend server`);
@@ -211,18 +211,18 @@ export default function ListeningModule({
   // but audio sessions manage their own localSubtitles
   const localCurrentSubtitle = useMemo(() => {
     if (!audioUrl) return null; // For YouTube videos, use parent's getCurrentSubtitle
-    
+
     // Debug logging for audio sessions only
     if (localSubtitles.length === 0) {
       console.warn('[Subtitle Matching] No subtitles available yet');
       return null;
     }
-    
+
     // Find matching subtitle
     const found = localSubtitles.find(
       s => state.currentTime >= s.start && state.currentTime <= s.end
     );
-    
+
     // Only log when subtitle changes or when there's a mismatch
     if (found) {
       if (!prevSubtitleRef.current || prevSubtitleRef.current.id !== found.id) {
@@ -240,7 +240,7 @@ export default function ListeningModule({
         prevSubtitleRef.current = null;
       }
     }
-    
+
     return found || null;
   }, [audioUrl, localSubtitles, state.currentTime]);
 
@@ -265,6 +265,9 @@ export default function ListeningModule({
     markedWords: string[];
     testSentences: string[];
     aiFeedback: string;
+    strengths?: string[];
+    weaknesses?: string[];
+    recommendations?: string[];
     context: string;
   } | undefined>(undefined);
 
@@ -289,7 +292,7 @@ export default function ListeningModule({
     console.log('[handleLoadSession] Session subtitles:', session.subtitles);
     console.log('[handleLoadSession] Session subtitles count:', session.subtitles?.length || 0);
     console.log('[handleLoadSession] Session transcript count:', session.transcript?.length || 0);
-    
+
     // 1. Set Audio URL
     setAudioUrl(session.audioUrl);
     setAudioTitle(session.prompt || 'Audio Session');
@@ -330,28 +333,28 @@ export default function ListeningModule({
 
     // Emergency Fallback if still empty
     if (subtitlesToUse.length === 0) {
-        console.warn('[handleLoadSession] Subtitles still empty. Checking transcript:', session.transcript);
-        if (session.transcript && Array.isArray(session.transcript) && session.transcript.length > 0) {
-             let currentTime = 0;
-             session.transcript.forEach((line, i) => {
-                 const text = line.text ? `${line.speaker || 'Speaker'}: ${line.text}` : JSON.stringify(line);
-                 const duration = Math.max(3, text.length / 15); 
-                 subtitlesToUse.push({
-                     id: `emergency-fallback-${i}`,
-                     start: currentTime,
-                     end: currentTime + duration,
-                     text: text
-                 });
-                 currentTime += duration;
-             });
-        } else {
-             subtitlesToUse.push({
-                 id: 'error-no-data',
-                 start: 0,
-                 end: 3600,
-                 text: 'Error: No transcript data found for this session.'
-             });
-        }
+      console.warn('[handleLoadSession] Subtitles still empty. Checking transcript:', session.transcript);
+      if (session.transcript && Array.isArray(session.transcript) && session.transcript.length > 0) {
+        let currentTime = 0;
+        session.transcript.forEach((line, i) => {
+          const text = line.text ? `${line.speaker || 'Speaker'}: ${line.text}` : JSON.stringify(line);
+          const duration = Math.max(3, text.length / 15);
+          subtitlesToUse.push({
+            id: `emergency-fallback-${i}`,
+            start: currentTime,
+            end: currentTime + duration,
+            text: text
+          });
+          currentTime += duration;
+        });
+      } else {
+        subtitlesToUse.push({
+          id: 'error-no-data',
+          start: 0,
+          end: 3600,
+          text: 'Error: No transcript data found for this session.'
+        });
+      }
     }
 
     console.log('[handleLoadSession] Final subtitlesToUse:', subtitlesToUse);
@@ -376,14 +379,14 @@ export default function ListeningModule({
     <div className="flex-1 flex flex-col overflow-hidden relative">
       {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
       <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'} relative`}>
-          <LoopView
-            videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
-            audioUrl={audioUrl}
-            videoTitle={audioUrl ? (audioTitle || 'Audio Session') : videoTitle}
-            inputUrl={inputUrl}
-            setInputUrl={setInputUrl}
-            isFetchingSubs={isFetchingSubs}
-            onLoadVideo={handleLoadVideo}
+        <LoopView
+          videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
+          audioUrl={audioUrl}
+          videoTitle={audioUrl ? (audioTitle || 'Audio Session') : videoTitle}
+          inputUrl={inputUrl}
+          setInputUrl={setInputUrl}
+          isFetchingSubs={isFetchingSubs}
+          onLoadVideo={handleLoadVideo}
           player={player}
           onPlayerReady={setPlayer}
           onStateChange={setState}

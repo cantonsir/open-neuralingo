@@ -19,6 +19,9 @@ interface ListeningComposeProps {
         markedWords: string[];
         testSentences: string[];
         aiFeedback: string;
+        strengths?: string[];
+        weaknesses?: string[];
+        recommendations?: string[];
         context: string;
     };
 }
@@ -68,14 +71,26 @@ export default function ListeningCompose({ setView, onLoadSession, targetLanguag
     // Auto-populate prompt when initial data is provided
     useEffect(() => {
         if (initialData && initialData.markedWords.length > 0) {
-            const generatedPrompt = `Create listening practice for these words I struggled with: ${initialData.markedWords.join(', ')}.
+            let generatedPrompt = `Create listening practice for these words/phrases I struggled with: ${initialData.markedWords.join(', ')}.
 
 Test sentences I found difficult:
 ${initialData.testSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-AI Feedback: ${initialData.aiFeedback}
+AI Feedback: ${initialData.aiFeedback}`;
 
-Context: ${initialData.context}`;
+            if (initialData.strengths && initialData.strengths.length > 0) {
+                generatedPrompt += `\n\nMy Strengths: ${initialData.strengths.join(', ')}`;
+            }
+
+            if (initialData.weaknesses && initialData.weaknesses.length > 0) {
+                generatedPrompt += `\n\nMy Weaknesses: ${initialData.weaknesses.join(', ')}`;
+            }
+
+            if (initialData.recommendations && initialData.recommendations.length > 0) {
+                generatedPrompt += `\n\nRecommendations: ${initialData.recommendations.join(', ')}`;
+            }
+
+            generatedPrompt += `\n\nContext: ${initialData.context}`;
 
             setPrompt(generatedPrompt);
             setContextId('test-results'); // Mark as coming from test
