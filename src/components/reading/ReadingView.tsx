@@ -279,9 +279,13 @@ export default function ReadingView({ libraryId, title, content: initialContent,
     };
 
     // Handle text selection
-    const handleTextSelection = () => {
+    const handleTextSelection = (event?: MouseEvent) => {
         const selection = window.getSelection();
         if (!selection || selection.toString().trim() === '') {
+            const target = event?.target as HTMLElement | null;
+            if (target && target.closest('[data-vocab-panel]')) {
+                return;
+            }
             setSelectedText('');
             setSelectionRange(null);
             return;

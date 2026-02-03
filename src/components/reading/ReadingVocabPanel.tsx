@@ -57,6 +57,19 @@ export default function ReadingVocabPanel({
     const [localSelectedText, setLocalSelectedText] = useState<string | null>(null);
     const [localSelectionIndices, setLocalSelectionIndices] = useState<number[] | null>(null);
 
+    const getSentenceWords = () => selectedSentence ? selectedSentence.trim().split(/\s+/).filter(w => w.length > 0) : [];
+
+    const normalizeIndices = (indices: number[], wordCount: number) => {
+        if (!indices.length) return [];
+        const sorted = [...indices].sort((a, b) => a - b).filter(i => i >= 0 && i < wordCount);
+        if (sorted.length <= 1) return sorted;
+        const min = sorted[0];
+        const max = sorted[sorted.length - 1];
+        return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+    };
+
+    const buildPhrase = (words: string[], indices: number[]) => indices.map(i => words[i]).join(' ');
+
     useEffect(() => {
         if (!selectedText || !selectedSentence) {
             setLocalSelectedText(null);
@@ -64,8 +77,12 @@ export default function ReadingVocabPanel({
             return;
         }
 
-        setLocalSelectedText(selectedText);
-        setLocalSelectionIndices(selectionIndices || []);
+        const words = getSentenceWords();
+        const normalized = normalizeIndices(selectionIndices || [], words.length);
+        const nextText = normalized.length > 1 ? buildPhrase(words, normalized) : selectedText;
+
+        setLocalSelectedText(nextText);
+        setLocalSelectionIndices(normalized);
     }, [selectedText, selectedSentence, selectionIndices, selectionKey]);
 
     const formatDefinitionForSave = (data: DefinitionData | null): string => {
@@ -203,16 +220,38 @@ export default function ReadingVocabPanel({
 
     const handleToggleWord = (index: number) => {
         if (!selectedSentence) return;
-        const words = selectedSentence.trim().split(/\s+/).filter(w => w.length > 0);
+        const words = getSentenceWords();
         const word = words[index];
         if (!word) return;
+
+        const current = localSelectionIndices || [];
+        if (current.length > 0) {
+            const sorted = [...current].sort((a, b) => a - b);
+            const min = sorted[0];
+            const max = sorted[sorted.length - 1];
+
+            if (index >= min && index <= max) {
+                setLocalSelectedText(word);
+                setLocalSelectionIndices([index]);
+                return;
+            }
+
+            if (index === min - 1 || index === max + 1) {
+                const range = Array.from({ length: (index < min ? max - index + 1 : index - min + 1) }, (_, i) => (index < min ? index + i : min + i));
+                const phrase = buildPhrase(words, range);
+                setLocalSelectedText(phrase);
+                setLocalSelectionIndices(range);
+                return;
+            }
+        }
+
         setLocalSelectedText(word);
         setLocalSelectionIndices([index]);
     };
 
     const handleToggleRange = (start: number, end: number) => {
         if (!selectedSentence) return;
-        const words = selectedSentence.trim().split(/\s+/).filter(w => w.length > 0);
+        const words = getSentenceWords();
         if (words.length === 0) return;
         const from = Math.min(start, end);
         const to = Math.max(start, end);
@@ -225,7 +264,12 @@ export default function ReadingVocabPanel({
     // Collapsed state
     if (isCollapsed) {
         return (
-            <div className="w-14 h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col items-center py-4 gap-4">
+            <div
+                data-vocab-panel
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
+                className="w-14 h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col items-center py-4 gap-4"
+            >
                 <button
                     onClick={onToggleCollapse}
                     className="p-2 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -248,7 +292,12 @@ export default function ReadingVocabPanel({
 
     // Expanded state
     return (
-        <div className="w-96 h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden">
+        <div
+            data-vocab-panel
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            className="w-96 h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col overflow-hidden"
+        >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
                 <div className="flex items-center gap-2">
