@@ -1008,6 +1008,21 @@ export const api = {
         }
     },
 
+    /**
+     * Delete a reading session.
+     */
+    async deleteReadingSession(sessionId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/reading/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete reading session');
+        } catch (error) {
+            console.error('API deleteReadingSession error:', error);
+            throw error;
+        }
+    },
+
     // --- Statistics & Forecast API ---
 
     /**

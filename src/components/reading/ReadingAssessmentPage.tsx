@@ -10,7 +10,7 @@ export default function ReadingAssessmentPage() {
     const [hasProfile, setHasProfile] = useState<boolean>(false);
     const [profile, setProfile] = useState<ReadingProfileData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [testCompleted, setTestCompleted] = useState(false);
+    const [isTakingTest, setIsTakingTest] = useState(false); // Track if user is actively taking the test
     const [testResponses, setTestResponses] = useState<ReadingTestResponse[]>([]);
     const [testPassages, setTestPassages] = useState<GeneratedPassage[]>([]);
     const [cachedAnalysis, setCachedAnalysis] = useState<ReadingAnalysis | null>(null);
@@ -21,11 +21,10 @@ export default function ReadingAssessmentPage() {
         if (savedState) {
             try {
                 const state = JSON.parse(savedState);
-                if (state.testCompleted && state.testResponses && state.testPassages) {
+                if (state.testResponses && state.testPassages && state.testResponses.length > 0) {
                     // Restore completed test state
                     setProfile(state.profile);
                     setHasProfile(true);
-                    setTestCompleted(true);
                     setTestResponses(state.testResponses);
                     setTestPassages(state.testPassages);
                     setCachedAnalysis(state.analysis || null);
@@ -84,6 +83,7 @@ export default function ReadingAssessmentPage() {
         );
     }
 
+    // No profile yet - show questionnaire
     if (!hasProfile) {
         return (
             <ReadingProfile
@@ -100,13 +100,12 @@ export default function ReadingAssessmentPage() {
         // Store test results and passages
         setTestResponses(responses);
         setTestPassages(passages);
-        setTestCompleted(true);
+        setIsTakingTest(false); // Return to results view
         setCachedAnalysis(null);
 
         // Save state to localStorage so we can restore it when navigating back
         const stateToSave = {
             profile,
-            testCompleted: true,
             testResponses: responses,
             testPassages: passages,
             analysis: null,
@@ -114,7 +113,7 @@ export default function ReadingAssessmentPage() {
         localStorage.setItem('readingAssessmentState', JSON.stringify(stateToSave));
     };
 
-    // Once profile exists, show test interface
+    // Safety check for profile
     if (!profile) {
         return (
             <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -123,35 +122,41 @@ export default function ReadingAssessmentPage() {
         );
     }
 
-    // Show analysis if test is completed
-    if (testCompleted) {
+    // User clicked "Take Test" - show the mini-test
+    if (isTakingTest) {
         return (
-            <ReadingAssessmentResults
+            <ReadingMiniTest
                 profile={profile}
-                passages={testPassages}
-                responses={testResponses}
-                cachedAnalysis={cachedAnalysis || undefined}
-                onRetakeAssessment={() => {
-                    // Clear saved state and reset to take new test
-                    localStorage.removeItem('readingAssessmentState');
-                    setTestCompleted(false);
-                    setTestResponses([]);
-                    setTestPassages([]);
-                    setCachedAnalysis(null);
-                }}
-                onStartLearning={() => {
-                    // TODO: Navigate to learning plan
-                    alert('Learning plan feature coming soon!');
-                }}
+                onComplete={handleTestComplete}
+                onBack={() => setIsTakingTest(false)} // Go back to results view
             />
         );
     }
 
+    // Profile exists - always show results page first
+    // (Results page shows "Take Mini-Test" button if no test results yet)
     return (
-        <ReadingMiniTest
+        <ReadingAssessmentResults
             profile={profile}
-            onComplete={handleTestComplete}
-            onBack={() => setHasProfile(false)}
+            passages={testPassages}
+            responses={testResponses}
+            cachedAnalysis={cachedAnalysis || undefined}
+            onRetakeAssessment={() => {
+                // Reset to questionnaire - user wants to redo the profile
+                localStorage.removeItem('readingAssessmentState');
+                setTestResponses([]);
+                setTestPassages([]);
+                setCachedAnalysis(null);
+                setHasProfile(false); // Go back to profile questionnaire
+            }}
+            onRetakeMiniTest={() => {
+                // Start (or retake) the mini-test
+                localStorage.removeItem('readingAssessmentState');
+                setTestResponses([]);
+                setTestPassages([]);
+                setCachedAnalysis(null);
+                setIsTakingTest(true); // Go to mini-test
+            }}
         />
     );
 }

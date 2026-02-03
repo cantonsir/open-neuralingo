@@ -92,6 +92,34 @@ def save_reading_session():
         return jsonify({'error': str(e)}), 500
 
 
+@reading_bp.route('/reading/sessions/<session_id>', methods=['DELETE'])
+def delete_reading_session(session_id):
+    """
+    Delete a reading session.
+    
+    Args:
+        session_id: ID of the session to delete
+    
+    Returns:
+        Success status
+    """
+    try:
+        with get_db() as conn:
+            result = conn.execute(
+                'DELETE FROM reading_sessions WHERE id = ?',
+                (session_id,)
+            )
+            conn.commit()
+            
+            if result.rowcount == 0:
+                return jsonify({'error': 'Session not found'}), 404
+            
+            return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # ===== READING ASSESSMENT PROFILE =====
 
 @reading_bp.route('/reading/profile', methods=['GET'])

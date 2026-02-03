@@ -250,6 +250,28 @@ export interface ReadingSession {
 export interface LibraryItem {
   id: string;
   title: string;
+  file_type?: 'text' | 'youtube' | 'pdf' | 'epub';
+  content_text?: string;
+}
+
+// YouTube subtitle data structure for library items
+export interface YouTubeSubtitleSegment {
+  id?: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface YouTubeSubtitleMetadata {
+  title: string;
+  channel: string;
+  duration: number;
+  url: string;
+}
+
+export interface YouTubeSubtitleData {
+  metadata: YouTubeSubtitleMetadata;
+  subtitles: YouTubeSubtitleSegment[];
 }
 
 // Google Developers YouTube API Demo Video (Extremely stable for testing)

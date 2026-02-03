@@ -1077,6 +1077,60 @@ export async function chatWithPlanner(history: { role: 'user' | 'assistant', tex
     }
 }
 
+/**
+ * Chat with the reading planner to refine reading material ideas.
+ */
+export async function chatWithReadingPlanner(history: { role: 'user' | 'assistant', text: string }[]): Promise<string> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return "I cannot connect to the planner service.";
+
+    const systemPrompt = `You are a creative collaborative assistant helping a language teacher/learner design reading practice material.
+    
+    Your goal is to help the user refine their idea for:
+    - Topic and subject matter
+    - Writing style (narrative, informative, dialogue-based, etc.)
+    - Difficulty level and target vocabulary
+    - Length and structure preferences
+    - Cultural context or specific themes
+
+    Keep your responses helpful, encouraging, and brief (1-3 sentences). 
+    Ask clarifying questions if the user's idea is vague.
+    When you feel the idea is ready, suggest they click "Create Session".`;
+
+    const contents = history.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+    }));
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents: contents,
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 200,
+                    }
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "I didn't quite catch that.";
+    } catch (e) {
+        console.error("Reading Planner Chat Error", e);
+        return "Sorry, I'm having trouble connecting to the planner.";
+    }
+}
+
 // ===== READING MODULE: MATERIAL GENERATION =====
 
 export interface ReadingMaterial {

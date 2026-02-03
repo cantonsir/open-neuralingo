@@ -372,7 +372,7 @@ export default function Sidebar({
                         <SectionHeader label="Tools" collapsed={collapsed} />
                         <NavItem
                             icon={<Book size={20} />}
-                            label="Story Generator"
+                            label="Reading Generator"
                             isActive={view === 'generator'}
                             collapsed={collapsed}
                             onClick={() => setView('generator')}

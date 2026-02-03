@@ -22,6 +22,9 @@ interface AssessmentResult {
     listeningLevel: number;
     subtitleDependence: number;
     difficulties: string[];
+    speakingSpeed: number;
+    learningGoal: string;
+    skillsFocus: string[];
 }
 
 interface MiniTestProps {
@@ -118,7 +121,7 @@ const MiniTest: React.FC<MiniTestProps> = ({ onComplete, onBack }) => {
             isExiting.current = false;
 
             // 1. Get assessment from API
-            let assessment: AssessmentResult = { targetLanguage: 'en', targetContent: 'movies', listeningLevel: 2, subtitleDependence: 1, difficulties: [] };
+            let assessment: AssessmentResult = { targetLanguage: 'en', targetContent: 'movies', listeningLevel: 2, subtitleDependence: 1, difficulties: [], speakingSpeed: 2, learningGoal: 'entertainment', skillsFocus: [] };
             try {
                 const res = await fetch('/api/assessment/profile');
                 if (cancelled) return;

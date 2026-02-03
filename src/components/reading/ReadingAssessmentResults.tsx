@@ -41,7 +41,7 @@ interface ReadingAssessmentResultsProps {
     responses: ReadingTestResponse[];
     cachedAnalysis?: ReadingAnalysis;
     onRetakeAssessment: () => void;
-    onStartLearning: () => void;
+    onRetakeMiniTest: () => void;
     onViewHistory?: () => void;
 }
 
@@ -51,7 +51,7 @@ const ReadingAssessmentResults: React.FC<ReadingAssessmentResultsProps> = ({
     responses,
     cachedAnalysis,
     onRetakeAssessment,
-    onStartLearning,
+    onRetakeMiniTest,
     onViewHistory,
 }) => {
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['partA', 'partB']));
@@ -86,11 +86,11 @@ const ReadingAssessmentResults: React.FC<ReadingAssessmentResultsProps> = ({
                             Retake
                         </button>
                         <button
-                            onClick={onStartLearning}
+                            onClick={onRetakeMiniTest}
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <Play className="w-4 h-4" />
-                            Start Learning
+                            Take Test
                         </button>
                     </div>
                 </div>
@@ -266,13 +266,34 @@ const ReadingAssessmentResults: React.FC<ReadingAssessmentResultsProps> = ({
 
                         {isExpanded('partB') && (
                             <div className="p-6">
-                                <ReadingTestAnalysis
-                                    profile={profile}
-                                    passages={passages}
-                                    responses={responses}
-                                    cachedAnalysis={cachedAnalysis}
-                                    variant="embedded"
-                                />
+                                {responses.length === 0 ? (
+                                    <div className="text-center py-8">
+                                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                            <BookOpen className="w-8 h-8 text-purple-500" />
+                                        </div>
+                                        <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                            No Test Results Yet
+                                        </h4>
+                                        <p className="text-gray-600 dark:text-gray-400 mb-4">
+                                            Take the mini-test to get a detailed analysis of your reading skills.
+                                        </p>
+                                        <button
+                                            onClick={onRetakeMiniTest}
+                                            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                                        >
+                                            <Play className="w-4 h-4" />
+                                            Take Mini-Test
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <ReadingTestAnalysis
+                                        profile={profile}
+                                        passages={passages}
+                                        responses={responses}
+                                        cachedAnalysis={cachedAnalysis}
+                                        variant="embedded"
+                                    />
+                                )}
                             </div>
                         )}
                     </div>
@@ -313,11 +334,11 @@ const ReadingAssessmentResults: React.FC<ReadingAssessmentResultsProps> = ({
                             Retake Assessment
                         </button>
                         <button
-                            onClick={onStartLearning}
+                            onClick={onRetakeMiniTest}
                             className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold rounded-xl hover:from-blue-600 hover:to-indigo-600 transition-all"
                         >
                             <Play className="w-5 h-5" />
-                            Start Learning Plan
+                            Retake Mini-Test
                         </button>
                     </div>
                 </div>
