@@ -164,7 +164,7 @@ export default function ReadingWebPage({
     const handleSaveVocab = (data: VocabSavePayload) => {
         const indices = data.selectionIndices && data.selectionIndices.length > 0 ? data.selectionIndices : [0];
         const mainIndex = indices[0] ?? 0;
-        const definitionText = data.definition ? `${data.word}: ${data.definition}` : data.word;
+        const definitionText = data.definition || data.word;
 
         const marker: Marker = {
             id: `webpage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,

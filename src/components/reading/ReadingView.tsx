@@ -325,7 +325,7 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         const paragraphIndex = selectionRange.paragraphIndex;
         const indices = data.selectionIndices && data.selectionIndices.length > 0 ? data.selectionIndices : [0];
         const mainIndex = indices[0] ?? 0;
-        const definitionText = data.definition ? `${data.word}: ${data.definition}` : data.word;
+        const definitionText = data.definition || data.word;
 
         const marker: Marker = {
             id: `reading-${Date.now()}-${Math.random()}`,
