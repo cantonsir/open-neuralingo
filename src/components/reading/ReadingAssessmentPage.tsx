@@ -3,7 +3,7 @@ import ReadingProfile, { ReadingProfileData } from './ReadingProfile';
 import ReadingMiniTest from './ReadingMiniTest';
 import ReadingTestAnalysis from './ReadingTestAnalysis';
 import { ReadingTestResponse } from '../../hooks/useReadingTest';
-import { GeneratedPassage } from '../../services/geminiService';
+import { GeneratedPassage, ReadingAnalysis } from '../../services/geminiService';
 import { api } from '../../db';
 
 export default function ReadingAssessmentPage() {
@@ -13,6 +13,7 @@ export default function ReadingAssessmentPage() {
     const [testCompleted, setTestCompleted] = useState(false);
     const [testResponses, setTestResponses] = useState<ReadingTestResponse[]>([]);
     const [testPassages, setTestPassages] = useState<GeneratedPassage[]>([]);
+    const [cachedAnalysis, setCachedAnalysis] = useState<ReadingAnalysis | null>(null);
 
     useEffect(() => {
         // Try to restore state from localStorage first
@@ -27,6 +28,7 @@ export default function ReadingAssessmentPage() {
                     setTestCompleted(true);
                     setTestResponses(state.testResponses);
                     setTestPassages(state.testPassages);
+                    setCachedAnalysis(state.analysis || null);
                     setLoading(false);
                     return;
                 }
@@ -99,6 +101,7 @@ export default function ReadingAssessmentPage() {
         setTestResponses(responses);
         setTestPassages(passages);
         setTestCompleted(true);
+        setCachedAnalysis(null);
 
         // Save state to localStorage so we can restore it when navigating back
         const stateToSave = {
@@ -106,6 +109,7 @@ export default function ReadingAssessmentPage() {
             testCompleted: true,
             testResponses: responses,
             testPassages: passages,
+            analysis: null,
         };
         localStorage.setItem('readingAssessmentState', JSON.stringify(stateToSave));
     };
@@ -126,12 +130,14 @@ export default function ReadingAssessmentPage() {
                 profile={profile}
                 passages={testPassages}
                 responses={testResponses}
+                cachedAnalysis={cachedAnalysis || undefined}
                 onRetakeAssessment={() => {
                     // Clear saved state and reset to take new test
                     localStorage.removeItem('readingAssessmentState');
                     setTestCompleted(false);
                     setTestResponses([]);
                     setTestPassages([]);
+                    setCachedAnalysis(null);
                 }}
                 onStartLearning={() => {
                     // TODO: Navigate to learning plan

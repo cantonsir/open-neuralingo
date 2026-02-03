@@ -18,6 +18,7 @@ const ReadingTestAnalysis: React.FC<ReadingTestAnalysisProps> = ({
     profile,
     passages,
     responses,
+    cachedAnalysis,
     onStartLearning,
     onRetakeAssessment,
     onViewHistory,
@@ -28,6 +29,12 @@ const ReadingTestAnalysis: React.FC<ReadingTestAnalysisProps> = ({
     const [showAllSentences, setShowAllSentences] = useState(false);
 
     useEffect(() => {
+        if (cachedAnalysis) {
+            setAnalysis(cachedAnalysis);
+            setLoading(false);
+            return;
+        }
+
         const analyzeResults = async () => {
             setLoading(true);
 
@@ -51,6 +58,19 @@ const ReadingTestAnalysis: React.FC<ReadingTestAnalysisProps> = ({
                     readingTimes
                 );
                 setAnalysis(result);
+
+                try {
+                    const stateToSave = {
+                        profile,
+                        testCompleted: true,
+                        testResponses: responses,
+                        testPassages: passages,
+                        analysis: result,
+                    };
+                    localStorage.setItem('readingAssessmentState', JSON.stringify(stateToSave));
+                } catch (storageError) {
+                    console.error('Error caching assessment:', storageError);
+                }
 
                 // Save assessment results to backend
                 try {
@@ -76,7 +96,7 @@ const ReadingTestAnalysis: React.FC<ReadingTestAnalysisProps> = ({
         };
 
         analyzeResults();
-    }, [profile, passages, responses]);
+    }, [cachedAnalysis, profile, passages, responses]);
 
     if (loading) {
         return (
