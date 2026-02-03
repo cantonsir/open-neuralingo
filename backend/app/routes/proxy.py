@@ -134,9 +134,9 @@ def proxy_webpage():
                     
                     var selectedText = selection.toString().trim();
                     
-                    // Only process short selections (1-5 words)
+                    // Only process short selections (1-12 words)
                     var wordCount = selectedText.split(/\\s+/).length;
-                    if (wordCount > 5 || selectedText.length > 100) return;
+                    if (wordCount > 12 || selectedText.length > 200) return;
                     
                     // Get position
                     var range = selection.getRangeAt(0);

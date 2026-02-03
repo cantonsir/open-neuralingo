@@ -124,7 +124,7 @@ function App() {
   };
 
   // --- Reading/Speaking/Writing Data ---
-  const [readingData, setReadingData] = useState<{ libraryId: string; title: string } | null>(null);
+  const [readingData, setReadingData] = useState<{ libraryId: string; title: string; content?: string } | null>(null);
   const [readingMarkers, setReadingMarkers] = useState<Marker[]>([]);
   const [speakingData, setSpeakingData] = useState<{ mode: 'live' | 'tts'; topic: string; contextId?: string } | null>(null);
   const [writingData, setWritingData] = useState<{ topic: string; contextId?: string; content?: string } | null>(null);
@@ -180,7 +180,13 @@ function App() {
           <>
             {/* Persist WebPage in background to avoid reload - MOVED OUTSIDE TERNARY */}
             <div className={view === 'webpage' ? 'flex-1 flex flex-col h-full overflow-hidden' : 'hidden'}>
-              <ReadingWebPage onNavigate={setView} firstLanguage={firstLanguage} onMarkersUpdate={setReadingMarkers} />
+              <ReadingWebPage
+                onNavigate={setView}
+                firstLanguage={firstLanguage}
+                onMarkersUpdate={setReadingMarkers}
+                onSaveToDeck={handleSaveToDeck}
+                speechLanguage={targetLanguage}
+              />
             </div>
 
             {view !== 'webpage' && (
@@ -228,9 +234,12 @@ function App() {
                               <ReadingView
                                 libraryId={readingData.libraryId}
                                 title={readingData.title}
+                                content={readingData.content}
                                 onNavigate={setView}
                                 onMarkersUpdate={setReadingMarkers}
+                                onSaveToDeck={handleSaveToDeck}
                                 firstLanguage={firstLanguage}
+                                speechLanguage={targetLanguage}
                               />
                             ) : (
                               <ReadingDashboard onNavigate={setView} />

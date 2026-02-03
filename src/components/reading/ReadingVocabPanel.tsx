@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen, Sparkles, Languages, Save, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, ChevronRight, BookOpen, Languages, Save, Trash2, Loader2, Volume2 } from 'lucide-react';
 import { Marker, VocabData } from '../../types';
 import { generateBilingualDefinition, generateSentenceMeaning } from '../../ai';
 import VocabularyBreakdown from '../listening/VocabularyBreakdown';
@@ -8,13 +8,29 @@ interface ReadingVocabPanelProps {
     selectedText: string | null;
     selectedSentence: string | null;
     selectionIndices: number[] | null;
+    selectionKey?: number;
     sessionMarkers: Marker[];
     isCollapsed: boolean;
     onToggleCollapse: () => void;
-    onSaveSelection: () => void;
+    onSaveSelection: (data: VocabSavePayload) => void;
     onRemoveMarker: (markerId: string) => void;
     onUpdateVocabData: (markerId: string, index: number, data: VocabData) => void;
     firstLanguage?: string;
+    speechLanguage?: string;
+}
+
+interface DefinitionData {
+    english: string;
+    native: string;
+    pronunciation?: string;
+}
+
+export interface VocabSavePayload {
+    word: string;
+    sentence: string;
+    selectionIndices: number[];
+    definition: string;
+    translation: string;
 }
 
 export default function ReadingVocabPanel({
@@ -27,46 +43,183 @@ export default function ReadingVocabPanel({
     onSaveSelection,
     onRemoveMarker,
     onUpdateVocabData,
-    firstLanguage = 'en'
+    firstLanguage = 'en',
+    speechLanguage = 'en',
+    selectionKey,
 }: ReadingVocabPanelProps) {
-    const [wordDefinition, setWordDefinition] = useState<string>('');
+    const [definition, setDefinition] = useState<DefinitionData | null>(null);
     const [sentenceMeaning, setSentenceMeaning] = useState<string>('');
-    const [isGeneratingWord, setIsGeneratingWord] = useState(false);
-    const [isGeneratingSentence, setIsGeneratingSentence] = useState(false);
+    const [isLoadingDef, setIsLoadingDef] = useState(false);
+    const [isLoadingSentence, setIsLoadingSentence] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const lastSentenceRef = useRef<string | null>(null);
+    const sentenceMeaningCacheRef = useRef<Map<string, string>>(new Map());
+    const [localSelectedText, setLocalSelectedText] = useState<string | null>(null);
+    const [localSelectionIndices, setLocalSelectionIndices] = useState<number[] | null>(null);
 
-    // Reset definitions when selection changes
     useEffect(() => {
-        if (!selectedText) {
-            setWordDefinition('');
-            setSentenceMeaning('');
+        if (!selectedText || !selectedSentence) {
+            setLocalSelectedText(null);
+            setLocalSelectionIndices(null);
+            return;
         }
-    }, [selectedText]);
 
-    const handleGenerateDefinition = async () => {
-        if (!selectedText) return;
-        setIsGeneratingWord(true);
-        try {
-            const definition = await generateBilingualDefinition(selectedText, selectedSentence || '', firstLanguage);
-            setWordDefinition(definition || 'Could not generate definition');
-        } catch (error) {
-            setWordDefinition('Error generating definition');
-        } finally {
-            setIsGeneratingWord(false);
-        }
+        setLocalSelectedText(selectedText);
+        setLocalSelectionIndices(selectionIndices || []);
+    }, [selectedText, selectedSentence, selectionIndices, selectionKey]);
+
+    const formatDefinitionForSave = (data: DefinitionData | null): string => {
+        if (!data) return '';
+        const english = data.english?.trim();
+        const native = data.native?.trim();
+        if (english && native) return `English: ${english}\nNative: ${native}`;
+        return english || native || '';
     };
 
-    const handleTranslateSentence = async () => {
-        if (!selectedSentence) return;
-        setIsGeneratingSentence(true);
+    const handleSaveSelection = () => {
+        if (!localSelectedText || !selectedSentence) return;
+        onSaveSelection({
+            word: localSelectedText,
+            sentence: selectedSentence,
+            selectionIndices: localSelectionIndices || [],
+            definition: formatDefinitionForSave(definition),
+            translation: sentenceMeaning
+        });
+    };
+
+    const canSave = Boolean(localSelectedText && selectedSentence && !isLoadingDef && !isLoadingSentence);
+
+    const speakSelection = () => {
+        if (!localSelectedText) return;
+        if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+        const utterance = new SpeechSynthesisUtterance(localSelectedText);
+        const lang = speechLanguage || 'en';
+        utterance.lang = lang;
+
         try {
-            // Always translate the whole sentence to native language
-            const translation = await generateSentenceMeaning(selectedSentence, firstLanguage);
-            setSentenceMeaning(translation || 'Could not translate');
-        } catch (error) {
-            setSentenceMeaning('Error generating translation');
-        } finally {
-            setIsGeneratingSentence(false);
+            const voices = window.speechSynthesis.getVoices();
+            const matched = voices.find(v => v.lang.toLowerCase().startsWith(lang.toLowerCase()));
+            if (matched) utterance.voice = matched;
+        } catch (e) {
+            // ignore voice lookup issues
         }
+
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    };
+
+    // Auto-generate definition when selection changes; sentence meaning only when sentence changes
+    useEffect(() => {
+        if (!localSelectedText || !selectedSentence) {
+            setDefinition(null);
+            setSentenceMeaning('');
+            setError(null);
+            setIsLoadingDef(false);
+            setIsLoadingSentence(false);
+            lastSentenceRef.current = null;
+            return;
+        }
+
+        let isCancelled = false;
+        const sentenceKey = selectedSentence.trim();
+        const sentenceChanged = lastSentenceRef.current !== sentenceKey;
+        lastSentenceRef.current = sentenceKey;
+        const cachedMeaning = sentenceMeaningCacheRef.current.get(sentenceKey);
+
+        setDefinition(null);
+        setError(null);
+        setIsLoadingDef(true);
+        if (sentenceChanged) {
+            if (cachedMeaning) {
+                setSentenceMeaning(cachedMeaning);
+                setIsLoadingSentence(false);
+            } else {
+                setSentenceMeaning('');
+                setIsLoadingSentence(true);
+            }
+        } else {
+            setIsLoadingSentence(false);
+        }
+
+        const loadDefinition = async () => {
+            try {
+                const result = await generateBilingualDefinition(localSelectedText, selectedSentence, firstLanguage);
+                if (!isCancelled && result) {
+                    try {
+                        const cleanText = result.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const parsed = JSON.parse(cleanText);
+                        setDefinition({
+                            english: parsed.english || '',
+                            native: parsed.native || '',
+                            pronunciation: parsed.pronunciation || ''
+                        });
+                    } catch {
+                        setDefinition({
+                            english: result,
+                            native: '',
+                            pronunciation: ''
+                        });
+                    }
+                }
+            } catch (e) {
+                if (!isCancelled) {
+                    setError('Failed to load definition');
+                }
+            } finally {
+                if (!isCancelled) {
+                    setIsLoadingDef(false);
+                }
+            }
+        };
+
+        const loadSentenceMeaning = async () => {
+            if (!sentenceChanged || cachedMeaning) return;
+            try {
+                const meaning = await generateSentenceMeaning(selectedSentence, firstLanguage);
+                if (!isCancelled) {
+                    const value = meaning || '';
+                    setSentenceMeaning(value);
+                    if (value) {
+                        sentenceMeaningCacheRef.current.set(sentenceKey, value);
+                    }
+                }
+            } catch (e) {
+                if (!isCancelled) {
+                    setSentenceMeaning('');
+                }
+            } finally {
+                if (!isCancelled) {
+                    setIsLoadingSentence(false);
+                }
+            }
+        };
+
+        loadDefinition();
+        loadSentenceMeaning();
+        return () => {
+            isCancelled = true;
+        };
+    }, [localSelectedText, selectedSentence, firstLanguage, selectionKey]);
+
+    const handleToggleWord = (index: number) => {
+        if (!selectedSentence) return;
+        const words = selectedSentence.trim().split(/\s+/).filter(w => w.length > 0);
+        const word = words[index];
+        if (!word) return;
+        setLocalSelectedText(word);
+        setLocalSelectionIndices([index]);
+    };
+
+    const handleToggleRange = (start: number, end: number) => {
+        if (!selectedSentence) return;
+        const words = selectedSentence.trim().split(/\s+/).filter(w => w.length > 0);
+        if (words.length === 0) return;
+        const from = Math.min(start, end);
+        const to = Math.max(start, end);
+        const indices = Array.from({ length: to - from + 1 }, (_, i) => from + i).filter(i => i >= 0 && i < words.length);
+        const phrase = indices.map(i => words[i]).join(' ');
+        setLocalSelectedText(phrase);
+        setLocalSelectionIndices(indices);
     };
 
     // Collapsed state
@@ -113,15 +266,28 @@ export default function ReadingVocabPanel({
             {/* Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
                 {/* Current Selection Section */}
-                {selectedText && selectedSentence ? (
-                    <div className="space-y-4">
-                        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
-                            <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">Current Selection</h4>
+                    {localSelectedText && selectedSentence ? (
+                        <div className="space-y-4">
+                            <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                                <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">Current Selection</h4>
 
                             {/* Selected Word */}
                             <div className="mb-3">
-                                <p className="text-xs text-blue-700 dark:text-blue-400 mb-1">Selected Word(s):</p>
-                                <p className="text-base font-medium text-blue-900 dark:text-blue-100">{selectedText}</p>
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-xs text-blue-700 dark:text-blue-400 mb-1">Selected Word(s):</p>
+                                    <button
+                                        onClick={speakSelection}
+                                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200"
+                                        title="Pronounce"
+                                    >
+                                        <Volume2 size={12} />
+                                        Pronounce
+                                    </button>
+                                </div>
+                                <p className="text-base font-medium text-blue-900 dark:text-blue-100">{localSelectedText}</p>
+                                {definition?.pronunciation && (
+                                    <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">{definition.pronunciation}</p>
+                                )}
                             </div>
 
                             {/* Sentence with Breakdown */}
@@ -130,83 +296,72 @@ export default function ReadingVocabPanel({
                                 <div className="bg-white dark:bg-gray-800 rounded-lg p-3">
                                     <VocabularyBreakdown
                                         text={selectedSentence}
-                                        markedIndices={selectionIndices || []}
-                                        onToggleWord={() => { }}
+                                        markedIndices={localSelectionIndices || []}
+                                        onToggleWord={handleToggleWord}
+                                        onToggleRange={handleToggleRange}
                                         compact={true}
                                     />
                                 </div>
                             </div>
 
-                            {/* AI Actions */}
-                            <div className="flex gap-2 mb-3">
-                                <button
-                                    onClick={handleGenerateDefinition}
-                                    disabled={isGeneratingWord}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    <Sparkles size={14} />
-                                    {isGeneratingWord ? 'Generating...' : 'Vocabulary define'}
-                                </button>
-                                <button
-                                    onClick={handleTranslateSentence}
-                                    disabled={isGeneratingSentence}
-                                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-lg text-sm font-medium transition-colors"
-                                >
-                                    <Languages size={14} />
-                                    {isGeneratingSentence ? 'Translating...' : 'Translate sentence'}
-                                </button>
+                            {error && (
+                                <div className="text-sm text-red-500 mb-2">{error}</div>
+                            )}
+
+                            {/* Definition */}
+                            <div className="space-y-2 mb-3">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <BookOpen size={12} />
+                                    Definition
+                                </div>
+                                {isLoadingDef ? (
+                                    <div className="flex items-center gap-2 text-gray-400">
+                                        <Loader2 size={14} className="animate-spin" />
+                                        <span className="text-sm">Generating definition...</span>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {definition?.english && (
+                                            <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                                                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{definition.english}</p>
+                                            </div>
+                                        )}
+                                        {definition?.native && (
+                                            <div className="p-2.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                                                <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{definition.native}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Word Definition */}
-                            {wordDefinition && (
-                                <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700">
-                                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-2">Definition:</p>
-                                    {(() => {
-                                        try {
-                                            // Clean potential markdown json blocks if any
-                                            const cleanText = wordDefinition.replace(/```json/g, '').replace(/```/g, '').trim();
-                                            const json = JSON.parse(cleanText);
-                                            if (json.english || json.native) {
-                                                return (
-                                                    <div className="space-y-3">
-                                                        {json.english && (
-                                                            <div>
-                                                                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">English</p>
-                                                                <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed bg-blue-50/50 dark:bg-blue-900/10 p-2 rounded">{json.english}</p>
-                                                            </div>
-                                                        )}
-                                                        {json.native && (
-                                                            <div>
-                                                                <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">Translated</p>
-                                                                <p className="text-sm text-gray-900 dark:text-gray-100 leading-relaxed bg-green-50/50 dark:bg-green-900/10 p-2 rounded">{json.native}</p>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            }
-                                        } catch (e) {
-                                            // Fallback
-                                        }
-                                        return <p className="text-sm text-gray-700 dark:text-gray-300">{wordDefinition}</p>;
-                                    })()}
-                                </div>
-                            )}
-
                             {/* Sentence Meaning */}
-                            {sentenceMeaning && (
-                                <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg border border-indigo-200 dark:border-indigo-700">
-                                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400 mb-1">Sentence Meaning:</p>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300">{sentenceMeaning}</p>
+                            <div className="space-y-2 mb-3">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <Languages size={12} />
+                                    Sentence Meaning
                                 </div>
-                            )}
+                                {isLoadingSentence ? (
+                                    <div className="flex items-center gap-2 text-gray-400">
+                                        <Loader2 size={14} className="animate-spin" />
+                                        <span className="text-sm">Translating sentence...</span>
+                                    </div>
+                                ) : sentenceMeaning ? (
+                                    <div className="p-2.5 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800">
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 italic line-clamp-2">"{selectedSentence}"</p>
+                                        <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{sentenceMeaning}</p>
+                                    </div>
+                                ) : null}
+                            </div>
 
                             {/* Save Button */}
                             <button
-                                onClick={onSaveSelection}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                                onClick={handleSaveSelection}
+                                disabled={!canSave}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg font-medium transition-colors"
                             >
                                 <Save size={16} />
-                                Save to Markers
+                                Save to Vocabulary
                             </button>
                         </div>
                     </div>

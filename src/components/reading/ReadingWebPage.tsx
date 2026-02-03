@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Search, RotateCw, Globe, FileText, Monitor, BookOpen, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { View, Marker } from '../../types';
-import VocabPopup from './VocabPopup';
+import { ArrowLeft, Search, RotateCw, Globe, FileText, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { View, Marker, VocabData } from '../../types';
+import ReadingVocabPanel, { VocabSavePayload } from './ReadingVocabPanel';
 
 interface ReadingWebPageProps {
     onNavigate: (view: View) => void;
     firstLanguage?: string;
     onMarkersUpdate?: (markers: Marker[]) => void;
+    onSaveToDeck?: (marker: Marker) => void;
+    speechLanguage?: string;
 }
 
 interface ReaderContent {
@@ -17,17 +19,12 @@ interface ReaderContent {
     image?: string;
 }
 
-interface VocabSelection {
-    word: string;
-    sentence: string;
-    position: { x: number; y: number };
-    source: 'reader' | 'full';
-}
-
 export default function ReadingWebPage({ 
     onNavigate, 
     firstLanguage = 'zh-CN',
-    onMarkersUpdate 
+    onMarkersUpdate,
+    onSaveToDeck,
+    speechLanguage = 'en'
 }: ReadingWebPageProps) {
     const [url, setUrl] = useState('https://en.wikipedia.org/wiki/Special:Random');
     const [currentSrc, setCurrentSrc] = useState(`/api/proxy?url=${encodeURIComponent('https://en.wikipedia.org/wiki/Special:Random')}`);
@@ -42,17 +39,19 @@ export default function ReadingWebPage({
     const canGoBack = historyIndex > 0;
     const canGoForward = historyIndex < navigationHistory.length - 1;
     
-    // Vocabulary popup state
-    const [vocabSelection, setVocabSelection] = useState<VocabSelection | null>(null);
+    // Vocabulary panel state
+    const [selectedText, setSelectedText] = useState<string | null>(null);
+    const [selectedSentence, setSelectedSentence] = useState<string | null>(null);
+    const [selectionIndices, setSelectionIndices] = useState<number[] | null>(null);
+    const [selectionKey, setSelectionKey] = useState(0);
     const [sessionMarkers, setSessionMarkers] = useState<Marker[]>([]);
-    
+    const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem('readingWebPanelCollapsed') === 'true';
+    });
+
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const readerContentRef = useRef<HTMLDivElement>(null);
-    const readerRangeRef = useRef<Range | null>(null);
-    const popupRef = useRef<HTMLDivElement | null>(null);
-    const popupRafRef = useRef<number | null>(null);
-    const pendingPopupPositionRef = useRef<{ x: number; y: number } | null>(null);
-    const vocabSelectionRef = useRef<VocabSelection | null>(null);
 
     // Extract sentence containing the selected word
     const extractSentence = (text: string, selectedWord: string): string => {
@@ -64,22 +63,13 @@ export default function ReadingWebPage({
         return relevantSentence?.trim() || text.slice(0, 200);
     };
 
-    // Handle text selection in Reader Mode
-    const updatePopupPosition = useCallback((x: number, y: number) => {
-        pendingPopupPositionRef.current = { x, y };
-        if (popupRafRef.current !== null) return;
-        popupRafRef.current = requestAnimationFrame(() => {
-            popupRafRef.current = null;
-            const next = pendingPopupPositionRef.current;
-            const popup = popupRef.current;
-            if (!next || !popup) return;
-            popup.style.transform = `translate3d(${Math.round(next.x)}px, ${Math.round(next.y)}px, 0)`;
-        });
-    }, []);
-
-    useEffect(() => {
-        vocabSelectionRef.current = vocabSelection;
-    }, [vocabSelection]);
+    const computeSelectionIndices = (sentence: string, selected: string): number[] => {
+        const sentenceWords = sentence.split(/\s+/);
+        const selectedWordList = selected.split(/\s+/);
+        return sentenceWords.map((word, idx) =>
+            selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
+        ).filter(i => i >= 0);
+    };
 
     const handleReaderSelection = useCallback(() => {
         const selection = window.getSelection();
@@ -89,19 +79,15 @@ export default function ReadingWebPage({
 
         const selectedText = selection.toString().trim();
         
-        // Only process single words or short phrases (max 5 words)
+        // Only process short selections (max 12 words)
         const wordCount = selectedText.split(/\s+/).length;
-        if (wordCount > 5 || selectedText.length > 100) {
+        if (wordCount > 12 || selectedText.length > 200) {
             return;
         }
 
-        // Get position for popup
-        const range = selection.getRangeAt(0);
-        readerRangeRef.current = range.cloneRange();
-        const rect = range.getBoundingClientRect();
-        
         // Find the surrounding text for context
         let contextText = '';
+        const range = selection.getRangeAt(0);
         const container = range.commonAncestorContainer;
         if (container.nodeType === Node.TEXT_NODE) {
             contextText = container.textContent || '';
@@ -119,21 +105,12 @@ export default function ReadingWebPage({
         }
 
         const sentence = extractSentence(contextText, selectedText);
+        const indices = computeSelectionIndices(sentence, selectedText);
 
-        const popupX = rect.left + rect.width / 2 - 160;
-        const popupY = rect.bottom + 10;
-
-        setVocabSelection({
-            word: selectedText,
-            sentence: sentence,
-            position: {
-                x: popupX, // Center the popup
-                y: popupY // Below the selection
-            },
-            source: 'reader'
-        });
-
-        updatePopupPosition(popupX, popupY);
+        setSelectedText(selectedText);
+        setSelectedSentence(sentence);
+        setSelectionIndices(indices);
+        setSelectionKey(prev => prev + 1);
 
         // Clear selection after showing popup
         // selection.removeAllRanges();
@@ -143,35 +120,13 @@ export default function ReadingWebPage({
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type === 'vocab-selection') {
-                const { word, sentence, x, y } = event.data;
-                
-                // Adjust position relative to iframe position
-                const iframe = iframeRef.current;
-                if (iframe) {
-                    const iframeRect = iframe.getBoundingClientRect();
-                    const popupX = iframeRect.left + x - 160;
-                    const popupY = iframeRect.top + y + 10;
-                    setVocabSelection({
-                        word,
-                        sentence,
-                        position: {
-                            x: popupX,
-                            y: popupY
-                        },
-                        source: 'full'
-                    });
-                    updatePopupPosition(popupX, popupY);
-                }
-            }
-
-            if (event.data?.type === 'vocab-scroll') {
-                const { x, y } = event.data;
-                if (typeof x !== 'number' || typeof y !== 'number') return;
-                const iframe = iframeRef.current;
-                if (!iframe) return;
-                if (vocabSelectionRef.current?.source !== 'full') return;
-                const iframeRect = iframe.getBoundingClientRect();
-                updatePopupPosition(iframeRect.left + x - 160, iframeRect.top + y + 10);
+                const { word, sentence } = event.data;
+                if (!word || !sentence) return;
+                const indices = computeSelectionIndices(sentence, word);
+                setSelectedText(word);
+                setSelectedSentence(sentence);
+                setSelectionIndices(indices);
+                setSelectionKey(prev => prev + 1);
             }
         };
 
@@ -192,47 +147,34 @@ export default function ReadingWebPage({
         }
     }, [mode, handleReaderSelection]);
 
-    // Track reader scroll to keep popup anchored to selection
+    // Clear selection when switching modes
     useEffect(() => {
-        if (mode !== 'reader') return;
-        const container = readerContentRef.current;
-        if (!container) return;
-
-        let ticking = false;
-        const handleScroll = () => {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(() => {
-                if (readerRangeRef.current && vocabSelectionRef.current?.source === 'reader') {
-                    const rect = readerRangeRef.current.getBoundingClientRect();
-                    updatePopupPosition(rect.left + rect.width / 2 - 160, rect.bottom + 10);
-                }
-                ticking = false;
-            });
-        };
-
-        container.addEventListener('scroll', handleScroll, { passive: true });
-        return () => container.removeEventListener('scroll', handleScroll);
+        setSelectedText(null);
+        setSelectedSentence(null);
+        setSelectionIndices(null);
     }, [mode]);
 
-    // Close popup handler
-    const handleClosePopup = () => {
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
-    };
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('readingWebPanelCollapsed', String(isPanelCollapsed));
+        }
+    }, [isPanelCollapsed]);
 
-    // Save vocabulary to session markers
-    const handleSaveVocab = (data: { word: string; sentence: string; definition: string; translation: string }) => {
+    // Save vocabulary to session markers + deck
+    const handleSaveVocab = (data: VocabSavePayload) => {
+        const indices = data.selectionIndices && data.selectionIndices.length > 0 ? data.selectionIndices : [0];
+        const mainIndex = indices[0] ?? 0;
+        const definitionText = data.definition ? `${data.word}: ${data.definition}` : data.word;
+
         const marker: Marker = {
             id: `webpage-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             start: 0,
             end: 0,
             subtitleText: data.sentence,
-            misunderstoodIndices: [],
+            misunderstoodIndices: indices,
             vocabData: {
-                0: {
-                    definition: `${data.word}: ${data.definition}`,
+                [mainIndex]: {
+                    definition: definitionText,
                     notes: data.translation
                 }
             },
@@ -244,6 +186,37 @@ export default function ReadingWebPage({
         const updatedMarkers = [...sessionMarkers, marker];
         setSessionMarkers(updatedMarkers);
         onMarkersUpdate?.(updatedMarkers);
+        onSaveToDeck?.(marker);
+    };
+
+    const handleRemoveMarker = (markerId: string) => {
+        const updatedMarkers = sessionMarkers.filter(m => m.id !== markerId);
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+    };
+
+    const handleUpdateVocabData = (markerId: string, index: number, data: VocabData) => {
+        const updatedMarkers = sessionMarkers.map(m => {
+            if (m.id === markerId) {
+                return {
+                    ...m,
+                    vocabData: {
+                        ...m.vocabData,
+                        [index]: data
+                    }
+                };
+            }
+            return m;
+        });
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+    };
+
+    const clearSelection = () => {
+        setSelectedText(null);
+        setSelectedSentence(null);
+        setSelectionIndices(null);
+        setSelectionKey(prev => prev + 1);
     };
 
     const handleGo = async (e?: React.FormEvent) => {
@@ -265,9 +238,7 @@ export default function ReadingWebPage({
         setUrl(target);
         setIsLoading(true);
         setReaderError(null);
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
+        clearSelection();
 
         if (mode === 'full') {
             setCurrentSrc(`/api/proxy?url=${encodeURIComponent(target)}`);
@@ -299,9 +270,7 @@ export default function ReadingWebPage({
     const handleModeChange = async (newMode: 'full' | 'reader') => {
         setMode(newMode);
         setIsLoading(true);
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
+        clearSelection();
         
         let target = url.trim();
         if (!target.startsWith('http://') && !target.startsWith('https://')) {
@@ -331,9 +300,7 @@ export default function ReadingWebPage({
         // Load without adding to history
         setIsLoading(true);
         setReaderError(null);
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
+        clearSelection();
 
         if (mode === 'full') {
             setCurrentSrc(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
@@ -351,9 +318,7 @@ export default function ReadingWebPage({
 
         setIsLoading(true);
         setReaderError(null);
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
+        clearSelection();
 
         if (mode === 'full') {
             setCurrentSrc(`/api/proxy?url=${encodeURIComponent(targetUrl)}`);
@@ -364,9 +329,7 @@ export default function ReadingWebPage({
 
     const handleReload = () => {
         setIsLoading(true);
-        setVocabSelection(null);
-        readerRangeRef.current = null;
-        pendingPopupPositionRef.current = null;
+        clearSelection();
         if (mode === 'full') {
             const baseUrl = currentSrc.split('&_t=')[0];
             setCurrentSrc(`${baseUrl}&_t=${Date.now()}`);
@@ -380,9 +343,10 @@ export default function ReadingWebPage({
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-950 relative">
-            {/* Toolbar */}
-            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex h-full bg-gray-50 dark:bg-gray-950 relative">
+            <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Toolbar */}
+                <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                 {/* Single Compact Row */}
                 <div className="flex items-center justify-between gap-2 px-4 py-2">
                     {/* Left: Back button + Globe + Navigation */}
@@ -594,19 +558,22 @@ export default function ReadingWebPage({
                     </div>
                 )}
             </div>
+            </div>
 
-            {/* Vocabulary Popup */}
-            {vocabSelection && (
-                <VocabPopup
-                    ref={popupRef}
-                    word={vocabSelection.word}
-                    sentence={vocabSelection.sentence}
-                    position={vocabSelection.position}
-                    onClose={handleClosePopup}
-                    onSave={handleSaveVocab}
-                    firstLanguage={firstLanguage}
-                />
-            )}
+            <ReadingVocabPanel
+                selectedText={selectedText}
+                selectedSentence={selectedSentence}
+                selectionIndices={selectionIndices}
+                selectionKey={selectionKey}
+                sessionMarkers={sessionMarkers}
+                isCollapsed={isPanelCollapsed}
+                onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
+                onSaveSelection={handleSaveVocab}
+                onRemoveMarker={handleRemoveMarker}
+                onUpdateVocabData={handleUpdateVocabData}
+                firstLanguage={firstLanguage}
+                speechLanguage={speechLanguage}
+            />
         </div>
     );
 }

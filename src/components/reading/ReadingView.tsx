@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, BookOpen, Loader2, Search, ExternalLink, Download } from 'lucide-react';
 import { View, Marker, VocabData, LibraryItem, YouTubeSubtitleData } from '../../types';
-import ReadingVocabPanel from './ReadingVocabPanel';
+import ReadingVocabPanel, { VocabSavePayload } from './ReadingVocabPanel';
 
 // Helper function to parse YouTube content
 function parseYouTubeContent(item: LibraryItem): YouTubeSubtitleData | null {
@@ -200,12 +200,15 @@ function YouTubeSubtitleView({ data }: YouTubeSubtitleViewProps) {
 interface ReadingViewProps {
     libraryId: string;
     title: string;
+    content?: string;
     onNavigate: (view: View) => void;
     onMarkersUpdate?: (markers: Marker[]) => void;
+    onSaveToDeck?: (marker: Marker) => void;
     firstLanguage?: string;
+    speechLanguage?: string;
 }
 
-export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpdate, firstLanguage = 'en' }: ReadingViewProps) {
+export default function ReadingView({ libraryId, title, content: initialContent, onNavigate, onMarkersUpdate, onSaveToDeck, firstLanguage = 'en', speechLanguage = 'en' }: ReadingViewProps) {
     const [content, setContent] = useState<string>('');
     const [libraryItem, setLibraryItem] = useState<LibraryItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -215,6 +218,7 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
         sentenceText: string;
         selectedWords: string;
     } | null>(null);
+    const [selectionKey, setSelectionKey] = useState(0);
     const [sessionMarkers, setSessionMarkers] = useState<Marker[]>([]);
     const [isPanelCollapsed, setIsPanelCollapsed] = useState(() => {
         if (typeof window === 'undefined') return false;
@@ -222,6 +226,13 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
     });
 
     useEffect(() => {
+        if (initialContent !== undefined) {
+            setContent(initialContent);
+            setLibraryItem(null);
+            setIsLoading(false);
+            return;
+        }
+
         const fetchContent = async () => {
             try {
                 const res = await fetch(`/api/library/${libraryId}/content`);
@@ -253,7 +264,7 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
         if (libraryId) {
             fetchContent();
         }
-    }, [libraryId]);
+    }, [libraryId, initialContent]);
 
     // Extract complete sentence(s) containing the selected text
     const extractSentence = (paragraph: string, selectedText: string): string => {
@@ -298,25 +309,19 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
                 sentenceText,
                 selectedWords: text,
             });
+            setSelectionKey(prev => prev + 1);
         }
     };
 
     // Handle saving words to session markers
-    const handleSaveWords = () => {
+    const handleSaveWords = (data: VocabSavePayload) => {
         if (!selectionRange) return;
 
-        const { sentenceText, selectedWords, paragraphIndex } = selectionRange;
-
-        // Create word indices within sentence
-        const sentenceWords = sentenceText.split(/\s+/);
-        const selectedWordList = selectedWords.split(/\s+/);
-        const indices: number[] = [];
-
-        sentenceWords.forEach((word, idx) => {
-            if (selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase()))) {
-                indices.push(idx);
-            }
-        });
+        const sentenceText = data.sentence || selectionRange.sentenceText;
+        const paragraphIndex = selectionRange.paragraphIndex;
+        const indices = data.selectionIndices && data.selectionIndices.length > 0 ? data.selectionIndices : [0];
+        const mainIndex = indices[0] ?? 0;
+        const definitionText = data.definition ? `${data.word}: ${data.definition}` : data.word;
 
         const marker: Marker = {
             id: `reading-${Date.now()}-${Math.random()}`,
@@ -324,7 +329,12 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
             end: paragraphIndex,
             subtitleText: sentenceText,
             misunderstoodIndices: indices,
-            vocabData: {},
+            vocabData: {
+                [mainIndex]: {
+                    definition: definitionText,
+                    notes: data.translation || ''
+                }
+            },
             tags: ['vocabulary'],
             createdAt: Date.now(),
             pressCount: 1,
@@ -333,8 +343,10 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
         const updatedMarkers = [...sessionMarkers, marker];
         setSessionMarkers(updatedMarkers);
         onMarkersUpdate?.(updatedMarkers);
+        onSaveToDeck?.(marker);
         setSelectedText('');
         setSelectionRange(null);
+        setSelectionKey(prev => prev + 1);
 
         // Clear browser selection
         window.getSelection()?.removeAllRanges();
@@ -455,6 +467,7 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
                         selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
                     ).filter(i => i >= 0);
                 })() : null}
+                selectionKey={selectionKey}
                 sessionMarkers={sessionMarkers}
                 isCollapsed={isPanelCollapsed}
                 onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
@@ -462,6 +475,7 @@ export default function ReadingView({ libraryId, title, onNavigate, onMarkersUpd
                 onRemoveMarker={handleRemoveMarker}
                 onUpdateVocabData={handleUpdateVocabData}
                 firstLanguage={firstLanguage}
+                speechLanguage={speechLanguage}
             />
         </div>
     );
