@@ -354,6 +354,14 @@ export default function Sidebar({
                         />
                         <SectionHeader label="Tools" collapsed={collapsed} />
                         <NavItem
+                            icon={<Globe size={20} />}
+                            label="Online Webpage"
+                            isActive={view === 'webpage'}
+                            collapsed={collapsed}
+                            onClick={() => setView('webpage')}
+                            activeColorTheme="blue"
+                        />
+                        <NavItem
                             icon={<Book size={20} />}
                             label="Reading Generator"
                             isActive={view === 'generator'}
@@ -367,14 +375,6 @@ export default function Sidebar({
                             isActive={view === 'library'}
                             collapsed={collapsed}
                             onClick={() => setView('library')}
-                            activeColorTheme="blue"
-                        />
-                        <NavItem
-                            icon={<Globe size={20} />}
-                            label="Online Webpage"
-                            isActive={view === 'webpage'}
-                            collapsed={collapsed}
-                            onClick={() => setView('webpage')}
                             activeColorTheme="blue"
                         />
                         <SectionHeader label="Learning" collapsed={collapsed} />
