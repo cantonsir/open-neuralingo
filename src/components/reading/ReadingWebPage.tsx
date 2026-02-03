@@ -349,16 +349,8 @@ export default function ReadingWebPage({
                 <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
                 {/* Single Compact Row */}
                 <div className="flex items-center justify-between gap-2 px-4 py-2">
-                    {/* Left: Back button + Globe + Navigation */}
+                    {/* Left: Globe + Navigation */}
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => onNavigate('home')}
-                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            title="Back to Reading Dashboard"
-                        >
-                            <ArrowLeft size={18} className="text-gray-600 dark:text-gray-400" />
-                        </button>
-
                         <Globe size={18} className="text-indigo-500" />
 
                         {/* Back/Forward Navigation */}

@@ -352,23 +352,6 @@ export default function Sidebar({
                             onClick={() => setView('home')}
                             activeColorTheme="blue"
                         />
-                        <SectionHeader label="Learning" collapsed={collapsed} />
-                        <NavItem
-                            icon={<GraduationCap size={20} />}
-                            label="Lessons"
-                            isActive={view === 'learning'}
-                            collapsed={collapsed}
-                            onClick={() => setView('learning')}
-                            activeColorTheme="blue"
-                        />
-                        <NavItem
-                            icon={<ClipboardCheck size={20} />}
-                            label="Assessment"
-                            isActive={view === 'assessment'}
-                            collapsed={collapsed}
-                            onClick={() => setView('assessment')}
-                            activeColorTheme="blue"
-                        />
                         <SectionHeader label="Tools" collapsed={collapsed} />
                         <NavItem
                             icon={<Book size={20} />}
@@ -392,6 +375,23 @@ export default function Sidebar({
                             isActive={view === 'webpage'}
                             collapsed={collapsed}
                             onClick={() => setView('webpage')}
+                            activeColorTheme="blue"
+                        />
+                        <SectionHeader label="Learning" collapsed={collapsed} />
+                        <NavItem
+                            icon={<GraduationCap size={20} />}
+                            label="Lessons"
+                            isActive={view === 'learning'}
+                            collapsed={collapsed}
+                            onClick={() => setView('learning')}
+                            activeColorTheme="blue"
+                        />
+                        <NavItem
+                            icon={<ClipboardCheck size={20} />}
+                            label="Assessment"
+                            isActive={view === 'assessment'}
+                            collapsed={collapsed}
+                            onClick={() => setView('assessment')}
                             activeColorTheme="blue"
                         />
                         <SectionHeader label="DATABASE" collapsed={collapsed} />

@@ -189,7 +189,17 @@ function App() {
               />
             </div>
 
-            {view !== 'webpage' && (
+            {/* Persist Library in background to avoid reload */}
+            <div className={view === 'library' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingLibrary onNavigate={handleNavigateWithData} />
+            </div>
+
+            {/* Persist Reading Generator in background to avoid reload */}
+            <div className={view === 'compose' || view === 'generator' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+              <ReadingCompose setView={setView} setReadingData={setReadingData} />
+            </div>
+
+            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && (
               view === 'learning' ? <ReadingLessons /> :
                 view === 'assessment' ? <ReadingAssessmentPage /> :
                   view === 'statistics' ? (
@@ -226,11 +236,8 @@ function App() {
                         />
                       </div>
                     ) :
-                      view === 'compose' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
-                        view === 'generator' ? <ReadingCompose setView={setView} setReadingData={setReadingData} /> :
-                          view === 'library' ? <ReadingLibrary onNavigate={handleNavigateWithData} /> :
-                            // view === 'webpage' is handled above
-                            view === 'reader' && readingData ? (
+                      // view === 'webpage', 'library', and generator are handled above
+                      view === 'reader' && readingData ? (
                               <ReadingView
                                 libraryId={readingData.libraryId}
                                 title={readingData.title}
