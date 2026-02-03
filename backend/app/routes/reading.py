@@ -428,3 +428,121 @@ def get_reading_assessment(assessment_id):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@reading_bp.route('/reading/statistics', methods=['GET'])
+def get_reading_statistics():
+    """
+    Get reading assessment statistics for charts and progress tracking.
+    
+    Query Parameters:
+        window: 'last_10', 'last_30', or 'all_time'
+    
+    Returns:
+        Statistics object with summary, score trend, and weakness evolution
+    """
+    try:
+        window = request.args.get('window', 'last_10')
+        
+        with get_db() as conn:
+            # Build query based on time window
+            if window == 'last_10':
+                assessments = conn.execute('''
+                    SELECT * FROM reading_assessments
+                    ORDER BY taken_at DESC
+                    LIMIT 10
+                ''').fetchall()
+            elif window == 'last_30':
+                thirty_days_ago = int(time.time() * 1000) - (30 * 24 * 60 * 60 * 1000)
+                assessments = conn.execute('''
+                    SELECT * FROM reading_assessments
+                    WHERE taken_at >= ?
+                    ORDER BY taken_at DESC
+                ''', (thirty_days_ago,)).fetchall()
+            else:  # all_time
+                assessments = conn.execute('''
+                    SELECT * FROM reading_assessments
+                    ORDER BY taken_at DESC
+                ''').fetchall()
+            
+            if not assessments:
+                return jsonify({
+                    'summary': {
+                        'totalTests': 0,
+                        'avgVocabCoverage': 0,
+                        'avgComprehension': 0,
+                        'currentLevel': 0,
+                        'bestVocabCoverage': 0,
+                        'improvementRate': '0%'
+                    },
+                    'scoreTrend': [],
+                    'weaknessEvolution': {},
+                    'computedAt': int(time.time() * 1000)
+                })
+            
+            # Convert to list and reverse for chronological order in charts
+            assessment_list = [dict(a) for a in assessments]
+            assessment_list.reverse()
+            
+            # Calculate summary stats
+            total_tests = len(assessment_list)
+            vocab_coverages = [a['vocabulary_coverage'] for a in assessment_list]
+            comprehensions = [a['sentence_comprehension'] for a in assessment_list]
+            
+            avg_vocab = sum(vocab_coverages) / total_tests if total_tests > 0 else 0
+            avg_comprehension = sum(comprehensions) / total_tests if total_tests > 0 else 0
+            current_level = assessment_list[-1]['overall_level'] if assessment_list else 0
+            best_vocab = max(vocab_coverages) if vocab_coverages else 0
+            
+            # Calculate improvement rate (compare first half to second half)
+            if total_tests >= 2:
+                first_half = assessment_list[:total_tests // 2]
+                second_half = assessment_list[total_tests // 2:]
+                first_avg = sum(a['vocabulary_coverage'] for a in first_half) / len(first_half)
+                second_avg = sum(a['vocabulary_coverage'] for a in second_half) / len(second_half)
+                improvement = second_avg - first_avg
+                improvement_rate = f"+{improvement:.1f}%" if improvement >= 0 else f"{improvement:.1f}%"
+            else:
+                improvement_rate = "N/A"
+            
+            # Build score trend data
+            score_trend = []
+            for i, a in enumerate(assessment_list):
+                score_trend.append({
+                    'testNumber': i + 1,
+                    'date': a['taken_at'],
+                    'vocabularyCoverage': a['vocabulary_coverage'],
+                    'sentenceComprehension': a['sentence_comprehension'],
+                    'overallLevel': a['overall_level']
+                })
+            
+            # Build weakness evolution (track vocabulary vs grammar barriers)
+            weakness_evolution = {
+                'vocabulary': [],
+                'grammar': []
+            }
+            
+            for a in assessment_list:
+                # Count issues per test
+                vocab_issues = a['total_words_marked']
+                grammar_issues = a['total_sentences_marked']
+                
+                weakness_evolution['vocabulary'].append(vocab_issues)
+                weakness_evolution['grammar'].append(grammar_issues)
+            
+            return jsonify({
+                'summary': {
+                    'totalTests': total_tests,
+                    'avgVocabCoverage': avg_vocab,
+                    'avgComprehension': avg_comprehension,
+                    'currentLevel': current_level,
+                    'bestVocabCoverage': best_vocab,
+                    'improvementRate': improvement_rate
+                },
+                'scoreTrend': score_trend,
+                'weaknessEvolution': weakness_evolution,
+                'computedAt': int(time.time() * 1000)
+            })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

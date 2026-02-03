@@ -10,6 +10,14 @@ import {
     AlertTriangle,
     Sparkles
 } from 'lucide-react';
+import {
+    languages,
+    readingLevelDescriptions,
+    contentPreferences,
+    readingSpeedOptions,
+    difficulties,
+    readingGoals
+} from './readingProfileData';
 
 export interface ReadingProfileData {
     id?: string;
@@ -27,61 +35,6 @@ interface ReadingProfileProps {
     onComplete: (profile: ReadingProfileData) => void;
     cachedProfile?: ReadingProfileData | null;
 }
-
-// Question data
-const languages = [
-    { id: 'en', label: 'English', flag: '🇬🇧' },
-    { id: 'ja', label: 'Japanese', flag: '🇯🇵' },
-    { id: 'zh-HK', label: 'Cantonese (Traditional)', flag: '🇭🇰' },
-    { id: 'zh-CN', label: 'Mandarin (Simplified)', flag: '🇨🇳' },
-    { id: 'de', label: 'German', flag: '🇩🇪' },
-    { id: 'fr', label: 'French', flag: '🇫🇷' },
-    { id: 'es', label: 'Spanish', flag: '🇪🇸' },
-];
-
-const readingLevelDescriptions = [
-    'Beginner - Simple sentences, basic vocabulary',
-    'Elementary - Short paragraphs, common topics',
-    'Intermediate - Longer texts, varied topics',
-    'Advanced - Complex texts, technical content',
-    'Native-like - Literature, specialized domains',
-];
-
-const contentPreferences = [
-    { id: 'fiction', label: 'Fiction & Stories', emoji: '📖' },
-    { id: 'news', label: 'News & Current Events', emoji: '📰' },
-    { id: 'academic', label: 'Academic & Research', emoji: '🎓' },
-    { id: 'technical', label: 'Technical & Professional', emoji: '💻' },
-    { id: 'lifestyle', label: 'Lifestyle & Culture', emoji: '🌟' },
-    { id: 'business', label: 'Business & Finance', emoji: '💼' },
-    { id: 'science', label: 'Science & Technology', emoji: '🔬' },
-    { id: 'other', label: 'Other', emoji: '📚' },
-];
-
-const readingSpeedOptions = [
-    { id: 'fast', label: 'Fast reader (skim & scan)', emoji: '⚡' },
-    { id: 'moderate', label: 'Moderate pace (balanced)', emoji: '👍' },
-    { id: 'slow', label: 'Slow & careful (detail-oriented)', emoji: '🔍' },
-];
-
-const difficulties = [
-    { id: 'vocabulary', label: 'Vocabulary (unknown words)', icon: '📚' },
-    { id: 'grammar', label: 'Grammar structures', icon: '🔧' },
-    { id: 'idioms', label: 'Idioms & expressions', icon: '💬' },
-    { id: 'cultural', label: 'Cultural references', icon: '🌍' },
-    { id: 'complex-sentences', label: 'Long/complex sentences', icon: '📝' },
-    { id: 'technical', label: 'Technical terminology', icon: '⚙️' },
-    { id: 'abstract', label: 'Abstract concepts', icon: '🤔' },
-];
-
-const readingGoals = [
-    { id: 'entertainment', label: 'Entertainment & enjoyment', emoji: '🎭' },
-    { id: 'academic', label: 'Academic study', emoji: '🎓' },
-    { id: 'professional', label: 'Professional work', emoji: '💼' },
-    { id: 'language-learning', label: 'Language learning', emoji: '🗣️' },
-    { id: 'cultural', label: 'Cultural understanding', emoji: '🌏' },
-    { id: 'exam', label: 'Exam preparation', emoji: '📋' },
-];
 
 const ReadingProfile: React.FC<ReadingProfileProps> = ({ onComplete, cachedProfile }) => {
     const [step, setStep] = useState(0);

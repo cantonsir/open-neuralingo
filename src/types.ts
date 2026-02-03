@@ -39,7 +39,7 @@ export type Module = 'landing' | 'listening' | 'reading' | 'speaking' | 'writing
 
 export type Theme = 'dark' | 'light';
 
-export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose' | 'webpage';
+export type View = 'home' | 'loop' | 'vocab' | 'flashcards' | 'history' | 'learning' | 'assessment' | 'minitest' | 'generator' | 'scenario' | 'correction' | 'reader' | 'conversation' | 'writer' | 'library' | 'compose' | 'webpage' | 'statistics';
 
 export type PracticeMode = 'loop' | 'shadow';
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReadingProfile, { ReadingProfileData } from './ReadingProfile';
 import ReadingMiniTest from './ReadingMiniTest';
-import ReadingTestAnalysis from './ReadingTestAnalysis';
+import ReadingAssessmentResults from './ReadingAssessmentResults';
 import { ReadingTestResponse } from '../../hooks/useReadingTest';
 import { GeneratedPassage, ReadingAnalysis } from '../../services/geminiService';
 import { api } from '../../db';
@@ -126,7 +126,7 @@ export default function ReadingAssessmentPage() {
     // Show analysis if test is completed
     if (testCompleted) {
         return (
-            <ReadingTestAnalysis
+            <ReadingAssessmentResults
                 profile={profile}
                 passages={testPassages}
                 responses={testResponses}
