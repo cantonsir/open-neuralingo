@@ -24,6 +24,8 @@ interface VocabularyManagerProps {
 type SortOption = 'newest' | 'oldest' | 'most-practiced' | 'due-first';
 type FilterSource = 'all' | 'loop' | 'shadow';
 
+const cleanToken = (token: string) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     module,
     markers,
@@ -216,6 +218,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
     const renderSidebarItem = (marker: Marker) => {
         const isSelected = selectedMarkerId === marker.id;
+        const words = marker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
         const subtitleSnippet = marker.subtitleText ? (marker.subtitleText.length > 40 ? marker.subtitleText.substr(0, 40) + '...' : marker.subtitleText) : "No text";
 
         const misunderstoodIndices = marker.misunderstoodIndices || [];
@@ -239,6 +242,11 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         const conceptualCount = groups.length;
         const hasPhrase = groups.some(g => g.length > 1);
         const pressCount = marker.pressCount || 1;
+
+        const primaryGroup = groups.length > 0 ? groups[0] : [];
+        const markedText = primaryGroup.length > 0
+            ? primaryGroup.map(idx => cleanToken(words[idx] || '')).filter(Boolean).join(' ')
+            : '';
 
         // SRS status indicator
         const isNew = !marker.lastReviewedAt;
@@ -289,7 +297,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                     </div>
                 </div>
                 <p className={`text-sm leading-snug pl-5 ${isSelected ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
-                    {subtitleSnippet}
+                    {markedText || subtitleSnippet}
                 </p>
                 <div className="mt-2 flex items-center gap-2 pl-5 flex-wrap">
                     {conceptualCount > 0 && (
@@ -474,10 +482,10 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                     // Helper to group consecutive indices
                                     const words = selectedMarker.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
                                     const markedIndices = selectedMarker.misunderstoodIndices || [];
-                                    const groupedItems: { indices: number[], text: string, mainIndex: number }[] = [];
-                                    if (markedIndices.length > 0) {
-                                        const sortedIndices = [...markedIndices].sort((a, b) => a - b);
-                                        let currentGroup: number[] = [sortedIndices[0]];
+                                        const groupedItems: { indices: number[], text: string, mainIndex: number }[] = [];
+                                        if (markedIndices.length > 0) {
+                                            const sortedIndices = [...markedIndices].sort((a, b) => a - b);
+                                            let currentGroup: number[] = [sortedIndices[0]];
 
                                         for (let i = 1; i < sortedIndices.length; i++) {
                                             if (sortedIndices[i] === sortedIndices[i - 1] + 1) {
@@ -485,7 +493,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                             } else {
                                                 groupedItems.push({
                                                     indices: currentGroup,
-                                                    text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                                    text: currentGroup.map(idx => cleanToken(words[idx] || '')).filter(Boolean).join(' '),
                                                     mainIndex: currentGroup[0]
                                                 });
                                                 currentGroup = [sortedIndices[i]];
@@ -493,7 +501,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                                         }
                                         groupedItems.push({
                                             indices: currentGroup,
-                                            text: currentGroup.map(idx => words[idx] || '').join(' '),
+                                            text: currentGroup.map(idx => cleanToken(words[idx] || '')).filter(Boolean).join(' '),
                                             mainIndex: currentGroup[0]
                                         });
                                     }

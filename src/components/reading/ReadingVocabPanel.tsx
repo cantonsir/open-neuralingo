@@ -59,6 +59,12 @@ export default function ReadingVocabPanel({
 
     const getSentenceWords = () => selectedSentence ? selectedSentence.trim().split(/\s+/).filter(w => w.length > 0) : [];
 
+    const cleanToken = (token: string) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+    const buildCleanPhrase = (words: string[], indices: number[]) => {
+        return indices.map(i => cleanToken(words[i] || '')).filter(Boolean).join(' ');
+    };
+
     const normalizeIndices = (indices: number[], wordCount: number) => {
         if (!indices.length) return [];
         const sorted = [...indices].sort((a, b) => a - b).filter(i => i >= 0 && i < wordCount);
@@ -79,7 +85,8 @@ export default function ReadingVocabPanel({
 
         const words = getSentenceWords();
         const normalized = normalizeIndices(selectionIndices || [], words.length);
-        const nextText = normalized.length > 1 ? buildPhrase(words, normalized) : selectedText;
+        const cleanedSelected = selectedText.split(/\s+/).map(cleanToken).filter(Boolean).join(' ');
+        const nextText = normalized.length > 0 ? buildCleanPhrase(words, normalized) : cleanedSelected;
 
         setLocalSelectedText(nextText);
         setLocalSelectionIndices(normalized);
@@ -238,14 +245,14 @@ export default function ReadingVocabPanel({
 
             if (index === min - 1 || index === max + 1) {
                 const range = Array.from({ length: (index < min ? max - index + 1 : index - min + 1) }, (_, i) => (index < min ? index + i : min + i));
-                const phrase = buildPhrase(words, range);
+                const phrase = buildCleanPhrase(words, range);
                 setLocalSelectedText(phrase);
                 setLocalSelectionIndices(range);
                 return;
             }
         }
 
-        setLocalSelectedText(word);
+        setLocalSelectedText(cleanToken(word));
         setLocalSelectionIndices([index]);
     };
 
@@ -256,7 +263,7 @@ export default function ReadingVocabPanel({
         const from = Math.min(start, end);
         const to = Math.max(start, end);
         const indices = Array.from({ length: to - from + 1 }, (_, i) => from + i).filter(i => i >= 0 && i < words.length);
-        const phrase = indices.map(i => words[i]).join(' ');
+        const phrase = buildCleanPhrase(words, indices);
         setLocalSelectedText(phrase);
         setLocalSelectionIndices(indices);
     };

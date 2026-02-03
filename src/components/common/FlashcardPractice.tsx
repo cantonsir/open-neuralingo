@@ -17,6 +17,7 @@ const getNewLimitKey = (module: string) => `flashcard-new-limit-${module}`;
 
 // TTS utilities for reading module
 const speakText = (text: string, lang: string = 'en-US') => {
+    if (!text || !text.trim()) return;
     if ('speechSynthesis' in window) {
         // Cancel any ongoing speech
         window.speechSynthesis.cancel();
@@ -69,6 +70,8 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
 
     const getCardWords = (card?: Marker) => card?.subtitleText?.trim().split(/\s+/).filter(w => w.length > 0) || [];
 
+    const cleanToken = (token: string) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
     const getGroupedItems = (card?: Marker) => {
         if (!card) return [] as { indices: number[]; text: string; mainIndex: number; isPhrase: boolean }[];
         const words = getCardWords(card);
@@ -83,7 +86,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
             if (sorted[i] === sorted[i - 1] + 1) {
                 currentGroup.push(sorted[i]);
             } else {
-                const text = currentGroup.map(idx => words[idx] || '').join(' ');
+                const text = currentGroup.map(idx => cleanToken(words[idx] || '')).filter(Boolean).join(' ');
                 grouped.push({
                     indices: currentGroup,
                     text,
@@ -94,7 +97,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
             }
         }
 
-        const text = currentGroup.map(idx => words[idx] || '').join(' ');
+        const text = currentGroup.map(idx => cleanToken(words[idx] || '')).filter(Boolean).join(' ');
         grouped.push({
             indices: currentGroup,
             text,
@@ -129,6 +132,11 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
             }
             return <span key={i} className="mx-1">{word}</span>;
         });
+    };
+
+    const getPrimaryMarkedItem = (card?: Marker) => {
+        const items = getGroupedItems(card);
+        return items.length > 0 ? items[0] : null;
     };
 
     // Save settings to localStorage
@@ -613,49 +621,49 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                             // Reading module front/back
                             <>
                                 <div className="mb-8 relative group">
-                                    <div className={`w-20 h-20 bg-${moduleColor}-50 dark:bg-${moduleColor}-500/10 rounded-full flex items-center justify-center transition-transform transform group-hover:scale-110`}>
+                                    <button
+                                        onClick={() => {
+                                            const item = getPrimaryMarkedItem(currentCard);
+                                            speakText(item?.text || '');
+                                        }}
+                                        className={`w-20 h-20 bg-${moduleColor}-50 dark:bg-${moduleColor}-500/10 rounded-full flex items-center justify-center transition-transform transform group-hover:scale-110`}
+                                        title="Pronounce"
+                                    >
                                         <Volume2 size={32} className={`text-${moduleColor}-500`} />
-                                    </div>
+                                    </button>
                                 </div>
 
                                 {!isFlipped && currentCard && (
                                     <div className="animate-in fade-in zoom-in duration-300 max-w-2xl mx-auto mb-8">
-                                        <div className="mb-6 flex flex-wrap justify-center gap-2">
-                                            {getGroupedItems(currentCard).length > 0 ? (
-                                                getGroupedItems(currentCard).map((item, idx) => (
-                                                    <span
-                                                        key={`${item.mainIndex}-${idx}`}
-                                                        className={`px-3 py-1 rounded-full text-sm font-semibold border ${item.isPhrase
-                                                            ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
-                                                            : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
-                                                            }`}
-                                                    >
-                                                        {item.text}
-                                                    </span>
-                                                ))
-                                            ) : (
-                                                <span className="text-sm text-gray-400 italic">No marked words</span>
-                                            )}
-                                        </div>
+                                        {(() => {
+                                            const item = getPrimaryMarkedItem(currentCard);
+                                            if (!item) {
+                                                return <span className="text-sm text-gray-400 italic">No marked words</span>;
+                                            }
+                                            const badgeClass = item.isPhrase
+                                                ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800'
+                                                : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800';
 
-                                        <p className="text-xl text-gray-700 dark:text-gray-300 leading-relaxed text-center">
-                                            {renderHighlightedSentence(currentCard)}
-                                        </p>
+                                            return (
+                                                <div className="bg-gray-50 dark:bg-gray-800/40 rounded-2xl px-8 py-6 border border-gray-100 dark:border-gray-800 shadow-sm">
+                                                    <div className="flex flex-col items-center gap-3 mb-4">
+                                                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${badgeClass}`}>
+                                                            {item.isPhrase ? 'Phrase' : 'Word'}
+                                                        </span>
+                                                        <div className={`text-4xl font-extrabold tracking-tight ${item.isPhrase ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                            {item.text}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
+                                                        <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed text-center">
+                                                            {renderHighlightedSentence(currentCard)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
-                                )}
-
-                                {!isFlipped && (
-                                    <>
-                                        <button
-                                            onClick={() => speakText(currentCard?.subtitleText || '')}
-                                            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg hover:shadow-xl"
-                                        >
-                                            <Volume2 size={18} /> Listen
-                                        </button>
-                                        <p className="text-[10px] text-gray-300 dark:text-gray-600 mt-4 italic">
-                                            (Uses text-to-speech)
-                                        </p>
-                                    </>
                                 )}
 
                                 {isFlipped && currentCard && (
@@ -664,46 +672,59 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                                             <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest capitalize">Reading Practice</span>
                                         </div>
 
-                                        <div className="space-y-4">
-                                            {(() => {
-                                                const items = getGroupedItems(currentCard);
-                                                if (items.length === 0) {
-                                                    return <p className="text-sm text-gray-400 italic">No marked words.</p>;
-                                                }
-                                                return items.map((item, idx) => {
-                                                    const data = currentCard.vocabData?.[item.mainIndex] || { definition: '', notes: '' };
-                                                    const tagClass = item.isPhrase
-                                                        ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-300'
-                                                        : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300';
+                                        {(() => {
+                                            const item = getPrimaryMarkedItem(currentCard);
+                                            if (!item) {
+                                                return <p className="text-sm text-gray-400 italic">No marked words.</p>;
+                                            }
+                                            const data = currentCard.vocabData?.[item.mainIndex] || { definition: '', notes: '' };
+                                            const tagClass = item.isPhrase
+                                                ? 'bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-300'
+                                                : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300';
 
-                                                    return (
-                                                        <div key={`${item.mainIndex}-${idx}`} className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 border border-gray-100 dark:border-gray-700">
-                                                            <div className="flex items-center gap-3 mb-3">
-                                                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{item.text}</h3>
-                                                                <span className={`${tagClass} text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider`}> 
-                                                                    {item.isPhrase ? 'Phrase' : 'Word'}
-                                                                </span>
+                                            return (
+                                                <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-100 dark:border-gray-800 shadow-sm">
+                                                    <div className="flex items-start justify-between gap-4 mb-5">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${tagClass}`}>
+                                                                {item.isPhrase ? 'Phrase' : 'Word'}
                                                             </div>
-
-                                                            <div className="space-y-3">
-                                                                <div>
-                                                                    <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Meaning</div>
-                                                                    <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-                                                                        {data.definition || <span className="italic text-gray-400">No definition provided.</span>}
-                                                                    </p>
-                                                                </div>
-                                                                <div>
-                                                                    <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">Sentence Translation</div>
-                                                                    <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">
-                                                                        {data.notes || <span className="italic text-gray-400">No translation provided.</span>}
-                                                                    </p>
-                                                                </div>
+                                                            <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                                                                {item.text}
                                                             </div>
                                                         </div>
-                                                    );
-                                                });
-                                            })()}
-                                        </div>
+                                                    </div>
+
+                                                    <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/20 p-4 mb-5">
+                                                        <div className="text-[10px] font-bold text-blue-600 dark:text-blue-300 uppercase tracking-widest mb-2">
+                                                            Sentence
+                                                        </div>
+                                                        <p className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed">
+                                                            {renderHighlightedSentence(currentCard)}
+                                                        </p>
+                                                    </div>
+
+                                                    <div className="grid gap-4 md:grid-cols-2">
+                                                        <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/40 p-4">
+                                                            <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
+                                                                Meaning
+                                                            </div>
+                                                            <p className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed">
+                                                                {data.definition || <span className="italic text-gray-400">No definition provided.</span>}
+                                                            </p>
+                                                        </div>
+                                                        <div className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/40 p-4">
+                                                            <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">
+                                                                Sentence Translation
+                                                            </div>
+                                                            <p className="text-gray-800 dark:text-gray-200 text-sm leading-relaxed">
+                                                                {data.notes || <span className="italic text-gray-400">No translation provided.</span>}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                             </>
