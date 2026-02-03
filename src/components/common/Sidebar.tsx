@@ -16,6 +16,7 @@ interface SidebarProps {
     videoId?: string;
     activeModule: Module;
     setActiveModule: (module: Module) => void;
+    readerAvailable?: boolean;
 }
 
 // Section header component
@@ -133,6 +134,7 @@ export default function Sidebar({
     videoId,
     activeModule,
     setActiveModule,
+    readerAvailable = false,
 }: SidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [isModuleMenuOpen, setIsModuleMenuOpen] = useState(false);
@@ -353,6 +355,15 @@ export default function Sidebar({
                             activeColorTheme="blue"
                         />
                         <SectionHeader label="Tools" collapsed={collapsed} />
+                        <NavItem
+                            icon={<BookOpen size={20} />}
+                            label="Reader"
+                            isActive={view === 'reader'}
+                            isDisabled={!readerAvailable}
+                            collapsed={collapsed}
+                            onClick={() => setView('reader')}
+                            activeColorTheme="blue"
+                        />
                         <NavItem
                             icon={<Globe size={20} />}
                             label="Online Webpage"

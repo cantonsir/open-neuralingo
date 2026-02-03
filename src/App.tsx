@@ -150,6 +150,7 @@ function App() {
           videoId={videoPlayer.videoId}
           activeModule={activeModule}
           setActiveModule={setActiveModule}
+          readerAvailable={Boolean(readingData)}
         />
       )}
 
@@ -199,7 +200,23 @@ function App() {
               <ReadingCompose setView={setView} setReadingData={setReadingData} />
             </div>
 
-            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && (
+            {/* Persist Reader in background to avoid reload */}
+            {readingData && (
+              <div className={view === 'reader' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+                <ReadingView
+                  libraryId={readingData.libraryId}
+                  title={readingData.title}
+                  content={readingData.content}
+                  onNavigate={setView}
+                  onMarkersUpdate={setReadingMarkers}
+                  onSaveToDeck={handleSaveToDeck}
+                  firstLanguage={firstLanguage}
+                  speechLanguage={targetLanguage}
+                />
+              </div>
+            )}
+
+            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && (
               view === 'learning' ? <ReadingLessons /> :
                 view === 'assessment' ? <ReadingAssessmentPage /> :
                   view === 'statistics' ? (
@@ -236,21 +253,8 @@ function App() {
                         />
                       </div>
                     ) :
-                      // view === 'webpage', 'library', and generator are handled above
-                      view === 'reader' && readingData ? (
-                              <ReadingView
-                                libraryId={readingData.libraryId}
-                                title={readingData.title}
-                                content={readingData.content}
-                                onNavigate={setView}
-                                onMarkersUpdate={setReadingMarkers}
-                                onSaveToDeck={handleSaveToDeck}
-                                firstLanguage={firstLanguage}
-                                speechLanguage={targetLanguage}
-                              />
-                            ) : (
-                              <ReadingDashboard onNavigate={setView} />
-                            )
+                      // view === 'webpage', 'library', generator, and reader are handled above
+                      <ReadingDashboard onNavigate={setView} />
             )}
           </>
         )}
