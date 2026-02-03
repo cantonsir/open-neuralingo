@@ -1094,14 +1094,14 @@ export async function generateReadingMaterial(prompt: string, context?: string):
 
     const systemPrompt = `Create an engaging reading passage about: "${prompt}".
     ${context ? `Context: ${context}` : ''}
-    
+
     Requirements:
     - Length: 300-500 words
     - Level: Intermediate (B1-B2)
     - Style: Clear, engaging, and educational
     - Include natural vocabulary and varied sentence structures
     - Make it interesting and culturally relevant
-    
+
     Return ONLY valid JSON in this exact format:
     {"title": "An Engaging Title", "content": "The full text of the passage..."}`;
 
@@ -1134,5 +1134,620 @@ export async function generateReadingMaterial(prompt: string, context?: string):
     } catch (e) {
         console.error("Reading Material Generation Error", e);
         return { title: 'Error', content: 'Failed to generate content.' };
+    }
+}
+
+// ===== READING ASSESSMENT =====
+
+export interface ReadingProfileData {
+    targetLanguage: string;
+    readingLevel: number;          // 0-4 (Beginner to Native-like)
+    contentPreferences: string[];   // ['fiction', 'news', 'academic', etc.]
+    readingSpeed: string;           // 'fast', 'moderate', 'slow'
+    difficulties: string[];         // ['vocabulary', 'grammar', 'idioms', etc.]
+    goals: string[];                // ['entertainment', 'academic', 'professional', etc.]
+    interests: string;              // Free-form text
+}
+
+export interface GeneratedPassage {
+    id: string;
+    title: string;
+    content: string;
+    difficulty: number;             // 1-5
+    contentType: 'narrative' | 'expository' | 'dialogue' | 'technical';
+    wordCount: number;
+    sentenceCount: number;
+}
+
+const readingLevelLabels: Record<number, string> = {
+    0: 'Beginner - simple sentences',
+    1: 'Elementary - short paragraphs',
+    2: 'Intermediate - longer texts',
+    3: 'Advanced - complex texts',
+    4: 'Native-like - literature',
+};
+
+const contentPreferenceLabels: Record<string, string> = {
+    fiction: 'fiction and stories',
+    news: 'news and current events',
+    academic: 'academic and research',
+    technical: 'technical and professional',
+    lifestyle: 'lifestyle and culture',
+    business: 'business and finance',
+    science: 'science and technology',
+    other: 'general content',
+};
+
+/**
+ * Generate personalized reading test passages based on learner profile
+ */
+export async function generateReadingTestPassages(
+    profile: ReadingProfileData,
+    count: number = 5
+): Promise<GeneratedPassage[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        console.error('Missing VITE_GEMINI_API_KEY');
+        return getFallbackReadingPassages(profile.readingLevel, count);
+    }
+
+    const prompt = buildReadingTestPrompt(profile, count);
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.8,
+                        maxOutputTokens: 4096,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        // Parse JSON from response (handle possible markdown wrapping)
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('No JSON array found in response');
+        }
+
+        const passages: GeneratedPassage[] = JSON.parse(jsonMatch[0]);
+
+        // Add word and sentence counts, assign IDs
+        return passages.map((passage, index) => {
+            const words = passage.content.split(/\s+/).length;
+            const sentences = passage.content.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+
+            return {
+                ...passage,
+                id: `passage-${Date.now()}-${index}`,
+                wordCount: words,
+                sentenceCount: sentences,
+            };
+        });
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        return getFallbackReadingPassages(profile.readingLevel, count);
+    }
+}
+
+/**
+ * Build AI prompt for generating reading passages
+ */
+function buildReadingTestPrompt(profile: ReadingProfileData, count: number): string {
+    const level = readingLevelLabels[profile.readingLevel] || readingLevelLabels[2];
+    const interests = profile.interests || 'general topics';
+    const preferences = profile.contentPreferences.map(p => contentPreferenceLabels[p] || p).join(', ');
+    const difficulties = profile.difficulties.join(', ');
+
+    // Determine word count range based on level
+    const wordRanges = [
+        '100-150 words',  // Beginner
+        '150-250 words',  // Elementary
+        '250-400 words',  // Intermediate
+        '400-500 words',  // Advanced
+        '450-600 words',  // Native-like
+    ];
+    const wordRange = wordRanges[profile.readingLevel] || wordRanges[2];
+
+    return `You are an expert language assessment creator. Generate ${count} diverse reading passages for a reading comprehension assessment.
+
+**Learner Profile:**
+- Target Language: ${languageLabels[profile.targetLanguage] || profile.targetLanguage}
+- Reading Level: ${level}
+- Content Preferences: ${preferences}
+- Main Difficulties: ${difficulties}
+- Interests: ${interests}
+- Reading Speed: ${profile.readingSpeed}
+- Goals: ${profile.goals.join(', ')}
+
+**Requirements:**
+1. Create ${count} passages with varied content types: narrative, expository, dialogue, and technical
+2. Each passage should be ${wordRange}
+3. Vary difficulty appropriately around Level ${profile.readingLevel + 1} (1-5 scale)
+4. Include vocabulary and grammar structures aligned with the learner's level
+5. Make content relevant to their interests (${interests})
+6. Ensure natural, engaging writing
+7. Incorporate some challenges aligned with stated difficulties (${difficulties})
+
+**Output Format:**
+Return ONLY a valid JSON array of passages. Each passage object must have:
+- "title": A descriptive title (string)
+- "content": The full passage text (string)
+- "difficulty": Difficulty level 1-5 (number)
+- "contentType": One of "narrative", "expository", "dialogue", or "technical"
+
+Example format:
+[
+  {
+    "title": "A Day at the Market",
+    "content": "The morning sun cast long shadows across the bustling market square...",
+    "difficulty": 2,
+    "contentType": "narrative"
+  },
+  ...
+]
+
+Generate ${count} passages now:`;
+}
+
+/**
+ * Fallback passages if API fails
+ */
+function getFallbackReadingPassages(level: number, count: number): GeneratedPassage[] {
+    const fallbackPassages: GeneratedPassage[] = [
+        {
+            id: 'fallback-1',
+            title: 'A Simple Story',
+            content: 'Once upon a time, there was a small village. The people in the village were very friendly. They helped each other every day. One day, a stranger came to visit. The villagers welcomed him with open arms. They shared their food and stories. The stranger was very happy. He decided to stay in the village for a while. The villagers and the stranger became good friends.',
+            difficulty: 1,
+            contentType: 'narrative',
+            wordCount: 68,
+            sentenceCount: 10,
+        },
+        {
+            id: 'fallback-2',
+            title: 'The Benefits of Reading',
+            content: 'Reading is one of the most valuable skills anyone can develop. When you read regularly, you expand your vocabulary and improve your understanding of grammar. Reading also helps you learn about different cultures, ideas, and perspectives. Whether you enjoy fiction or non-fiction, reading provides mental stimulation and can reduce stress. Many successful people credit their achievements to the knowledge and insights they gained through reading.',
+            difficulty: 2,
+            contentType: 'expository',
+            wordCount: 71,
+            sentenceCount: 5,
+        },
+        {
+            id: 'fallback-3',
+            title: 'Planning a Trip',
+            content: '"Where should we go this summer?" Sarah asked.\n"I was thinking about visiting the mountains," replied Tom.\n"That sounds wonderful! We could go hiking and enjoy the fresh air."\n"Exactly. I\'ve heard there are some beautiful trails there."\n"Should we book a hotel or try camping?"\n"Let\'s try camping. It will be more adventurous."\n"Great idea! I\'ll start looking at campsites online."',
+            difficulty: 2,
+            contentType: 'dialogue',
+            wordCount: 69,
+            sentenceCount: 7,
+        },
+        {
+            id: 'fallback-4',
+            title: 'Climate Change Challenges',
+            content: 'Climate change presents one of the most significant challenges of our time. Rising global temperatures have led to more frequent extreme weather events, including hurricanes, droughts, and floods. Scientists attribute these changes primarily to increased greenhouse gas emissions from human activities. The consequences affect not only the environment but also economies, public health, and food security worldwide. Addressing this issue requires coordinated international efforts, including transitioning to renewable energy sources, improving energy efficiency, and implementing sustainable agricultural practices. While progress has been made, much more needs to be done to mitigate the worst effects of climate change.',
+            difficulty: 4,
+            contentType: 'expository',
+            wordCount: 103,
+            sentenceCount: 6,
+        },
+        {
+            id: 'fallback-5',
+            title: 'Neural Network Architecture',
+            content: 'Artificial neural networks are computational models inspired by biological neural systems. These networks consist of interconnected nodes, or neurons, organized into layers: an input layer, one or more hidden layers, and an output layer. Each connection between neurons has an associated weight that adjusts during training through a process called backpropagation. This iterative learning mechanism enables the network to minimize error and improve performance on specific tasks. Deep learning, a subset of machine learning, utilizes neural networks with multiple hidden layers to model complex patterns in large datasets. Applications range from image recognition and natural language processing to autonomous vehicles and medical diagnosis.',
+            difficulty: 5,
+            contentType: 'technical',
+            wordCount: 111,
+            sentenceCount: 6,
+        },
+    ];
+
+    // Return subset based on count, cycling if necessary
+    const selected: GeneratedPassage[] = [];
+    for (let i = 0; i < count; i++) {
+        selected.push(fallbackPassages[i % fallbackPassages.length]);
+    }
+
+    return selected;
+}
+
+// ===== READING TEST ANALYSIS =====
+
+export interface VocabularyGap {
+    category: string;
+    examples: string[];
+    count: number;
+}
+
+export interface GrammarChallenge {
+    pattern: string;
+    examples: string[];
+    count: number;
+    difficulty: 'intermediate' | 'advanced' | 'complex';
+}
+
+export interface CombinedIssue {
+    sentence: string;
+    markedWords: string[];
+    grammarPattern: string;
+}
+
+export interface MarkedWordDetail {
+    word: string;
+    context: string;
+    difficulty: 'basic' | 'intermediate' | 'advanced';
+    frequency: 'high' | 'medium' | 'low';
+}
+
+export interface MarkedSentenceDetail {
+    sentence: string;
+    grammarPatterns: string[];
+    complexity: 'moderate' | 'high' | 'very_high';
+}
+
+export interface ReadingAnalysis {
+    overallLevel: number;
+    vocabularyLevel: number;
+    grammarLevel: number;
+    readingSpeed: 'slow' | 'moderate' | 'fast';
+    primaryBarrier: 'vocabulary' | 'grammar' | 'balanced';
+
+    strengths: string[];
+    weaknesses: string[];
+
+    vocabularyGaps: VocabularyGap[];
+    grammarChallenges: GrammarChallenge[];
+    combinedIssues: CombinedIssue[];
+
+    recommendations: {
+        recommendedLevel: number;
+        focusAreas: string[];
+        suggestedContent: string[];
+        nextSteps: string[];
+    };
+
+    markedWordsList: MarkedWordDetail[];
+    markedSentencesList: MarkedSentenceDetail[];
+
+    statistics: {
+        totalWordsRead: number;
+        totalWordsMarked: number;
+        vocabularyCoverage: number;
+        totalSentencesRead: number;
+        totalSentencesMarked: number;
+        sentenceComprehension: number;
+    };
+}
+
+/**
+ * Analyze reading test results to identify vocabulary gaps, grammar challenges, and primary barriers
+ */
+export async function analyzeReadingTestResults(
+    profile: ReadingProfileData,
+    passages: GeneratedPassage[],
+    markedWords: Map<string, { text: string; sentenceContext: string; paragraphIndex: number; wordIndices: number[]; markedAt: number; type: 'word' | 'phrase' }[]>,
+    markedSentences: Map<string, { text: string; paragraphIndex: number; sentenceIndex: number; markedAt: number; reason?: 'grammar' | 'complexity' | 'vocabulary' | 'unknown' }[]>,
+    readingTimes: Map<string, number>
+): Promise<ReadingAnalysis> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    // Calculate statistics
+    const totalWordsRead = passages.reduce((sum, p) => sum + p.wordCount, 0);
+    const totalSentencesRead = passages.reduce((sum, p) => sum + p.sentenceCount, 0);
+
+    let totalWordsMarked = 0;
+    markedWords.forEach(words => {
+        totalWordsMarked += words.length;
+    });
+
+    let totalSentencesMarked = 0;
+    markedSentences.forEach(sentences => {
+        totalSentencesMarked += sentences.length;
+    });
+
+    const vocabularyCoverage = totalWordsRead > 0 ? ((totalWordsRead - totalWordsMarked) / totalWordsRead) * 100 : 0;
+    const sentenceComprehension = totalSentencesRead > 0 ? ((totalSentencesRead - totalSentencesMarked) / totalSentencesRead) * 100 : 0;
+
+    // Collect all marked words and sentences for analysis
+    const allMarkedWords: string[] = [];
+    const allMarkedWordContexts: string[] = [];
+    markedWords.forEach(words => {
+        words.forEach(word => {
+            allMarkedWords.push(word.text);
+            allMarkedWordContexts.push(word.sentenceContext);
+        });
+    });
+
+    const allMarkedSentences: string[] = [];
+    markedSentences.forEach(sentences => {
+        sentences.forEach(sentence => {
+            allMarkedSentences.push(sentence.text);
+        });
+    });
+
+    // Calculate average reading time
+    let totalReadingTime = 0;
+    readingTimes.forEach(time => {
+        totalReadingTime += time;
+    });
+    const avgReadingTimePerPassage = readingTimes.size > 0 ? totalReadingTime / readingTimes.size : 0;
+    const avgWordsPerMinute = avgReadingTimePerPassage > 0 ? (totalWordsRead / passages.length) / (avgReadingTimePerPassage / 60000) : 0;
+
+    // Determine reading speed
+    let readingSpeed: 'slow' | 'moderate' | 'fast' = 'moderate';
+    if (avgWordsPerMinute < 150) {
+        readingSpeed = 'slow';
+    } else if (avgWordsPerMinute > 250) {
+        readingSpeed = 'fast';
+    }
+
+    // Determine primary barrier based on ratios
+    const wordMarkRatio = totalWordsRead > 0 ? (totalWordsMarked / totalWordsRead) : 0;
+    const sentenceMarkRatio = totalSentencesRead > 0 ? (totalSentencesMarked / totalSentencesRead) : 0;
+
+    let primaryBarrier: 'vocabulary' | 'grammar' | 'balanced' = 'balanced';
+    if (wordMarkRatio > sentenceMarkRatio * 1.5) {
+        primaryBarrier = 'vocabulary';
+    } else if (sentenceMarkRatio > wordMarkRatio * 1.5) {
+        primaryBarrier = 'grammar';
+    }
+
+    if (!apiKey) {
+        // Return basic analysis without AI
+        return {
+            overallLevel: profile.readingLevel,
+            vocabularyLevel: profile.readingLevel,
+            grammarLevel: profile.readingLevel,
+            readingSpeed,
+            primaryBarrier,
+            strengths: vocabularyCoverage > 85 ? ['Good vocabulary coverage'] : [],
+            weaknesses: vocabularyCoverage < 70 ? ['Limited vocabulary'] : [],
+            vocabularyGaps: [],
+            grammarChallenges: [],
+            combinedIssues: [],
+            recommendations: {
+                recommendedLevel: profile.readingLevel,
+                focusAreas: primaryBarrier === 'vocabulary' ? ['Expand vocabulary'] : ['Practice grammar patterns'],
+                suggestedContent: [],
+                nextSteps: ['Continue practicing'],
+            },
+            markedWordsList: [],
+            markedSentencesList: [],
+            statistics: {
+                totalWordsRead,
+                totalWordsMarked,
+                vocabularyCoverage,
+                totalSentencesRead,
+                totalSentencesMarked,
+                sentenceComprehension,
+            },
+        };
+    }
+
+    // Build AI prompt for detailed analysis
+    const prompt = `You are an expert language assessment analyst. Analyze a reading comprehension test to identify vocabulary gaps, grammar challenges, and provide personalized feedback.
+
+**Learner Profile:**
+- Current Reading Level: ${profile.readingLevel + 1}/5 (${readingLevelLabels[profile.readingLevel]})
+- Target Language: ${profile.targetLanguage}
+- Known Difficulties: ${profile.difficulties.join(', ')}
+- Goals: ${profile.goals.join(', ')}
+
+**Test Statistics:**
+- Total words read: ${totalWordsRead}
+- Words marked as unknown: ${totalWordsMarked} (${(100 - vocabularyCoverage).toFixed(1)}% of total)
+- Vocabulary coverage: ${vocabularyCoverage.toFixed(1)}%
+- Total sentences read: ${totalSentencesRead}
+- Sentences marked as difficult: ${totalSentencesMarked} (${(100 - sentenceComprehension).toFixed(1)}% of total)
+- Sentence comprehension: ${sentenceComprehension.toFixed(1)}%
+- Average reading speed: ${avgWordsPerMinute.toFixed(0)} words per minute
+- Primary barrier detected: ${primaryBarrier}
+
+**Marked Words (${allMarkedWords.length} total):**
+${allMarkedWords.slice(0, 30).join(', ')}${allMarkedWords.length > 30 ? '...' : ''}
+
+**Word Contexts (sample):**
+${allMarkedWordContexts.slice(0, 5).map((ctx, i) => `"${ctx.substring(0, 100)}..."`).join('\n')}
+
+**Marked Sentences (${allMarkedSentences.length} total):**
+${allMarkedSentences.slice(0, 10).map((s, i) => `${i + 1}. "${s.substring(0, 120)}${s.length > 120 ? '...' : ''}"`).join('\n')}
+
+**Analysis Tasks:**
+1. Categorize marked words into vocabulary gaps (e.g., "Academic vocabulary", "Technical terms", "Idioms", etc.)
+2. Identify grammar patterns in marked sentences (e.g., "Passive voice", "Complex subordinate clauses", "Relative clauses", "Conditional structures")
+3. Determine if primary barrier is vocabulary-driven, grammar-driven, or balanced
+4. Identify sentences that have both marked words and complex grammar (combined issues)
+5. Assess appropriate reading level based on comprehension rates
+6. Provide specific, actionable recommendations
+
+**Output Format:**
+Return ONLY valid JSON with this structure:
+{
+  "overallLevel": 2,
+  "vocabularyLevel": 3,
+  "grammarLevel": 2,
+  "strengths": ["Strong vocabulary (93% coverage)", "Good narrative comprehension"],
+  "weaknesses": ["Struggles with passive voice", "Limited academic vocabulary"],
+  "vocabularyGaps": [
+    {
+      "category": "Academic Vocabulary",
+      "examples": ["hypothesis", "paradigm", "empirical"],
+      "count": 8
+    }
+  ],
+  "grammarChallenges": [
+    {
+      "pattern": "Passive Voice",
+      "examples": ["The theory was developed...", "It has been suggested..."],
+      "count": 5,
+      "difficulty": "advanced"
+    }
+  ],
+  "combinedIssues": [
+    {
+      "sentence": "Despite the aforementioned hypothesis...",
+      "markedWords": ["aforementioned", "hypothesis"],
+      "grammarPattern": "Complex subordinate clause"
+    }
+  ],
+  "recommendedLevel": 3,
+  "focusAreas": ["Expand academic vocabulary", "Practice passive voice recognition"],
+  "suggestedContent": ["News articles", "Science blogs"],
+  "nextSteps": ["Practice with Level 3 texts", "Focus on grammar drills"],
+  "markedWordsList": [
+    {
+      "word": "hypothesis",
+      "context": "The hypothesis was tested...",
+      "difficulty": "advanced",
+      "frequency": "medium"
+    }
+  ],
+  "markedSentencesList": [
+    {
+      "sentence": "The theory was developed by researchers...",
+      "grammarPatterns": ["Passive voice"],
+      "complexity": "high"
+    }
+  ]
+}`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.4,
+                        maxOutputTokens: 3072,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        // Parse JSON from response
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('No JSON found in response');
+        }
+
+        const aiAnalysis = JSON.parse(jsonMatch[0]);
+
+        // Build marked words list from actual test data if AI doesn't provide it
+        const markedWordsList = aiAnalysis.markedWordsList && aiAnalysis.markedWordsList.length > 0
+            ? aiAnalysis.markedWordsList
+            : Array.from(markedWords.values()).flat().map(word => ({
+                word: word.text,
+                context: word.sentenceContext.substring(0, 100),
+                difficulty: 'intermediate' as const,
+                frequency: 'medium' as const,
+            }));
+
+        // Build marked sentences list from actual test data if AI doesn't provide it
+        const markedSentencesList = aiAnalysis.markedSentencesList && aiAnalysis.markedSentencesList.length > 0
+            ? aiAnalysis.markedSentencesList
+            : Array.from(markedSentences.values()).flat().map(sentence => ({
+                sentence: sentence.text,
+                grammarPatterns: sentence.reason ? [sentence.reason] : ['unknown'],
+                complexity: 'moderate' as const,
+            }));
+
+        // Combine AI analysis with calculated statistics
+        return {
+            overallLevel: aiAnalysis.overallLevel || profile.readingLevel,
+            vocabularyLevel: aiAnalysis.vocabularyLevel || profile.readingLevel,
+            grammarLevel: aiAnalysis.grammarLevel || profile.readingLevel,
+            readingSpeed,
+            primaryBarrier,
+            strengths: aiAnalysis.strengths || [],
+            weaknesses: aiAnalysis.weaknesses || [],
+            vocabularyGaps: aiAnalysis.vocabularyGaps || [],
+            grammarChallenges: aiAnalysis.grammarChallenges || [],
+            combinedIssues: aiAnalysis.combinedIssues || [],
+            recommendations: {
+                recommendedLevel: aiAnalysis.recommendedLevel || profile.readingLevel,
+                focusAreas: aiAnalysis.focusAreas || [],
+                suggestedContent: aiAnalysis.suggestedContent || [],
+                nextSteps: aiAnalysis.nextSteps || [],
+            },
+            markedWordsList,
+            markedSentencesList,
+            statistics: {
+                totalWordsRead,
+                totalWordsMarked,
+                vocabularyCoverage,
+                totalSentencesRead,
+                totalSentencesMarked,
+                sentenceComprehension,
+            },
+        };
+    } catch (error) {
+        console.error('Reading test analysis error:', error);
+
+        // Build marked words and sentences lists from actual test data for fallback
+        const fallbackMarkedWordsList = Array.from(markedWords.values()).flat().map(word => ({
+            word: word.text,
+            context: word.sentenceContext.substring(0, 100),
+            difficulty: 'intermediate' as const,
+            frequency: 'medium' as const,
+        }));
+
+        const fallbackMarkedSentencesList = Array.from(markedSentences.values()).flat().map(sentence => ({
+            sentence: sentence.text,
+            grammarPatterns: sentence.reason ? [sentence.reason] : ['unknown'],
+            complexity: 'moderate' as const,
+        }));
+
+        // Return fallback analysis
+        return {
+            overallLevel: profile.readingLevel,
+            vocabularyLevel: profile.readingLevel,
+            grammarLevel: profile.readingLevel,
+            readingSpeed,
+            primaryBarrier,
+            strengths: vocabularyCoverage > 85 ? ['Good vocabulary coverage'] : [],
+            weaknesses: vocabularyCoverage < 70 ? ['Limited vocabulary'] : sentenceComprehension < 70 ? ['Grammar comprehension challenges'] : [],
+            vocabularyGaps: [],
+            grammarChallenges: [],
+            combinedIssues: [],
+            recommendations: {
+                recommendedLevel: profile.readingLevel,
+                focusAreas: primaryBarrier === 'vocabulary' ? ['Expand vocabulary'] : primaryBarrier === 'grammar' ? ['Practice grammar patterns'] : ['Balance vocabulary and grammar practice'],
+                suggestedContent: [],
+                nextSteps: ['Continue practicing with appropriate level materials'],
+            },
+            markedWordsList: fallbackMarkedWordsList,
+            markedSentencesList: fallbackMarkedSentencesList,
+            statistics: {
+                totalWordsRead,
+                totalWordsMarked,
+                vocabularyCoverage,
+                totalSentencesRead,
+                totalSentencesMarked,
+                sentenceComprehension,
+            },
+        };
     }
 }

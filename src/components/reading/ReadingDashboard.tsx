@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book, Play, Layers, TrendingUp, BookOpen, Clock, Flame, Globe } from 'lucide-react';
+import { Book, Play, Layers, TrendingUp, BookOpen, Clock, Flame, Globe, BarChart3, ClipboardCheck } from 'lucide-react';
 import CommonDashboard from '../common/CommonDashboard';
 import { View } from '../../types';
 
@@ -142,6 +142,36 @@ export default function ReadingDashboard({ onNavigate }: ReadingDashboardProps) 
                             Lessons
                         </div>
                         <div className="text-xs text-gray-500">Grammar & Vocab</div>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => onNavigate('assessment')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-green-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center">
+                        <ClipboardCheck size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
+                            Assessment
+                        </div>
+                        <div className="text-xs text-gray-500">Test your reading level</div>
+                    </div>
+                </button>
+
+                <button
+                    onClick={() => onNavigate('statistics')}
+                    className="w-full flex items-center gap-4 p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl hover:border-purple-500/50 hover:shadow-md transition-all group"
+                >
+                    <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center">
+                        <BarChart3 size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <div className="font-semibold text-gray-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                            Statistics
+                        </div>
+                        <div className="text-xs text-gray-500">View progress & history</div>
                     </div>
                 </button>
             </div>

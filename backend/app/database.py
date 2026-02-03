@@ -467,7 +467,69 @@ def init_db():
             created_at INTEGER
         )
     ''')
-    
+
+    # Reading assessment profile table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reading_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            target_language TEXT,
+            reading_level INTEGER,
+            content_preferences TEXT,
+            difficulties TEXT,
+            goals TEXT,
+            interests TEXT,
+            reading_speed TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    ''')
+
+    # Reading assessment results table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reading_assessments (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT,
+            taken_at INTEGER,
+            passages TEXT,
+            marked_words TEXT,
+            marked_sentences TEXT,
+            reading_times TEXT,
+            analysis TEXT,
+            overall_level INTEGER,
+            vocabulary_level INTEGER,
+            grammar_level INTEGER,
+            primary_barrier TEXT,
+            total_words_read INTEGER,
+            total_words_marked INTEGER,
+            total_sentences_read INTEGER,
+            total_sentences_marked INTEGER,
+            vocabulary_coverage REAL,
+            sentence_comprehension REAL,
+            FOREIGN KEY (profile_id) REFERENCES reading_profiles(id)
+        )
+    ''')
+
+    # Reading test passages table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reading_test_passages (
+            id TEXT PRIMARY KEY,
+            assessment_id TEXT,
+            title TEXT,
+            content TEXT,
+            difficulty INTEGER,
+            content_type TEXT,
+            marked_words TEXT,
+            marked_sentences TEXT,
+            reading_time INTEGER,
+            word_count INTEGER,
+            sentence_count INTEGER,
+            vocabulary_coverage REAL,
+            sentence_comprehension REAL,
+            FOREIGN KEY (assessment_id) REFERENCES reading_assessments(id)
+        )
+    ''')
+
     # Review log table (Anki-style) - tracks every single review
     c.execute('''
         CREATE TABLE IF NOT EXISTS review_log (

@@ -17,6 +17,8 @@ import ReadingLessons from './components/reading/ReadingLessons';
 import ReadingAssessmentPage from './components/reading/ReadingAssessmentPage';
 import ReadingCompose from './components/reading/ReadingCompose';
 import ReadingWebPage from './components/reading/ReadingWebPage';
+import ReadingProfile from './components/reading/ReadingProfile';
+import ReadingStatistics from './components/reading/ReadingStatistics';
 import SpeakingDashboard from './components/speaking/SpeakingDashboard';
 import SpeakingScenario from './components/speaking/SpeakingScenario';
 import SpeakingLessons from './components/speaking/SpeakingLessons';
@@ -184,6 +186,15 @@ function App() {
             {view !== 'webpage' && (
               view === 'learning' ? <ReadingLessons /> :
                 view === 'assessment' ? <ReadingAssessmentPage /> :
+                  view === 'statistics' ? (
+                    <ReadingStatistics
+                      onTakeNewAssessment={() => setView('assessment')}
+                      onViewAssessment={(id) => {
+                        // TODO: Navigate to specific assessment view
+                        console.log('View assessment:', id);
+                      }}
+                    />
+                  ) :
                   view === 'vocab' ? (
                     <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                       <VocabularyManager
