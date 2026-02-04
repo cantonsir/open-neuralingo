@@ -1,6 +1,6 @@
-# EchoLoop Backend
+# OpenNeuralingo Backend
 
-A modular Flask API server for the EchoLoop language learning application.
+A modular Flask API server for the OpenNeuralingo language learning application.
 
 ## 📁 Project Structure
 
@@ -155,7 +155,7 @@ Environment variables (or modify `app/config.py`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DB_FILE` | `echoloop.db` | SQLite database file |
+| `DB_FILE` | `openneuralingo.db` | SQLite database file |
 | `UPLOAD_FOLDER` | `uploads` | Upload directory |
 | `HOST` | `0.0.0.0` | Server host |
 | `PORT` | `3001` | Server port |

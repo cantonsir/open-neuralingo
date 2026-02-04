@@ -156,7 +156,7 @@ export default function SettingsPanel({
 
                             {/* App Info */}
                             <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
-                                <div className="font-medium text-gray-900 dark:text-white mb-1">EchoLoop</div>
+                                <div className="font-medium text-gray-900 dark:text-white mb-1">OpenNeuralingo</div>
                                 <div className="text-sm text-gray-500">Deep Listening Trainer</div>
                                 <div className="text-xs text-gray-400 mt-2">Version 1.0.0</div>
                             </div>

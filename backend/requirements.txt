@@ -1,4 +1,4 @@
-# EchoLoop Backend Dependencies
+# OpenNeuralingo Backend Dependencies
 # ==============================
 
 # Web Framework

@@ -290,7 +290,7 @@ The video you are watching is used to verify API functionality.
 If you can see this video and read these captions...
 
 00:00:12.500 --> 00:00:15.000
-...then the EchoLoop application is working correctly!
+...then the OpenNeuralingo application is working correctly!
 
 00:00:16.000 --> 00:00:20.000
 Try pressing SPACE now to create a marker.

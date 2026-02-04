@@ -1,5 +1,5 @@
 """
-EchoLoop Backend Application Factory
+OpenNeuralingo Backend Application Factory
 
 A modular Flask application for language learning with YouTube integration.
 """

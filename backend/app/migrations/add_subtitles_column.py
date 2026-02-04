@@ -15,9 +15,9 @@ def migrate():
     Add subtitles_json column to listening_sessions and practice_sessions tables.
     Safe to run multiple times - checks if columns exist before adding.
     """
-    # Get database path - it's in the root directory as echoloop.db
+    # Get database path - it's in the root directory as openneuralingo.db
     project_root = Path(__file__).parent.parent.parent.parent
-    db_path = project_root / 'echoloop.db'
+    db_path = project_root / 'openneuralingo.db'
     
     if not db_path.exists():
         print(f"⚠️  Database not found at {db_path}")

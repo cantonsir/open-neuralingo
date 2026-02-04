@@ -1,7 +1,7 @@
 """
 Application Configuration
 
-Centralized configuration management for the EchoLoop backend.
+Centralized configuration management for the OpenNeuralingo backend.
 """
 
 import os
@@ -13,7 +13,7 @@ class Config:
     # Database - use parent directory to share DB with frontend
     # __file__ is backend/app/config.py, so go up 2 levels to get project root
     _BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    DB_FILE = os.environ.get('DB_FILE', os.path.join(_BASE_DIR, 'echoloop.db'))
+    DB_FILE = os.environ.get('DB_FILE', os.path.join(_BASE_DIR, 'openneuralingo.db'))
     
     # File uploads
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')

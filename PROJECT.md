@@ -1,4 +1,4 @@
-# EchoLoop - AI-Powered Language Learning Platform
+# OpenNeuralingo - AI-Powered Language Learning Platform
 
 **Version:** 1.0.0
 **Author:** Jayden (Cantonsir)
@@ -9,7 +9,7 @@
 
 ## Overview
 
-EchoLoop is a comprehensive AI-powered language learning platform designed to help learners improve their listening, reading, speaking, and writing skills through interactive exercises, YouTube video analysis, and real-time conversation practice.
+OpenNeuralingo is a comprehensive AI-powered language learning platform designed to help learners improve their listening, reading, speaking, and writing skills through interactive exercises, YouTube video analysis, and real-time conversation practice.
 
 ### Key Features
 
@@ -129,7 +129,7 @@ deep-listening-trainer/
 │       └── ttsService.ts
 │
 ├── uploads/                # Uploaded PDF/EPUB files
-├── echoloop.db             # SQLite database
+├── openneuralingo.db       # SQLite database
 ├── package.json
 ├── vite.config.ts
 ├── tsconfig.json
@@ -179,7 +179,7 @@ Target languages: English, Spanish, French, German, Japanese, Korean, Mandarin, 
 └──────────────────┬──────────────────────────┘
                    │ SQL
 ┌──────────────────▼──────────────────────────┐
-│           SQLite (echoloop.db)              │
+│        SQLite (openneuralingo.db)           │
 │  flashcards, goals, assessments, library    │
 └─────────────────────────────────────────────┘
 
@@ -198,7 +198,7 @@ npx kill-port 3000  # Kill frontend
 
 **Reset database:**
 ```bash
-rm echoloop.db
+rm openneuralingo.db
 # Restart backend to recreate tables
 ```
 

@@ -1,4 +1,4 @@
-# EchoLoop
+# OpenNeuralingo
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
@@ -7,10 +7,10 @@
 
 **A comprehensive language learning platform with AI-powered listening, reading, speaking, and writing modules.**
 
-EchoLoop helps language learners improve their skills through interactive exercises, YouTube video analysis, AI-generated lessons, and real-time conversation practice.
+OpenNeuralingo helps language learners improve their skills through interactive exercises, YouTube video analysis, AI-generated lessons, and real-time conversation practice.
 
 <div align="center">
-  <img width="1200" alt="EchoLoop Dashboard" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" alt="OpenNeuralingo Dashboard" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
 ## Features
@@ -40,7 +40,7 @@ EchoLoop helps language learners improve their skills through interactive exerci
 ## Architecture Overview
 
 <div align="center">
-  <img width="300" alt="EchoLoop Architecture" src="docs/architecture.svg" />
+  <img width="300" alt="OpenNeuralingo Architecture" src="docs/architecture.svg" />
 </div>
 
 ## Tech Stack
@@ -118,7 +118,7 @@ npm run dev
 ```
 The frontend runs on http://localhost:3000
 
-Open http://localhost:3000 in your browser to use EchoLoop.
+Open http://localhost:3000 in your browser to use OpenNeuralingo.
 
 ### Troubleshooting
 
@@ -133,9 +133,9 @@ npx kill-port 3000
 
 **Database issues**
 
-The SQLite database (`echoloop.db`) is created automatically in the project root. To reset:
+The SQLite database (`openneuralingo.db`) is created automatically in the project root. To reset:
 ```bash
-rm echoloop.db
+rm openneuralingo.db
 ```
 
 ## Keyboard Shortcuts

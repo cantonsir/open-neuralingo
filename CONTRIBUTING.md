@@ -1,6 +1,6 @@
-# Contributing to EchoLoop
+# Contributing to OpenNeuralingo
 
-Thank you for your interest in contributing to EchoLoop! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to OpenNeuralingo! This document provides guidelines and instructions for contributing.
 
 ## Table of Contents
 
@@ -211,4 +211,4 @@ If you have questions about contributing, feel free to open an issue with the "q
 
 ---
 
-Thank you for contributing to EchoLoop!
+Thank you for contributing to OpenNeuralingo!

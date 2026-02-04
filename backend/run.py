@@ -1,5 +1,5 @@
 """
-EchoLoop Backend - Main Entry Point
+OpenNeuralingo Backend - Main Entry Point
 
 Usage:
     python run.py [--host HOST] [--port PORT] [--debug]
@@ -21,7 +21,7 @@ from app.database import ensure_upload_folder, migrate_add_subtitle_columns
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='EchoLoop Backend Server',
+        description='OpenNeuralingo Backend Server',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
@@ -62,7 +62,7 @@ def main():
     
     print(f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                    EchoLoop Backend                          ║
+║                OpenNeuralingo Backend                        ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Running on: http://{args.host}:{args.port}                          
 ║  Debug mode: {'ON' if args.debug else 'OFF'}                                          
