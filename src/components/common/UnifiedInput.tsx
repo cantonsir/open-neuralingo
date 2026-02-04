@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, Paperclip, Send, Loader2, CheckSquare, Square } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Upload, Plus, X, FileText, BookOpen, Link as LinkIcon, Zap, Brain, Paperclip, Send, Loader2, CheckSquare, Square, Mic, MicOff } from 'lucide-react';
 
 interface UnifiedInputProps {
     value: string;
@@ -22,6 +22,8 @@ interface UnifiedInputProps {
     onUrlChange?: (url: string) => void;
     onSubmit?: () => void;
     isLoading?: boolean;
+    enableSpeechInput?: boolean;
+    speechLanguage?: string;
 }
 
 export default function UnifiedInput({
@@ -43,12 +45,41 @@ export default function UnifiedInput({
     url,
     onUrlChange,
     onSubmit,
-    isLoading = false
+    isLoading = false,
+    enableSpeechInput = false,
+    speechLanguage
 }: UnifiedInputProps) {
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [showLinkInput, setShowLinkInput] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const attachWrapperRef = useRef<HTMLDivElement>(null);
+    const linkWrapperRef = useRef<HTMLDivElement>(null);
+    const recognitionRef = useRef<any>(null);
+    const isListeningRef = useRef(false);
+    const speechBaseRef = useRef('');
+    const onChangeRef = useRef(onChange);
+    const [isListening, setIsListening] = useState(false);
+    const [speechError, setSpeechError] = useState<string | null>(null);
+
+    useEffect(() => {
+        onChangeRef.current = onChange;
+    }, [onChange]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (showAttachMenu && attachWrapperRef.current && !attachWrapperRef.current.contains(target)) {
+                setShowAttachMenu(false);
+            }
+            if (showLinkInput && linkWrapperRef.current && !linkWrapperRef.current.contains(target)) {
+                setShowLinkInput(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showAttachMenu, showLinkInput]);
 
     // Context title helper
     const contextTitle = library.find(l => l.id === contextId)?.title || "Unknown Context";
@@ -88,6 +119,91 @@ export default function UnifiedInput({
             onSubmit();
         }
     };
+
+    const getSpeechRecognition = () => {
+        if (typeof window === 'undefined') return null;
+        return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+    };
+
+    const speechSupported = useMemo(() => Boolean(getSpeechRecognition()), []);
+
+    const stopListening = () => {
+        isListeningRef.current = false;
+        if (recognitionRef.current) {
+            try {
+                recognitionRef.current.onend = null;
+                recognitionRef.current.stop();
+            } catch (e) {
+                // Ignore stop errors
+            }
+        }
+        setIsListening(false);
+    };
+
+    const startListening = () => {
+        const SpeechRecognition = getSpeechRecognition();
+        if (!SpeechRecognition) {
+            setSpeechError('Speech recognition is not supported in this browser.');
+            return;
+        }
+
+        setSpeechError(null);
+        if (!recognitionRef.current) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognitionRef.current = recognition;
+        }
+
+        speechBaseRef.current = value.trim();
+        recognitionRef.current.lang = speechLanguage || 'en-US';
+
+        recognitionRef.current.onresult = (event: any) => {
+            const transcript = Array.from(event.results)
+                .map((result: any) => result[0]?.transcript || '')
+                .join('')
+                .trim();
+
+            const base = speechBaseRef.current;
+            const nextValue = base ? `${base} ${transcript}`.trim() : transcript;
+            if (nextValue) {
+                onChangeRef.current(nextValue);
+            }
+        };
+
+        recognitionRef.current.onerror = () => {
+            stopListening();
+        };
+
+        recognitionRef.current.onend = () => {
+            if (isListeningRef.current) {
+                stopListening();
+            }
+        };
+
+        try {
+            recognitionRef.current.start();
+            isListeningRef.current = true;
+            setIsListening(true);
+        } catch (e) {
+            stopListening();
+        }
+    };
+
+    const toggleListening = () => {
+        if (isListening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            stopListening();
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Theme definitions (extended for gradients usually)
     const getThemeColors = () => {
@@ -198,7 +314,7 @@ export default function UnifiedInput({
             <div className="px-4 pb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* Add Context / Attachment */}
-                    <div className="relative">
+                    <div className="relative" ref={attachWrapperRef}>
                         <button
                             onClick={toggleAttach}
                             className={`p-2.5 rounded-full transition-all active:scale-95 ${showAttachMenu
@@ -256,7 +372,7 @@ export default function UnifiedInput({
 
                     {/* URL Input Toggle */}
                     {onUrlChange && (
-                        <div className="relative">
+                        <div className="relative" ref={linkWrapperRef}>
                             <button
                                 onClick={toggleLink}
                                 className={`p-2.5 rounded-full transition-all active:scale-95 ${showLinkInput
@@ -299,6 +415,21 @@ export default function UnifiedInput({
                         {value.length} chars
                     </span>
 
+                    {enableSpeechInput && (
+                        <button
+                            onClick={toggleListening}
+                            disabled={!speechSupported}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-md ${
+                                isListening
+                                    ? 'bg-red-500 text-white animate-pulse'
+                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-white'
+                            } ${!speechSupported ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105 active:scale-95'}`}
+                            title={speechSupported ? (isListening ? 'Stop voice input' : 'Start voice input') : 'Speech input not supported'}
+                        >
+                            {isListening ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+                        </button>
+                    )}
+
                     {/* Send / Action Button - NOW CLICKABLE */}
                     <button
                         onClick={handleSubmit}
@@ -317,6 +448,12 @@ export default function UnifiedInput({
                     </button>
                 </div>
             </div>
+
+            {enableSpeechInput && speechError && (
+                <div className="px-4 pb-3 text-xs text-red-500">
+                    {speechError}
+                </div>
+            )}
 
             {/* Hidden File Input */}
             <input

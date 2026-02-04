@@ -27,6 +27,7 @@ interface Message {
 export default function ReadingCompose({ setView, setReadingData }: AppState) {
     const [prompt, setPrompt] = useState('');
     const [contextId, setContextId] = useState('');
+    const [url, setUrl] = useState('');
     const [library, setLibrary] = useState<LibraryItem[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -77,8 +78,8 @@ export default function ReadingCompose({ setView, setReadingData }: AppState) {
     };
 
     const handleInputSubmit = async () => {
-        if (!prompt && !contextId && mode === 'fast') {
-            alert("Please enter a prompt or select a context.");
+        if (!prompt && !contextId && !url && mode === 'fast') {
+            alert("Please enter a prompt, provide a URL, or select a context.");
             return;
         }
         if (!prompt && mode === 'plan') {
@@ -137,6 +138,10 @@ export default function ReadingCompose({ setView, setReadingData }: AppState) {
         if (contextId) {
             const item = library.find(l => l.id === contextId);
             if (item) contextText = item.title;
+        }
+
+        if (url) {
+            contextText += `\nReference URL: ${url}`;
         }
 
         // Generate reading material
@@ -525,6 +530,9 @@ export default function ReadingCompose({ setView, setReadingData }: AppState) {
                             placeholder="Describe a topic for reading practice..."
                             mode={mode}
                             onModeChange={setMode}
+                            url={url}
+                            onUrlChange={setUrl}
+                            enableSpeechInput={true}
                             onSubmit={handleInputSubmit}
                             isLoading={isGenerating}
                         />

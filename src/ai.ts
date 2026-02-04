@@ -161,6 +161,38 @@ export const generateStory = async (topic: string, level: string = "intermediate
     }
 };
 
+export const generateReadableText = async (text: string): Promise<string | null> => {
+    const genAI = getGenAI();
+    if (!genAI) return null;
+
+    const input = text.trim();
+    if (!input) return text;
+
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+        const prompt = `Reformat the following text to be easier to read.
+Keep the exact wording, punctuation, and order.
+Do NOT paraphrase, summarize, translate, or add headings.
+Do NOT add new bullet points or numbering (keep existing ones only).
+You may insert line breaks and blank lines to separate paragraphs or dialogue lines.
+
+Return plain text only.
+
+Text:
+"""
+${text}
+"""`;
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+    } catch (error) {
+        console.error("Error generating readable text:", error);
+        return null;
+    }
+};
+
 export const getChatResponse = async (history: { role: 'user' | 'model'; parts: string }[], scenario: string): Promise<string | null> => {
     const genAI = getGenAI();
     if (!genAI) return null;

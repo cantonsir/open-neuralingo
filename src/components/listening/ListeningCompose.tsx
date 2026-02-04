@@ -705,6 +705,8 @@ AI Feedback: ${initialData.aiFeedback}`;
                             onMultiVoiceChange={setMultiVoice}
                             url={url}
                             onUrlChange={setUrl}
+                            enableSpeechInput={true}
+                            speechLanguage={targetLanguage}
                             onSubmit={handleInputSubmit}
                             isLoading={isGenerating}
                             className="shadow-xl border-gray-200 dark:border-gray-700"

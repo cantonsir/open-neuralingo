@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Search, RotateCw, Globe, FileText, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, RotateCw, Globe, FileText, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { View, Marker, VocabData } from '../../types';
 import ReadingVocabPanel, { VocabSavePayload } from './ReadingVocabPanel';
 
@@ -77,11 +77,11 @@ export default function ReadingWebPage({
             return;
         }
 
-        const selectedText = selection.toString().trim();
+        const text = selection.toString().trim();
         
         // Only process short selections (max 12 words)
-        const wordCount = selectedText.split(/\s+/).length;
-        if (wordCount > 12 || selectedText.length > 200) {
+        const wordCount = text.split(/\s+/).length;
+        if (wordCount > 12 || text.length > 200) {
             return;
         }
 
@@ -104,10 +104,10 @@ export default function ReadingWebPage({
             contextText = paragraphElement.textContent || contextText;
         }
 
-        const sentence = extractSentence(contextText, selectedText);
-        const indices = computeSelectionIndices(sentence, selectedText);
-
-        setSelectedText(selectedText);
+        const sentence = extractSentence(contextText, text);
+        // Vocab panel lookup
+        const indices = computeSelectionIndices(sentence, text);
+        setSelectedText(text);
         setSelectedSentence(sentence);
         setSelectionIndices(indices);
         setSelectionKey(prev => prev + 1);
@@ -399,7 +399,7 @@ export default function ReadingWebPage({
                         </div>
                     </form>
 
-                    {/* Right: Reload + Mode Toggle + Saved Words */}
+                    {/* Right: Reload + Mode Toggle + Focus Reading + Saved Words */}
                     <div className="flex items-center gap-2">
                         <button
                             type="button"

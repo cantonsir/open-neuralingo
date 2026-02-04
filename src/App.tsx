@@ -129,11 +129,20 @@ function App() {
   const [speakingData, setSpeakingData] = useState<{ mode: 'live' | 'tts'; topic: string; contextId?: string } | null>(null);
   const [writingData, setWritingData] = useState<{ topic: string; contextId?: string; content?: string } | null>(null);
 
+  const handleDiscardReadingMarker = (id: string) => {
+    setReadingMarkers((prev) => prev.filter((marker) => marker.id !== id));
+  };
+
   const handleNavigateWithData = (navView: View, data?: any) => {
     if (navView === 'reader' && data) {
       setReadingData(data);
     }
     setView(navView);
+  };
+
+  const handleLibraryNavigate = (navView: View, data?: any) => {
+    setActiveModule('reading');
+    handleNavigateWithData(navView, data);
   };
 
   return (
@@ -192,7 +201,7 @@ function App() {
 
             {/* Persist Library in background to avoid reload */}
             <div className={view === 'library' ? 'flex-1 overflow-hidden' : 'hidden'}>
-              <ReadingLibrary onNavigate={handleNavigateWithData} />
+              <ReadingLibrary onNavigate={handleLibraryNavigate} />
             </div>
 
             {/* Persist Reading Generator in background to avoid reload */}
@@ -201,12 +210,11 @@ function App() {
             </div>
 
             {/* Persist Reader in background to avoid reload */}
-            {readingData && (
               <div className={view === 'reader' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
                 <ReadingView
-                  libraryId={readingData.libraryId}
-                  title={readingData.title}
-                  content={readingData.content}
+                  libraryId={readingData?.libraryId || ''}
+                  title={readingData?.title || ''}
+                  content={readingData?.content}
                   onNavigate={setView}
                   onMarkersUpdate={setReadingMarkers}
                   onSaveToDeck={handleSaveToDeck}
@@ -214,7 +222,6 @@ function App() {
                   speechLanguage={targetLanguage}
                 />
               </div>
-            )}
 
             {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && (
               view === 'learning' ? <ReadingLessons /> :
@@ -240,6 +247,7 @@ function App() {
                         onSaveToDeck={handleSaveToDeck}
                         onDeleteCard={handleDeleteFromDeck}
                         onUpdateCard={handleUpdateCard}
+                        onDiscardSessionMarker={handleDiscardReadingMarker}
                       />
                     </div>
                   ) :
@@ -261,6 +269,9 @@ function App() {
 
         {/* Speaking Module */}
         {activeModule === 'speaking' && (
+          view === 'library' ? (
+            <ReadingLibrary onNavigate={handleLibraryNavigate} />
+          ) :
           view === 'learning' ? <SpeakingLessons /> :
             view === 'assessment' ? <SpeakingAssessment /> :
               view === 'vocab' ? (
@@ -306,6 +317,9 @@ function App() {
 
         {/* Writing Module */}
         {activeModule === 'writing' && (
+          view === 'library' ? (
+            <ReadingLibrary onNavigate={handleLibraryNavigate} />
+          ) :
           view === 'learning' ? <WritingLessons /> :
             view === 'assessment' ? <WritingAssessmentPage /> :
               view === 'vocab' ? (
@@ -351,6 +365,9 @@ function App() {
 
         {/* Listening Module */}
         {activeModule === 'listening' && (
+          view === 'library' ? (
+            <ReadingLibrary onNavigate={handleLibraryNavigate} />
+          ) : (
           <ListeningModule
             view={view}
             setView={setView}
@@ -412,6 +429,7 @@ function App() {
             refreshAssessmentData={learningData.refreshAssessmentData}
             refreshGoalDetails={learningData.refreshGoalDetails}
           />
+          )
         )}
       </div>
     </div>

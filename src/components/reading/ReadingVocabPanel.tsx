@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, BookOpen, Languages, Save, Trash2, Loader2, Volume2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, Languages, Save, Trash2, Loader2, Volume2, Check, Plus } from 'lucide-react';
 import { Marker, VocabData } from '../../types';
 import { generateBilingualDefinition, generateSentenceMeaning } from '../../ai';
 import VocabularyBreakdown from '../listening/VocabularyBreakdown';
+import { FocusReadingAnalysis, FocusAnnotation } from './focusReadingAI';
+
+export interface FocusSaveItem {
+    type: 'word' | 'phrase';
+    text: string;
+    sentenceContext: string;
+    definitionEnglish?: string;
+    definitionNative?: string;
+    pronunciation?: string;
+}
 
 interface ReadingVocabPanelProps {
     selectedText: string | null;
@@ -17,6 +27,16 @@ interface ReadingVocabPanelProps {
     onUpdateVocabData: (markerId: string, index: number, data: VocabData) => void;
     firstLanguage?: string;
     speechLanguage?: string;
+    focusMode?: {
+        enabled: boolean;
+        annotations: FocusAnnotation[];
+        analysis: FocusReadingAnalysis | null;
+        isAnalyzing: boolean;
+        onFinishReading: () => void;
+        onRemoveAnnotation: (id: string) => void;
+        onSaveFocusItem?: (item: FocusSaveItem) => void;
+        onSaveAllFocusItems?: (items: FocusSaveItem[]) => void;
+    };
 }
 
 interface DefinitionData {
@@ -46,6 +66,7 @@ export default function ReadingVocabPanel({
     firstLanguage = 'en',
     speechLanguage = 'en',
     selectionKey,
+    focusMode,
 }: ReadingVocabPanelProps) {
     const [definition, setDefinition] = useState<DefinitionData | null>(null);
     const [sentenceMeaning, setSentenceMeaning] = useState<string>('');
@@ -56,6 +77,22 @@ export default function ReadingVocabPanel({
     const sentenceMeaningCacheRef = useRef<Map<string, string>>(new Map());
     const [localSelectedText, setLocalSelectedText] = useState<string | null>(null);
     const [localSelectionIndices, setLocalSelectionIndices] = useState<number[] | null>(null);
+    const isFocusEnabled = Boolean(focusMode?.enabled);
+    const [activeTab, setActiveTab] = useState<'vocab' | 'assessment'>(isFocusEnabled ? 'assessment' : 'vocab');
+    const [savedFocusItems, setSavedFocusItems] = useState<Set<string>>(new Set());
+
+    // Reset saved items when analysis changes
+    useEffect(() => {
+        setSavedFocusItems(new Set());
+    }, [focusMode?.analysis]);
+
+    useEffect(() => {
+        if (isFocusEnabled) {
+            setActiveTab('assessment');
+        } else {
+            setActiveTab('vocab');
+        }
+    }, [isFocusEnabled]);
 
     const getSentenceWords = () => selectedSentence ? selectedSentence.trim().split(/\s+/).filter(w => w.length > 0) : [];
 
@@ -297,6 +334,426 @@ export default function ReadingVocabPanel({
         );
     }
 
+    const renderAssessmentContent = (): React.ReactNode => {
+        if (!focusMode) return null;
+
+        if (focusMode.isAnalyzing) {
+            return (
+                <div className="flex items-center gap-2 text-gray-500">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-sm">Analyzing focus reading...</span>
+                </div>
+            );
+        }
+
+        // Before analysis: show annotations list and finish button
+        if (!focusMode.analysis) {
+            const annotations = focusMode.annotations;
+            const wordCount = annotations.filter((a) => a.type === 'word').length;
+            const phraseCount = annotations.filter((a) => a.type === 'phrase').length;
+            const sentenceCount = annotations.filter((a) => a.type === 'sentence').length;
+
+            return (
+                <div className="space-y-4">
+                    <div className="rounded-xl border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-4">
+                        <h4 className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 mb-2">Focus Reading</h4>
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mb-1">
+                            Select text to mark what you don't understand:
+                        </p>
+                        <ul className="text-xs text-indigo-600 dark:text-indigo-300 space-y-0.5 ml-2">
+                            <li><span className="inline-block w-3 h-3 bg-red-200 dark:bg-red-800/40 rounded mr-1"></span> 1 word = vocabulary gap</li>
+                            <li><span className="inline-block w-3 h-3 bg-green-200 dark:bg-green-800/40 rounded mr-1"></span> 2+ words = phrase gap</li>
+                            <li><span className="inline-block w-3 h-2 border-b-2 border-orange-400 mr-1"></span> Full sentence = comprehension gap</li>
+                        </ul>
+                    </div>
+
+                    {annotations.length > 0 && (
+                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Annotations ({annotations.length})</p>
+                            <div className="flex gap-2 text-xs text-gray-600 dark:text-gray-300">
+                                <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 rounded">{wordCount} words</span>
+                                <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 rounded">{phraseCount} phrases</span>
+                                <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 rounded">{sentenceCount} sentences</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Annotation list grouped by type */}
+                    {wordCount > 0 && (
+                        <div className="space-y-1">
+                            <h5 className="text-xs font-semibold text-red-700 dark:text-red-400">Words</h5>
+                            <div className="space-y-1">
+                                {annotations.filter((a) => a.type === 'word').map((a) => (
+                                    <div key={a.id} className="flex items-center justify-between p-1.5 rounded bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800">
+                                        <span className="text-sm text-gray-800 dark:text-gray-200">{a.text}</span>
+                                        <button
+                                            onClick={() => focusMode.onRemoveAnnotation(a.id)}
+                                            className="p-0.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {phraseCount > 0 && (
+                        <div className="space-y-1">
+                            <h5 className="text-xs font-semibold text-green-700 dark:text-green-400">Phrases</h5>
+                            <div className="space-y-1">
+                                {annotations.filter((a) => a.type === 'phrase').map((a) => (
+                                    <div key={a.id} className="flex items-center justify-between p-1.5 rounded bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800">
+                                        <span className="text-sm text-gray-800 dark:text-gray-200">{a.text}</span>
+                                        <button
+                                            onClick={() => focusMode.onRemoveAnnotation(a.id)}
+                                            className="p-0.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {sentenceCount > 0 && (
+                        <div className="space-y-1">
+                            <h5 className="text-xs font-semibold text-orange-700 dark:text-orange-400">Sentences</h5>
+                            <div className="space-y-1">
+                                {annotations.filter((a) => a.type === 'sentence').map((a) => (
+                                    <div key={a.id} className="flex items-start justify-between p-1.5 rounded bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800">
+                                        <span className="text-xs text-gray-800 dark:text-gray-200 line-clamp-2">{a.text}</span>
+                                        <button
+                                            onClick={() => focusMode.onRemoveAnnotation(a.id)}
+                                            className="p-0.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 shrink-0"
+                                        >
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={focusMode.onFinishReading}
+                        disabled={annotations.length === 0}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
+                    >
+                        Finish Reading
+                    </button>
+                </div>
+            );
+        }
+
+        // After analysis: show results
+        const analysis = focusMode.analysis;
+        const stats = analysis.statistics;
+        const annotations = focusMode.annotations;
+
+        // Helper to find sentence context from annotations
+        const findSentenceContext = (text: string, type: 'word' | 'phrase'): string => {
+            const annotation = annotations.find(a => a.text.toLowerCase() === text.toLowerCase() && a.type === type);
+            return annotation?.sentenceContext || text;
+        };
+
+        const hasDefinition = (definition?: { english?: string; native?: string }) => {
+            return Boolean(definition?.english || definition?.native);
+        };
+
+        // Build saveable items for Save All
+        const getSaveableItems = (): FocusSaveItem[] => {
+            const items: FocusSaveItem[] = [];
+            analysis.flaggedWords.forEach(word => {
+                const key = `word-${word.word}`;
+                if (!savedFocusItems.has(key) && hasDefinition(word.definition)) {
+                    items.push({
+                        type: 'word',
+                        text: word.word,
+                        sentenceContext: findSentenceContext(word.word, 'word'),
+                        definitionEnglish: word.definition?.english,
+                        definitionNative: word.definition?.native,
+                        pronunciation: word.definition?.pronunciation,
+                    });
+                }
+            });
+            analysis.flaggedPhrases.forEach(phrase => {
+                const key = `phrase-${phrase.phrase}`;
+                if (!savedFocusItems.has(key) && hasDefinition(phrase.definition)) {
+                    items.push({
+                        type: 'phrase',
+                        text: phrase.phrase,
+                        sentenceContext: findSentenceContext(phrase.phrase, 'phrase'),
+                        definitionEnglish: phrase.definition?.english,
+                        definitionNative: phrase.definition?.native,
+                    });
+                }
+            });
+            return items;
+        };
+
+        const handleSaveItem = (
+            type: 'word' | 'phrase',
+            text: string,
+            definition?: { english?: string; native?: string; pronunciation?: string }
+        ) => {
+            const key = `${type}-${text}`;
+            if (savedFocusItems.has(key)) return;
+            
+            const sentenceContext = findSentenceContext(text, type);
+            const item: FocusSaveItem = {
+                type,
+                text,
+                sentenceContext,
+                definitionEnglish: definition?.english,
+                definitionNative: definition?.native,
+                pronunciation: definition?.pronunciation,
+            };
+            
+            focusMode.onSaveFocusItem?.(item);
+            setSavedFocusItems(prev => new Set(prev).add(key));
+        };
+
+        const handleSaveAll = () => {
+            const items = getSaveableItems();
+            if (items.length === 0) return;
+            
+            focusMode.onSaveAllFocusItems?.(items);
+            
+            // Mark all as saved
+            const newSaved = new Set(savedFocusItems);
+            items.forEach(item => newSaved.add(`${item.type}-${item.text}`));
+            setSavedFocusItems(newSaved);
+        };
+
+        const saveableCount = getSaveableItems().length;
+        const hasSaveHandlers = focusMode.onSaveFocusItem || focusMode.onSaveAllFocusItems;
+
+        const formatDefinitionBlock = (definition?: { english?: string; native?: string }) => {
+            if (!definition?.english && !definition?.native) return null;
+
+            return (
+                <div className="space-y-2">
+                    {definition.english && (
+                        <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                            <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{definition.english}</p>
+                        </div>
+                    )}
+                    {definition.native && (
+                        <div className="p-2.5 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+                            <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{definition.native}</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        return (
+            <div className="space-y-4">
+                <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                    <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-2">Summary</h4>
+                    <p className="text-sm text-blue-800 dark:text-blue-100 leading-relaxed">{analysis.summary}</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                        <p className="text-xs text-gray-500">Overall</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{analysis.overallLevel}/5</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                        <p className="text-xs text-gray-500">Vocab</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{analysis.vocabularyLevel}/5</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2">
+                        <p className="text-xs text-gray-500">Grammar</p>
+                        <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{analysis.grammarLevel}/5</p>
+                    </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Annotation Stats</p>
+                    <div className="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                        <p>Words flagged: {stats.wordAnnotations}</p>
+                        <p>Phrases flagged: {stats.phraseAnnotations}</p>
+                        <p>Sentences flagged: {stats.sentenceAnnotations}</p>
+                        <p className="font-medium">Primary barrier: {analysis.primaryBarrier}</p>
+                    </div>
+                </div>
+
+                {/* Save All Button */}
+                {hasSaveHandlers && saveableCount > 0 && (
+                    <button
+                        onClick={handleSaveAll}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                        <Save size={16} />
+                        Save All to My Words ({saveableCount})
+                    </button>
+                )}
+
+                {analysis.flaggedWords.length > 0 && (
+                    <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Vocabulary Definitions</h4>
+                        <div className="space-y-3">
+                            {analysis.flaggedWords.map((word, idx) => {
+                                const key = `word-${word.word}`;
+                                const isSaved = savedFocusItems.has(key);
+                                const canSave = hasSaveHandlers && hasDefinition(word.definition) && !isSaved;
+                                const definitionBlock = formatDefinitionBlock(word.definition);
+
+                                return (
+                                    <div key={`${word.word}-${idx}`} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs text-blue-700 dark:text-blue-400 uppercase tracking-wide">Word</p>
+                                                <p className="text-base font-semibold text-blue-900 dark:text-blue-100">{word.word}</p>
+                                                {word.definition?.pronunciation && (
+                                                    <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">{word.definition.pronunciation}</p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-gray-500 capitalize">{word.difficulty}</span>
+                                                {canSave && (
+                                                    <button
+                                                        onClick={() => handleSaveItem('word', word.word, word.definition)}
+                                                        className="p-1 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
+                                                        title="Save to My Words"
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                )}
+                                                {isSaved && (
+                                                    <span className="p-1 text-green-600 dark:text-green-400">
+                                                        <Check size={14} />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {definitionBlock && (
+                                            <div className="mt-3 space-y-2">
+                                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                    <BookOpen size={12} />
+                                                    Definition
+                                                </div>
+                                                {definitionBlock}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {analysis.flaggedPhrases.length > 0 && (
+                    <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Phrase Explanations</h4>
+                        <div className="space-y-3">
+                            {analysis.flaggedPhrases.map((phrase, idx) => {
+                                const key = `phrase-${phrase.phrase}`;
+                                const isSaved = savedFocusItems.has(key);
+                                const canSave = hasSaveHandlers && hasDefinition(phrase.definition) && !isSaved;
+                                const definitionBlock = formatDefinitionBlock(phrase.definition);
+
+                                return (
+                                    <div key={`${phrase.phrase}-${idx}`} className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs text-blue-700 dark:text-blue-400 uppercase tracking-wide">Phrase</p>
+                                                <p className="text-base font-semibold text-blue-900 dark:text-blue-100">"{phrase.phrase}"</p>
+                                            </div>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                {canSave && (
+                                                    <button
+                                                        onClick={() => handleSaveItem('phrase', phrase.phrase, phrase.definition)}
+                                                        className="p-1 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors"
+                                                        title="Save to My Words"
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                )}
+                                                {isSaved && (
+                                                    <span className="p-1 text-green-600 dark:text-green-400">
+                                                        <Check size={14} />
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {definitionBlock && (
+                                            <div className="mt-3 space-y-2">
+                                                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                    <BookOpen size={12} />
+                                                    Explanation
+                                                </div>
+                                                {definitionBlock}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {analysis.flaggedSentences.length > 0 && (
+                    <div className="space-y-2">
+                        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sentence Analysis</h4>
+                        <div className="space-y-2">
+                            {analysis.flaggedSentences.map((sentence, idx) => (
+                                <div key={`sent-${idx}`} className="p-2 rounded-lg border border-orange-100 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
+                                    <p className="text-xs text-gray-800 dark:text-gray-200 line-clamp-2">"{sentence.text}"</p>
+                                    {sentence.grammarPattern && (
+                                        <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">Pattern: {sentence.grammarPattern}</p>
+                                    )}
+                                    {sentence.explanation && (
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{sentence.explanation}</p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {analysis.strengths.length > 0 && (
+                    <div className="rounded-lg border border-green-100 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3">
+                        <p className="text-xs font-semibold text-green-700 dark:text-green-300 mb-2">Strengths</p>
+                        <ul className="text-sm text-green-800 dark:text-green-200 space-y-1">
+                            {analysis.strengths.map((strength, idx) => (
+                                <li key={`${strength}-${idx}`}>{strength}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {analysis.weaknesses.length > 0 && (
+                    <div className="rounded-lg border border-orange-100 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 p-3">
+                        <p className="text-xs font-semibold text-orange-700 dark:text-orange-300 mb-2">Areas to Improve</p>
+                        <ul className="text-sm text-orange-800 dark:text-orange-200 space-y-1">
+                            {analysis.weaknesses.map((weakness, idx) => (
+                                <li key={`${weakness}-${idx}`}>{weakness}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                <div className="rounded-lg border border-indigo-100 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-3">
+                    <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-2">Recommendations</p>
+                    <div className="text-sm text-indigo-800 dark:text-indigo-200 space-y-1">
+                        {analysis.recommendations.focusAreas.map((item, idx) => (
+                            <p key={`focus-${idx}`}>- {item}</p>
+                        ))}
+                        {analysis.recommendations.nextSteps.map((item, idx) => (
+                            <p key={`next-${idx}`}>- {item}</p>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     // Expanded state
     return (
         <div
@@ -309,8 +766,34 @@ export default function ReadingVocabPanel({
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
                 <div className="flex items-center gap-2">
                     <BookOpen size={20} className="text-blue-600 dark:text-blue-400" />
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Vocabulary Panel</h3>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Reading Panel</h3>
                 </div>
+                {isFocusEnabled && (
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('vocab')}
+                            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                                activeTab === 'vocab'
+                                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400'
+                            }`}
+                        >
+                            Vocab
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('assessment')}
+                            className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                                activeTab === 'assessment'
+                                    ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400'
+                            }`}
+                        >
+                            Assessment
+                        </button>
+                    </div>
+                )}
                 <button
                     onClick={onToggleCollapse}
                     className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -321,9 +804,12 @@ export default function ReadingVocabPanel({
 
             {/* Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                {/* Current Selection Section */}
-                    {localSelectedText && selectedSentence ? (
-                        <div className="space-y-4">
+                {isFocusEnabled && activeTab === 'assessment' ? (
+                    renderAssessmentContent()
+                ) : (
+                    <>
+                        {localSelectedText && selectedSentence ? (
+                            <div className="space-y-4">
                             <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
                                 <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">Current Selection</h4>
 
@@ -429,8 +915,8 @@ export default function ReadingVocabPanel({
                 )}
 
                 {/* Saved Markers Section */}
-                {sessionMarkers.length > 0 && (
-                    <div className="space-y-3">
+                        {sessionMarkers.length > 0 && (
+                            <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Saved Words ({sessionMarkers.length})</h4>
                         </div>
@@ -470,7 +956,9 @@ export default function ReadingVocabPanel({
                                 );
                             })}
                         </div>
-                    </div>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

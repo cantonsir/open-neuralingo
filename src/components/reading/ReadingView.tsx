@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ArrowLeft, BookOpen, Loader2, Search, ExternalLink, Download } from 'lucide-react';
 import { View, Marker, VocabData, LibraryItem, YouTubeSubtitleData } from '../../types';
-import ReadingVocabPanel, { VocabSavePayload } from './ReadingVocabPanel';
+import ReadingVocabPanel, { VocabSavePayload, FocusSaveItem } from './ReadingVocabPanel';
+import { analyzeFocusReadingBehavior, FocusReadingAnalysis, FocusAnnotation, classifyAnnotationType } from './focusReadingAI';
+import { generateReadableText } from '../../ai';
 
 // Helper function to parse YouTube content
 function parseYouTubeContent(item: LibraryItem): YouTubeSubtitleData | null {
@@ -224,6 +226,14 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         if (typeof window === 'undefined') return false;
         return window.localStorage.getItem('readingPanelCollapsed') === 'true';
     });
+    const [isFocusModeEnabled, setIsFocusModeEnabled] = useState(false);
+    const [focusAnnotations, setFocusAnnotations] = useState<FocusAnnotation[]>([]);
+    const [focusAnalysis, setFocusAnalysis] = useState<FocusReadingAnalysis | null>(null);
+    const [isAnalyzingFocus, setIsAnalyzingFocus] = useState(false);
+    const [isReadableViewEnabled, setIsReadableViewEnabled] = useState(false);
+    const [readableContent, setReadableContent] = useState<string | null>(null);
+    const [isFormattingReadable, setIsFormattingReadable] = useState(false);
+    const readableCacheRef = useRef<Record<string, string>>({});
 
     useEffect(() => {
         if (initialContent !== undefined) {
@@ -263,8 +273,87 @@ export default function ReadingView({ libraryId, title, content: initialContent,
 
         if (libraryId) {
             fetchContent();
+        } else {
+            setIsLoading(false);
         }
     }, [libraryId, initialContent]);
+
+    const hashText = (text: string) => {
+        let hash = 0;
+        for (let i = 0; i < text.length; i += 1) {
+            hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+        }
+        return hash.toString(16);
+    };
+
+    const normalizeReadableText = useCallback((text: string) => text.replace(/\r?\n/g, ''), []);
+
+    const isReadableMatch = useCallback((originalText: string, readableText: string) => {
+        return normalizeReadableText(originalText) === normalizeReadableText(readableText);
+    }, [normalizeReadableText]);
+
+    const getReadableCacheKey = useCallback(() => {
+        const hash = hashText(content);
+        if (libraryId) return `library:${libraryId}:${hash}`;
+        return `inline:${hash}`;
+    }, [libraryId, content]);
+
+    useEffect(() => {
+        if (!isReadableViewEnabled || !content) return;
+
+        const cacheKey = getReadableCacheKey();
+        const storageKey = `readable:${cacheKey}`;
+        const cached = readableCacheRef.current[cacheKey];
+        if (cached && isReadableMatch(content, cached)) {
+            setReadableContent(cached);
+            setIsFormattingReadable(false);
+            return;
+        }
+
+        if (typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem(storageKey);
+            if (stored && isReadableMatch(content, stored)) {
+                readableCacheRef.current[cacheKey] = stored;
+                setReadableContent(stored);
+                setIsFormattingReadable(false);
+                return;
+            }
+            if (stored && !isReadableMatch(content, stored)) {
+                window.localStorage.removeItem(storageKey);
+            }
+        }
+
+        let isCancelled = false;
+        setIsFormattingReadable(true);
+        generateReadableText(content)
+            .then((formatted) => {
+                if (isCancelled) return;
+                if (formatted && formatted.trim() && isReadableMatch(content, formatted)) {
+                    readableCacheRef.current[cacheKey] = formatted;
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.setItem(storageKey, formatted);
+                    }
+                    setReadableContent(formatted);
+                } else {
+                    setReadableContent(null);
+                    setIsReadableViewEnabled(false);
+                }
+            })
+            .catch(() => {
+                if (isCancelled) return;
+                setReadableContent(null);
+                setIsReadableViewEnabled(false);
+            })
+            .finally(() => {
+                if (!isCancelled) {
+                    setIsFormattingReadable(false);
+                }
+            });
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [isReadableViewEnabled, content, getReadableCacheKey]);
 
     // Extract complete sentence(s) containing the selected text
     const extractSentence = (paragraph: string, selectedText: string): string => {
@@ -278,44 +367,220 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         return relevantSentences.join(' ').trim() || sentences[0];
     };
 
+    const buildLineStarts = useCallback((text: string) => {
+        const starts = [0];
+        for (let i = 0; i < text.length; i += 1) {
+            if (text[i] === '\n') {
+                starts.push(i + 1);
+            }
+        }
+        return starts;
+    }, []);
+
+    const findLineIndex = useCallback((lineStarts: number[], index: number) => {
+        let low = 0;
+        let high = lineStarts.length - 1;
+        let result = 0;
+
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (lineStarts[mid] <= index) {
+                result = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+
+        return result;
+    }, []);
+
+    const originalParagraphs = useMemo(() => content.split('\n'), [content]);
+
+    const readableMaps = useMemo(() => {
+        if (!isReadableViewEnabled || !readableContent || !content) return null;
+        if (!isReadableMatch(content, readableContent)) return null;
+
+        const readableToOriginal = new Array(readableContent.length).fill(-1);
+        const originalToReadable = new Array(content.length).fill(-1);
+
+        const isNewline = (char: string) => char === '\n' || char === '\r';
+        let origIndex = 0;
+
+        for (let i = 0; i < readableContent.length; i += 1) {
+            const ch = readableContent[i];
+            if (isNewline(ch)) continue;
+
+            while (origIndex < content.length && isNewline(content[origIndex])) {
+                origIndex += 1;
+            }
+
+            if (origIndex >= content.length || content[origIndex] !== ch) {
+                return null;
+            }
+
+            readableToOriginal[i] = origIndex;
+            originalToReadable[origIndex] = i;
+            origIndex += 1;
+        }
+
+        return {
+            readableToOriginal,
+            originalToReadable,
+            originalLineStarts: buildLineStarts(content),
+            readableLineStarts: buildLineStarts(readableContent),
+        };
+    }, [isReadableViewEnabled, readableContent, content, isReadableMatch, buildLineStarts]);
+
+    const displayAnnotations = useMemo(() => {
+        if (!isFocusModeEnabled) return [] as FocusAnnotation[];
+        if (!isReadableViewEnabled || !readableMaps || !readableContent) return focusAnnotations;
+
+        const { originalLineStarts, readableLineStarts, originalToReadable } = readableMaps;
+
+        return focusAnnotations
+            .map((annotation) => {
+                const originalStart = originalLineStarts[annotation.paragraphIndex] + annotation.startOffset;
+                const originalEnd = originalLineStarts[annotation.paragraphIndex] + annotation.endOffset;
+
+                const displayStart = originalToReadable[originalStart];
+                const displayEnd = originalToReadable[originalEnd - 1];
+
+                if (displayStart === undefined || displayStart < 0 || displayEnd === undefined || displayEnd < 0) {
+                    return null;
+                }
+
+                const displayEndExclusive = displayEnd + 1;
+                const displayParagraphIndex = findLineIndex(readableLineStarts, displayStart);
+                const displayParagraphStart = readableLineStarts[displayParagraphIndex] || 0;
+
+                return {
+                    ...annotation,
+                    paragraphIndex: displayParagraphIndex,
+                    startOffset: displayStart - displayParagraphStart,
+                    endOffset: displayEndExclusive - displayParagraphStart,
+                } as FocusAnnotation;
+            })
+            .filter((item): item is FocusAnnotation => Boolean(item));
+    }, [focusAnnotations, isFocusModeEnabled, isReadableViewEnabled, readableMaps, readableContent, findLineIndex]);
+
+    const getSelectionOffsets = (range: Range, paragraphElement: HTMLElement) => {
+        if (!paragraphElement.contains(range.startContainer) || !paragraphElement.contains(range.endContainer)) {
+            return null;
+        }
+
+        const rawText = range.toString();
+        if (!rawText.trim()) return null;
+
+        const preRange = range.cloneRange();
+        preRange.selectNodeContents(paragraphElement);
+        preRange.setEnd(range.startContainer, range.startOffset);
+        const rawStart = preRange.toString().length;
+        const leadingWhitespace = rawText.length - rawText.trimStart().length;
+        const trailingWhitespace = rawText.length - rawText.trimEnd().length;
+        const startOffset = rawStart + leadingWhitespace;
+        const endOffset = rawStart + rawText.length - trailingWhitespace;
+
+        return { startOffset, endOffset, trimmedText: rawText.trim() };
+    };
+
     // Handle text selection
-    const handleTextSelection = (event?: MouseEvent) => {
+    const handleTextSelection = useCallback((event?: MouseEvent) => {
         const selection = window.getSelection();
         if (!selection || selection.toString().trim() === '') {
             const target = event?.target as HTMLElement | null;
             if (target && target.closest('[data-vocab-panel]')) {
                 return;
             }
-            setSelectedText('');
-            setSelectionRange(null);
+            if (!isFocusModeEnabled) {
+                setSelectedText('');
+                setSelectionRange(null);
+            }
             return;
         }
 
-        const text = selection.toString().trim();
-        setSelectedText(text);
+        const range = selection.getRangeAt(0);
 
         // Find which paragraph contains the selection
-        const range = selection.getRangeAt(0);
         const container = range.commonAncestorContainer;
         const paragraphElement = container.nodeType === Node.TEXT_NODE
             ? container.parentElement?.closest('p')
             : (container as Element).closest('p');
 
-        if (paragraphElement) {
-            const paragraphIndex = parseInt(paragraphElement.getAttribute('data-paragraph-index') || '0');
-            const fullParagraph = paragraphElement.textContent || '';
+        if (!paragraphElement) return;
 
-            // Extract sentence containing selected text
-            const sentenceText = extractSentence(fullParagraph, text);
+        const offsets = getSelectionOffsets(range, paragraphElement);
+        if (!offsets) return;
 
-            setSelectionRange({
-                paragraphIndex,
-                sentenceText,
-                selectedWords: text,
-            });
-            setSelectionKey(prev => prev + 1);
+        let { startOffset, endOffset, trimmedText } = offsets;
+        if (!trimmedText) return;
+
+        const displayParagraphIndex = parseInt(paragraphElement.getAttribute('data-paragraph-index') || '0');
+        let paragraphIndex = displayParagraphIndex;
+        let fullParagraph = paragraphElement.textContent || '';
+
+        if (isReadableViewEnabled) {
+            if (!readableMaps || !readableContent) return;
+
+            const { readableLineStarts, readableToOriginal, originalLineStarts } = readableMaps;
+            const displayParagraphStart = readableLineStarts[displayParagraphIndex] || 0;
+            const displayStart = displayParagraphStart + startOffset;
+            const displayEnd = displayParagraphStart + endOffset;
+            const originalStart = readableToOriginal[displayStart];
+            const originalEnd = readableToOriginal[displayEnd - 1];
+
+            if (originalStart === undefined || originalStart < 0 || originalEnd === undefined || originalEnd < 0) {
+                return;
+            }
+
+            const originalEndExclusive = originalEnd + 1;
+            const originalParagraphIndex = findLineIndex(originalLineStarts, originalStart);
+            const originalParagraphStart = originalLineStarts[originalParagraphIndex] || 0;
+
+            paragraphIndex = originalParagraphIndex;
+            fullParagraph = originalParagraphs[originalParagraphIndex] || '';
+            startOffset = originalStart - originalParagraphStart;
+            endOffset = originalEndExclusive - originalParagraphStart;
         }
-    };
+
+        if (isFocusModeEnabled) {
+            // Focus mode: create annotation instead of vocab lookup
+            const sentenceContext = extractSentence(fullParagraph, trimmedText);
+            const annotationType = classifyAnnotationType(trimmedText, fullParagraph);
+
+            // Check for duplicate — toggle off if already annotated
+            const existingIdx = focusAnnotations.findIndex(
+                (a) => a.paragraphIndex === paragraphIndex && a.startOffset === startOffset && a.endOffset === endOffset
+            );
+            if (existingIdx >= 0) {
+                setFocusAnnotations((prev) => prev.filter((_, i) => i !== existingIdx));
+            } else {
+                const annotation: FocusAnnotation = {
+                    id: `focus-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                    type: annotationType,
+                    text: trimmedText,
+                    sentenceContext,
+                    paragraphIndex,
+                    startOffset: Math.max(0, startOffset),
+                    endOffset: Math.max(0, endOffset),
+                    createdAt: Date.now(),
+                };
+                setFocusAnnotations((prev) => [...prev, annotation]);
+            }
+            selection.removeAllRanges();
+            return;
+        }
+
+        // Normal mode: vocab panel lookup
+        const sentenceText = extractSentence(fullParagraph, trimmedText);
+        setSelectedText(trimmedText);
+        setSelectionRange({
+            paragraphIndex,
+            sentenceText,
+            selectedWords: trimmedText,
+        });
+        setSelectionKey(prev => prev + 1);
+    }, [isFocusModeEnabled, focusAnnotations, isReadableViewEnabled, readableMaps, readableContent, originalParagraphs, findLineIndex]);
 
     // Handle saving words to session markers
     const handleSaveWords = (data: VocabSavePayload) => {
@@ -360,7 +625,7 @@ export default function ReadingView({ libraryId, title, content: initialContent,
     useEffect(() => {
         document.addEventListener('mouseup', handleTextSelection);
         return () => document.removeEventListener('mouseup', handleTextSelection);
-    }, [content]);
+    }, [handleTextSelection]);
 
     // Persist collapse state
     useEffect(() => {
@@ -368,6 +633,22 @@ export default function ReadingView({ libraryId, title, content: initialContent,
             window.localStorage.setItem('readingPanelCollapsed', String(isPanelCollapsed));
         }
     }, [isPanelCollapsed]);
+
+    useEffect(() => {
+        if (!isFocusModeEnabled) {
+            setFocusAnalysis(null);
+        }
+    }, [isFocusModeEnabled]);
+
+    // Clear focus annotations when content changes (new article opened)
+    useEffect(() => {
+        setFocusAnnotations([]);
+        setFocusAnalysis(null);
+        setIsFocusModeEnabled(false);
+        setReadableContent(null);
+        setIsReadableViewEnabled(false);
+        setIsFormattingReadable(false);
+    }, [libraryId]);
 
     // Handler for removing markers
     const handleRemoveMarker = (markerId: string) => {
@@ -394,6 +675,169 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         onMarkersUpdate?.(updatedMarkers);
     };
 
+    const handleRemoveFocusAnnotation = useCallback((id: string) => {
+        setFocusAnnotations((prev) => prev.filter((a) => a.id !== id));
+    }, []);
+
+    // Render paragraph text with annotation highlights
+    const renderAnnotatedParagraph = (paragraphText: string, paragraphIndex: number): React.ReactNode => {
+        if (!isFocusModeEnabled || displayAnnotations.length === 0) {
+            return paragraphText;
+        }
+
+        // Get annotations for this paragraph
+        const paragraphAnnotations = displayAnnotations
+            .filter((a) => a.paragraphIndex === paragraphIndex)
+            .sort((a, b) => a.startOffset - b.startOffset);
+
+        if (paragraphAnnotations.length === 0) {
+            return paragraphText;
+        }
+
+        const elements: React.ReactNode[] = [];
+        let lastIndex = 0;
+
+        paragraphAnnotations.forEach((annotation, idx) => {
+            const safeStart = Math.max(0, Math.min(annotation.startOffset, paragraphText.length));
+            const safeEnd = Math.max(safeStart, Math.min(annotation.endOffset, paragraphText.length));
+            if (safeEnd <= safeStart) {
+                return;
+            }
+
+            // Add text before this annotation
+            if (safeStart > lastIndex) {
+                elements.push(
+                    <span key={`text-${paragraphIndex}-${idx}`}>
+                        {paragraphText.slice(lastIndex, safeStart)}
+                    </span>
+                );
+            }
+
+            // Add the annotated span with appropriate styling
+            let className = '';
+            if (annotation.type === 'word') {
+                className = 'bg-red-200 dark:bg-red-800/40 rounded px-0.5';
+            } else if (annotation.type === 'phrase') {
+                className = 'bg-green-200 dark:bg-green-800/40 rounded px-0.5';
+            } else if (annotation.type === 'sentence') {
+                className = 'underline decoration-2 decoration-orange-400 underline-offset-4';
+            }
+
+            elements.push(
+                <span
+                    key={`annotation-${annotation.id}`}
+                    className={className}
+                    title={`${annotation.type}: ${annotation.text}`}
+                >
+                    {paragraphText.slice(safeStart, safeEnd)}
+                </span>
+            );
+
+            lastIndex = safeEnd;
+        });
+
+        // Add remaining text after last annotation
+        if (lastIndex < paragraphText.length) {
+            elements.push(
+                <span key={`text-${paragraphIndex}-end`}>
+                    {paragraphText.slice(lastIndex)}
+                </span>
+            );
+        }
+
+        return <>{elements}</>;
+    };
+
+    const handleFinishFocusReading = async () => {
+        if (focusAnnotations.length === 0) return;
+        setIsAnalyzingFocus(true);
+        try {
+            const result = await analyzeFocusReadingBehavior(content, focusAnnotations, firstLanguage);
+            setFocusAnalysis(result);
+        } catch (error) {
+            console.error('Focus reading analysis failed:', error);
+        } finally {
+            setIsAnalyzingFocus(false);
+        }
+    };
+
+    const computeFocusIndices = (sentence: string, selected: string) => {
+        const sentenceWords = sentence.split(/\s+/);
+        const selectedWordList = selected.split(/\s+/);
+        return sentenceWords.map((word, idx) =>
+            selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
+        ).filter(i => i >= 0);
+    };
+
+    const formatFocusDefinition = (item: FocusSaveItem) => {
+        const english = item.definitionEnglish?.trim();
+        const native = item.definitionNative?.trim();
+        if (english && native) return `English: ${english}\nNative: ${native}`;
+        return english || native || '';
+    };
+
+    // Save a single focus item (word or phrase) to My Words
+    const handleSaveFocusItem = useCallback((item: FocusSaveItem) => {
+        const formattedDefinition = formatFocusDefinition(item);
+        const indices = computeFocusIndices(item.sentenceContext, item.text);
+        const mainIndex = indices[0] ?? 0;
+
+        const marker: Marker = {
+            id: `focus-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            start: 0,
+            end: 0,
+            subtitleText: item.sentenceContext,
+            misunderstoodIndices: indices.length ? indices : [0],
+            vocabData: {
+                [mainIndex]: {
+                    definition: formattedDefinition || item.text,
+                    notes: `${item.type === 'word' ? 'Vocabulary' : 'Phrase'} from Focus Reading`
+                }
+            },
+            tags: ['vocabulary'],
+            createdAt: Date.now(),
+            pressCount: 1,
+        };
+
+        const updatedMarkers = [...sessionMarkers, marker];
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+        onSaveToDeck?.(marker);
+    }, [sessionMarkers, onMarkersUpdate, onSaveToDeck]);
+
+    // Save all focus items (words + phrases) to My Words
+    const handleSaveAllFocusItems = useCallback((items: FocusSaveItem[]) => {
+        const newMarkers: Marker[] = items.map((item, idx) => {
+            const formattedDefinition = formatFocusDefinition(item);
+            const indices = computeFocusIndices(item.sentenceContext, item.text);
+            const mainIndex = indices[0] ?? 0;
+            return {
+            id: `focus-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+            start: 0,
+            end: 0,
+            subtitleText: item.sentenceContext,
+            misunderstoodIndices: indices.length ? indices : [0],
+            vocabData: {
+                [mainIndex]: {
+                    definition: formattedDefinition || item.text,
+                    notes: `${item.type === 'word' ? 'Vocabulary' : 'Phrase'} from Focus Reading`
+                }
+            },
+            tags: ['vocabulary'],
+            createdAt: Date.now() + idx,
+            pressCount: 1,
+            };
+        });
+
+        const updatedMarkers = [...sessionMarkers, ...newMarkers];
+        setSessionMarkers(updatedMarkers);
+        onMarkersUpdate?.(updatedMarkers);
+        newMarkers.forEach(marker => onSaveToDeck?.(marker));
+    }, [sessionMarkers, onMarkersUpdate, onSaveToDeck]);
+
+    const displayContent = isReadableViewEnabled && readableContent ? readableContent : content;
+    const displayParagraphs = useMemo(() => displayContent.split('\n'), [displayContent]);
+
     return (
         <div className="flex-1 flex overflow-hidden bg-white dark:bg-gray-950">
             {/* Main Content Area */}
@@ -411,6 +855,46 @@ export default function ReadingView({ libraryId, title, content: initialContent,
                         <BookOpen className="w-5 h-5 text-indigo-500" />
                         {title}
                     </h2>
+                </div>
+                <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
+                    <div className="flex items-center gap-2">
+                        <span>Readable View</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsReadableViewEnabled((prev) => !prev)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                isReadableViewEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
+                            } ${isFormattingReadable ? 'opacity-60 cursor-wait' : ''}`}
+                            aria-pressed={isReadableViewEnabled}
+                            disabled={isFormattingReadable}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    isReadableViewEnabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
+                        {isReadableViewEnabled && isFormattingReadable && (
+                            <span className="text-xs text-gray-400">Formatting...</span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span>Focus Reading</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsFocusModeEnabled((prev) => !prev)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                isFocusModeEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
+                            }`}
+                            aria-pressed={isFocusModeEnabled}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                    isFocusModeEnabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                            />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -433,25 +917,35 @@ export default function ReadingView({ libraryId, title, content: initialContent,
                         // Render regular article content
                         return (
                             <div className="max-w-3xl mx-auto">
-                                {content ? (
-                                    <div className="space-y-4 text-base md:text-lg leading-relaxed text-gray-800 dark:text-gray-300">
-                                        {content.split('\n').map((paragraph, idx) => {
-                                            // Skip empty paragraphs
-                                            if (!paragraph.trim()) return null;
+                                {displayContent ? (
+                                    isReadableViewEnabled && isFormattingReadable && !readableContent ? (
+                                        <div className="flex items-center justify-center py-12 text-gray-500">
+                                            <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mr-2" />
+                                            <span className="text-sm">Formatting for readability...</span>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4 text-base md:text-lg leading-relaxed text-gray-800 dark:text-gray-300">
+                                            {displayParagraphs.map((paragraph, idx) => {
+                                                if (!paragraph.trim()) return null;
 
-                                            return (
-                                                <p
-                                                    key={idx}
-                                                    data-paragraph-index={idx}
-                                                    className="whitespace-pre-wrap"
-                                                >
-                                                    {paragraph}
-                                                </p>
-                                            );
-                                        })}
-                                    </div>
+                                                return (
+                                                    <p
+                                                        key={idx}
+                                                        data-paragraph-index={idx}
+                                                        className={`whitespace-pre-wrap ${isFocusModeEnabled ? 'select-text cursor-text' : ''}`}
+                                                    >
+                                                        {renderAnnotatedParagraph(paragraph, idx)}
+                                                    </p>
+                                                );
+                                            })}
+                                        </div>
+                                    )
                                 ) : (
-                                    <p className="text-center text-gray-500 italic">No text content available.</p>
+                                    <div className="text-center py-16 text-gray-400">
+                                        <BookOpen size={48} className="mx-auto mb-4 opacity-40" />
+                                        <p className="text-lg font-medium text-gray-500 mb-2">No content loaded</p>
+                                        <p className="text-sm">Go to Library to select something to read, or use the Compose tool to generate content.</p>
+                                    </div>
                                 )}
                             </div>
                         );
@@ -480,6 +974,16 @@ export default function ReadingView({ libraryId, title, content: initialContent,
                 onUpdateVocabData={handleUpdateVocabData}
                 firstLanguage={firstLanguage}
                 speechLanguage={speechLanguage}
+                focusMode={isFocusModeEnabled ? {
+                    enabled: true,
+                    annotations: focusAnnotations,
+                    analysis: focusAnalysis,
+                    isAnalyzing: isAnalyzingFocus,
+                    onFinishReading: handleFinishFocusReading,
+                    onRemoveAnnotation: handleRemoveFocusAnnotation,
+                    onSaveFocusItem: handleSaveFocusItem,
+                    onSaveAllFocusItems: handleSaveAllFocusItems,
+                } : undefined}
             />
         </div>
     );

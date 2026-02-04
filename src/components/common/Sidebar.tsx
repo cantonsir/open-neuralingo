@@ -318,6 +318,16 @@ export default function Sidebar({
                             activeColorTheme="orange"
                         />
 
+                        <SectionHeader label="Library" collapsed={collapsed} />
+                        <NavItem
+                            icon={<Book size={20} />}
+                            label="Library"
+                            isActive={view === 'library'}
+                            collapsed={collapsed}
+                            onClick={() => setView('library')}
+                            activeColorTheme="orange"
+                        />
+
                         {/* DATABASE Section */}
                         <SectionHeader label="Database" collapsed={collapsed} />
                         <NavItem
@@ -359,7 +369,6 @@ export default function Sidebar({
                             icon={<BookOpen size={20} />}
                             label="Reader"
                             isActive={view === 'reader'}
-                            isDisabled={!readerAvailable}
                             collapsed={collapsed}
                             onClick={() => setView('reader')}
                             activeColorTheme="blue"
@@ -380,6 +389,7 @@ export default function Sidebar({
                             onClick={() => setView('generator')}
                             activeColorTheme="blue"
                         />
+                        <SectionHeader label="Library" collapsed={collapsed} />
                         <NavItem
                             icon={<Layers size={20} />}
                             label="Library"
@@ -455,6 +465,16 @@ export default function Sidebar({
                             onClick={() => setView('assessment')}
                             activeColorTheme="green"
                         />
+
+                        <SectionHeader label="Library" collapsed={collapsed} />
+                        <NavItem
+                            icon={<Book size={20} />}
+                            label="Library"
+                            isActive={view === 'library'}
+                            collapsed={collapsed}
+                            onClick={() => setView('library')}
+                            activeColorTheme="green"
+                        />
                         <SectionHeader label="Practice" collapsed={collapsed} />
                         <NavItem
                             icon={<Mic size={20} />}
@@ -492,6 +512,16 @@ export default function Sidebar({
                             isActive={view === 'assessment'}
                             collapsed={collapsed}
                             onClick={() => setView('assessment')}
+                            activeColorTheme="purple"
+                        />
+
+                        <SectionHeader label="Library" collapsed={collapsed} />
+                        <NavItem
+                            icon={<Book size={20} />}
+                            label="Library"
+                            isActive={view === 'library'}
+                            collapsed={collapsed}
+                            onClick={() => setView('library')}
                             activeColorTheme="purple"
                         />
                         <SectionHeader label="Tools" collapsed={collapsed} />

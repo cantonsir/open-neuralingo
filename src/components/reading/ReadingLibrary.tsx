@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Book, Plus, Upload, Trash2, FileText, Loader2, Link2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Book, Upload, Trash2, FileText, Loader2, Link2, BookOpen } from 'lucide-react';
 import { View } from '../../types';
+import { formatTimeAgo } from '../../utils/formatters';
 
 interface LibraryItem {
     id: string;
@@ -21,6 +22,32 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
     const [showUrlInput, setShowUrlInput] = useState(false);
     const [importUrl, setImportUrl] = useState('');
     const [isImporting, setIsImporting] = useState(false);
+    const urlPopoverRef = useRef<HTMLDivElement>(null);
+
+    const extractYoutubeId = (value: string): string | null => {
+        if (!value) return null;
+        if (value.length === 11 && !value.includes('http')) return value;
+        const match = value.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        return match ? match[1] : null;
+    };
+
+    const getDisplayTitle = (item: LibraryItem) => {
+        if (item.file_type === 'youtube' && item.title.toLowerCase().startsWith('youtube:')) {
+            return item.title.slice(8).trim();
+        }
+        return item.title;
+    };
+
+    const getThumbnailUrl = (item: LibraryItem) => {
+        if (item.file_type !== 'youtube') return null;
+        const videoId = extractYoutubeId(item.filename || '') || extractYoutubeId(item.title || '');
+        return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+    };
+
+    const getTypeLabel = (fileType: string) => {
+        if (!fileType) return 'Document';
+        return fileType.toUpperCase();
+    };
 
     const fetchLibrary = async () => {
         try {
@@ -43,6 +70,19 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
 
         loadLibrary();
     }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!showUrlInput) return;
+            const target = event.target as Node;
+            if (urlPopoverRef.current && !urlPopoverRef.current.contains(target)) {
+                setShowUrlInput(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showUrlInput]);
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -126,7 +166,7 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                     </div>
 
                     <div className="flex gap-3">
-                        <div className="relative">
+                        <div className="relative" ref={urlPopoverRef}>
                             {showUrlInput && (
                                 <div className="absolute right-0 -top-12 md:top-full md:mt-2 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-96 z-20">
                                     <div className="flex gap-2 mb-2">
@@ -188,46 +228,62 @@ export default function ReadingLibrary({ onNavigate }: ReadingLibraryProps) {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {library.map(item => (
-                            <div
-                                key={item.id}
-                                onClick={() => onNavigate('reader', { libraryId: item.id, title: item.title })}
-                                className="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all cursor-pointer flex flex-col"
-                            >
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg text-amber-600 dark:text-amber-400">
-                                        <FileText className="w-8 h-8" />
+                        {library.map(item => {
+                            const thumbnail = getThumbnailUrl(item);
+                            const displayTitle = getDisplayTitle(item);
+                            const typeLabel = getTypeLabel(item.file_type);
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    onClick={() => onNavigate('reader', { libraryId: item.id, title: item.title })}
+                                    className="group cursor-pointer bg-white dark:bg-gray-900 rounded-xl overflow-hidden border border-gray-100 dark:border-gray-800 hover:border-yellow-500/50 hover:shadow-lg transition-all"
+                                >
+                                    <div className="relative aspect-video bg-gray-200 dark:bg-gray-800">
+                                        {thumbnail ? (
+                                            <img
+                                                src={thumbnail}
+                                                alt={displayTitle}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><rect fill="%23374151" width="320" height="180"/><text fill="%239CA3AF" x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="14">No Thumbnail</text></svg>';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full bg-gradient-to-br from-amber-50 to-amber-100 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center">
+                                                <FileText className="w-10 h-10 text-amber-400 dark:text-gray-500" />
+                                            </div>
+                                        )}
+
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                            <div className="w-12 h-12 rounded-full bg-yellow-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+                                                <BookOpen size={20} className="text-white" />
+                                            </div>
+                                        </div>
+
+                                        <div className="absolute top-3 left-3 px-2 py-1 rounded-full text-[11px] font-semibold bg-white/90 text-gray-700 dark:bg-gray-900/80 dark:text-gray-200">
+                                            {typeLabel}
+                                        </div>
+
+                                        <button
+                                            onClick={(e) => handleDelete(e, item.id)}
+                                            className="absolute top-3 right-3 p-2 text-gray-600 hover:text-red-500 transition-colors rounded-full bg-white/90 dark:bg-gray-900/80 hover:bg-white dark:hover:bg-gray-800"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={(e) => handleDelete(e, item.id)}
-                                        className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
 
-                                <h3 className="font-semibold text-gray-900 dark:text-white truncate mb-1" title={item.title}>
-                                    {item.title}
-                                </h3>
-                                <div className="flex items-center gap-2">
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 uppercase tracking-wider font-medium">
-                                        {item.file_type}
-                                    </p>
-                                    {item.file_type === 'youtube' && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                            📺 YouTube
-                                        </span>
-                                    )}
+                                    <div className="p-4">
+                                        <h3 className="font-semibold text-gray-900 dark:text-white line-clamp-2" title={displayTitle}>
+                                            {displayTitle}
+                                        </h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                            {formatTimeAgo(item.created_at)}
+                                        </p>
+                                    </div>
                                 </div>
-
-                                <div className="mt-auto pt-4 flex items-center justify-between text-sm text-gray-400">
-                                    <span>{new Date(item.created_at).toLocaleDateString()}</span>
-                                    <span className="group-hover:text-amber-500 transition-colors flex items-center gap-1">
-                                        Read Now <span className="text-lg">→</span>
-                                    </span>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

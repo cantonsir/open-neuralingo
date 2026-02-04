@@ -202,7 +202,8 @@ def import_youtube_to_library():
             return jsonify({'error': f'Failed to fetch transcript: {str(e)}'}), 500
 
         if not title:
-            title = f"YouTube Import ({video_id})"
+            video_title = _fetch_youtube_title(video_id)
+            title = f"YouTube: {video_title}" if video_title else f"YouTube: {video_id}"
 
         with get_db() as conn:
             library_id = str(uuid.uuid4())
@@ -281,6 +282,29 @@ def _is_youtube_url(url: str) -> tuple[bool, str | None]:
     if match:
         return True, match.group(1)
     return False, None
+
+
+def _fetch_youtube_title(video_id: str) -> str | None:
+    """
+    Fetch a YouTube video title via oEmbed (no API key required).
+
+    Returns:
+        title string or None
+    """
+    try:
+        response = requests.get(
+            'https://www.youtube.com/oembed',
+            params={'url': f'https://www.youtube.com/watch?v={video_id}', 'format': 'json'},
+            timeout=10
+        )
+        if response.ok:
+            data = response.json()
+            title = data.get('title')
+            if title:
+                return title.strip()
+    except Exception:
+        return None
+    return None
 
 
 def _extract_article_content(url: str) -> tuple[str, str]:
@@ -412,7 +436,8 @@ def import_url_to_library():
             except Exception as e:
                 return jsonify({'error': f'Failed to fetch YouTube transcript: {str(e)}'}), 500
             
-            title = f"YouTube: {video_id}"
+            video_title = _fetch_youtube_title(video_id)
+            title = f"YouTube: {video_title}" if video_title else f"YouTube: {video_id}"
             file_type = 'youtube'
             
         else:
