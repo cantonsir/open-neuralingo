@@ -37,12 +37,6 @@ OpenNeuralingo helps language learners improve their skills through interactive 
 - **Grammar Correction**: Get detailed corrections and suggestions
 - **Session History**: Review past writing sessions and improvements
 
-## Architecture Overview
-
-<div align="center">
-  <img width="300" alt="OpenNeuralingo Architecture" src="docs/architecture.svg" />
-</div>
-
 ## Tech Stack
 
 | Layer | Technology |
