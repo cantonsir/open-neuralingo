@@ -159,7 +159,7 @@ export function useVideoPlayer({
       return;
     }
 
-    if (view !== 'loop' && view !== 'vocab') {
+    if (view !== 'loop' && view !== 'vocab' && view !== 'flashcards') {
       if (videoId) {
         setPendingSegment({ start, end });
         setView('loop');

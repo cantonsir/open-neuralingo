@@ -223,7 +223,17 @@ function App() {
                 />
               </div>
 
-            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && (
+            {/* Persist Reading Flashcards in background to avoid reload */}
+            <div className={view === 'flashcards' ? 'flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden' : 'hidden'}>
+              <FlashcardPractice
+                module="reading"
+                savedCards={savedCards}
+                onExit={() => setView('home')}
+                onPlayAudio={() => { }}
+              />
+            </div>
+
+            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && view !== 'flashcards' && (
               view === 'learning' ? <ReadingLessons /> :
                 view === 'assessment' ? <ReadingAssessmentPage /> :
                   view === 'statistics' ? (
@@ -251,17 +261,7 @@ function App() {
                       />
                     </div>
                   ) :
-                    view === 'flashcards' ? (
-                      <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                        <FlashcardPractice
-                          module="reading"
-                          savedCards={savedCards}
-                          onExit={() => setView('home')}
-                          onPlayAudio={() => { }}
-                        />
-                      </div>
-                    ) :
-                      // view === 'webpage', 'library', generator, and reader are handled above
+                      // view === 'webpage', 'library', generator, reader, and flashcards are handled above
                       <ReadingDashboard onNavigate={setView} />
             )}
           </>
@@ -269,98 +269,106 @@ function App() {
 
         {/* Speaking Module */}
         {activeModule === 'speaking' && (
-          view === 'library' ? (
-            <ReadingLibrary onNavigate={handleLibraryNavigate} />
-          ) :
-          view === 'learning' ? <SpeakingLessons /> :
-            view === 'assessment' ? <SpeakingAssessment /> :
-              view === 'vocab' ? (
-                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                  <VocabularyManager
-                    module="speaking"
-                    markers={[]}
-                    savedCards={savedCards}
-                    onRemoveWord={() => { }}
-                    onUpdateVocabData={() => { }}
-                    onPlaySegment={() => { }}
-                    onSaveToDeck={handleSaveToDeck}
-                    onDeleteCard={handleDeleteFromDeck}
-                    onUpdateCard={handleUpdateCard}
-                  />
-                </div>
+          <>
+            {/* Persist Speaking Flashcards in background to avoid reload */}
+            <div className={view === 'flashcards' ? 'flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden' : 'hidden'}>
+              <FlashcardPractice
+                module="speaking"
+                savedCards={savedCards}
+                onExit={() => setView('home')}
+                onPlayAudio={() => { }}
+              />
+            </div>
+
+            {view !== 'flashcards' && (
+              view === 'library' ? (
+                <ReadingLibrary onNavigate={handleLibraryNavigate} />
               ) :
-                view === 'flashcards' ? (
-                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                    <FlashcardPractice
-                      module="speaking"
-                      savedCards={savedCards}
-                      onExit={() => setView('home')}
-                      onPlayAudio={() => { }}
+              view === 'learning' ? <SpeakingLessons /> :
+                view === 'assessment' ? <SpeakingAssessment /> :
+                  view === 'vocab' ? (
+                    <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                      <VocabularyManager
+                        module="speaking"
+                        markers={[]}
+                        savedCards={savedCards}
+                        onRemoveWord={() => { }}
+                        onUpdateVocabData={() => { }}
+                        onPlaySegment={() => { }}
+                        onSaveToDeck={handleSaveToDeck}
+                        onDeleteCard={handleDeleteFromDeck}
+                        onUpdateCard={handleUpdateCard}
+                      />
+                    </div>
+                  ) :
+                    view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
+                  view === 'conversation' && speakingData ? (
+                    <SpeakingView
+                      mode={speakingData.mode}
+                      topic={speakingData.topic}
+                      contextId={speakingData.contextId}
+                      onNavigate={setView}
                     />
-                  </div>
-                ) :
-                  view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
-                view === 'conversation' && speakingData ? (
-                  <SpeakingView
-                    mode={speakingData.mode}
-                    topic={speakingData.topic}
-                    contextId={speakingData.contextId}
-                    onNavigate={setView}
-                  />
-                ) : (
-                  <SpeakingDashboard
-                    setView={setView}
-                    setSpeakingData={setSpeakingData}
-                  />
-                )
+                  ) : (
+                    <SpeakingDashboard
+                      setView={setView}
+                      setSpeakingData={setSpeakingData}
+                    />
+                  )
+            )}
+          </>
         )}
 
         {/* Writing Module */}
         {activeModule === 'writing' && (
-          view === 'library' ? (
-            <ReadingLibrary onNavigate={handleLibraryNavigate} />
-          ) :
-          view === 'learning' ? <WritingLessons /> :
-            view === 'assessment' ? <WritingAssessmentPage /> :
-              view === 'vocab' ? (
-                <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                  <VocabularyManager
-                    module="writing"
-                    markers={[]}
-                    savedCards={savedCards}
-                    onRemoveWord={() => { }}
-                    onUpdateVocabData={() => { }}
-                    onPlaySegment={() => { }}
-                    onSaveToDeck={handleSaveToDeck}
-                    onDeleteCard={handleDeleteFromDeck}
-                    onUpdateCard={handleUpdateCard}
-                  />
-                </div>
+          <>
+            {/* Persist Writing Flashcards in background to avoid reload */}
+            <div className={view === 'flashcards' ? 'flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden' : 'hidden'}>
+              <FlashcardPractice
+                module="writing"
+                savedCards={savedCards}
+                onExit={() => setView('home')}
+                onPlayAudio={() => { }}
+              />
+            </div>
+
+            {view !== 'flashcards' && (
+              view === 'library' ? (
+                <ReadingLibrary onNavigate={handleLibraryNavigate} />
               ) :
-                view === 'flashcards' ? (
-                  <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-                    <FlashcardPractice
-                      module="writing"
-                      savedCards={savedCards}
-                      onExit={() => setView('home')}
-                      onPlayAudio={() => { }}
+              view === 'learning' ? <WritingLessons /> :
+                view === 'assessment' ? <WritingAssessmentPage /> :
+                  view === 'vocab' ? (
+                    <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                      <VocabularyManager
+                        module="writing"
+                        markers={[]}
+                        savedCards={savedCards}
+                        onRemoveWord={() => { }}
+                        onUpdateVocabData={() => { }}
+                        onPlaySegment={() => { }}
+                        onSaveToDeck={handleSaveToDeck}
+                        onDeleteCard={handleDeleteFromDeck}
+                        onUpdateCard={handleUpdateCard}
+                      />
+                    </div>
+                  ) :
+                    view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
+                  view === 'writer' && writingData ? (
+                    <WritingView
+                      topic={writingData.topic}
+                      contextId={writingData.contextId}
+                      initialContent={writingData.content}
+                      onBack={setView}
                     />
-                  </div>
-                ) :
-                  view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
-                view === 'writer' && writingData ? (
-                  <WritingView
-                    topic={writingData.topic}
-                    contextId={writingData.contextId}
-                    initialContent={writingData.content}
-                    onBack={setView}
-                  />
-                ) : (
-                  <WritingDashboard
-                    setView={setView}
-                    setWritingData={setWritingData}
-                  />
-                )
+                  ) : (
+                    <WritingDashboard
+                      setView={setView}
+                      setWritingData={setWritingData}
+                    />
+                  )
+            )}
+          </>
         )}
 
         {/* Listening Module */}

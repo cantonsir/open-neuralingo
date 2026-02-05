@@ -461,17 +461,15 @@ export default function ListeningModule({
         </div>
       )}
 
-      {/* Flashcards View */}
-      {view === 'flashcards' && (
-        <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
-          <FlashcardPractice
-            module="listening"
-            savedCards={savedCards}
-            onExit={() => setView('home')}
-            onPlayAudio={handlePlaySegment}
-          />
-        </div>
-      )}
+      {/* Flashcards View - keep-alive to preserve stage */}
+      <div className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden ${view === 'flashcards' ? 'flex' : 'hidden'}`}>
+        <FlashcardPractice
+          module="listening"
+          savedCards={savedCards}
+          onExit={() => setView('home')}
+          onPlayAudio={handlePlaySegment}
+        />
+      </div>
 
       {/* Learning Section - 3 Level Hierarchy */}
       {view === 'learning' && (
