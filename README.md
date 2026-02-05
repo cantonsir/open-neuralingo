@@ -59,8 +59,8 @@ OpenNeuralingo helps language learners improve their skills through interactive 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/cantonsir/deep-listening-trainer.git
-   cd deep-listening-trainer
+   git clone https://github.com/cantonsir/open-neuralingo.git
+   cd open-neuralingo
    ```
 
 2. **Install frontend dependencies**
@@ -154,7 +154,7 @@ See [.env.example](.env.example) for all available environment variables.
 ## Project Structure
 
 ```
-deep-listening-trainer/
+open-neuralingo/
 ├── src/                    # Frontend source code
 │   ├── components/         # React components by module
 │   │   ├── common/         # Shared components
