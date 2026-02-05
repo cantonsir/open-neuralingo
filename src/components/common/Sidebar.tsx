@@ -478,7 +478,7 @@ export default function Sidebar({
                         <SectionHeader label="Practice" collapsed={collapsed} />
                         <NavItem
                             icon={<Mic size={20} />}
-                            label="Roleplay Scenarios"
+                            label="Conversation"
                             isActive={view === 'scenario'}
                             collapsed={collapsed}
                             onClick={() => setView('scenario')}

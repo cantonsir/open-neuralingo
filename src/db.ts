@@ -911,6 +911,21 @@ export const api = {
         }
     },
 
+    /**
+     * Delete a speaking session by ID.
+     */
+    async deleteSpeakingSession(sessionId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/speaking/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete speaking session');
+        } catch (error) {
+            console.error('API deleteSpeakingSession error:', error);
+            throw error;
+        }
+    },
+
     // --- Listening History API ---
 
     /**

@@ -86,3 +86,31 @@ def save_speaking_session():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@speaking_bp.route('/speaking/sessions/<session_id>', methods=['DELETE'])
+def delete_speaking_session(session_id):
+    """
+    Delete a speaking session by ID.
+    
+    Args:
+        session_id: The ID of the session to delete
+    
+    Returns:
+        Success status
+    """
+    try:
+        with get_db() as conn:
+            result = conn.execute(
+                'DELETE FROM speaking_sessions WHERE id = ?',
+                (session_id,)
+            )
+            conn.commit()
+            
+            if result.rowcount == 0:
+                return jsonify({'error': 'Session not found'}), 404
+            
+            return jsonify({'status': 'success'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

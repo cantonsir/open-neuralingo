@@ -1,6 +1,5 @@
 import React from 'react';
 import { View } from '../../types';
-import ConversationPractice from './ConversationPractice';
 import LiveConversation from './LiveConversation';
 
 interface SpeakingViewProps {
@@ -11,9 +10,7 @@ interface SpeakingViewProps {
 }
 
 export default function SpeakingView({ mode, topic, contextId, onNavigate }: SpeakingViewProps) {
-    if (mode === 'live') {
-        return <LiveConversation topic={topic} contextId={contextId} onBack={() => onNavigate('scenario')} />;
-    } else {
-        return <ConversationPractice topic={topic} contextId={contextId} onBack={() => onNavigate('scenario')} />;
-    }
+    // All modes now route to LiveConversation (full audio experience)
+    // The new text-based conversation mode is handled directly in SpeakingScenario
+    return <LiveConversation topic={topic} contextId={contextId} onBack={() => onNavigate('scenario')} />;
 }

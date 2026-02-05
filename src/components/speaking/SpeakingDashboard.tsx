@@ -116,9 +116,9 @@ export default function SpeakingDashboard({ setView, setSpeakingData }: Speaking
                     </div>
                     <div className="flex-1 text-left">
                         <div className="font-semibold text-gray-900 dark:text-white group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">
-                            Start Roleplay
+                            Conversation
                         </div>
-                        <div className="text-xs text-gray-500">Choose a scenario</div>
+                        <div className="text-xs text-gray-500">Start a conversation</div>
                     </div>
                 </button>
 

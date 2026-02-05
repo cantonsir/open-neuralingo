@@ -301,7 +301,7 @@ function App() {
                       />
                     </div>
                   ) :
-                    view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} /> :
+                    view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} speechLanguage={targetLanguage} /> :
                   view === 'conversation' && speakingData ? (
                     <SpeakingView
                       mode={speakingData.mode}
