@@ -5,43 +5,44 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?logo=flask)](https://flask.palletsprojects.com/)
 
-**A comprehensive language learning platform with AI-powered listening, reading, speaking, and writing modules.**
+OpenNeuralingo is a full-stack language learning platform with AI-powered listening, reading, speaking, and writing workflows. It combines YouTube analysis, structured practice sessions, and a personal content library to help learners build consistent habits.
 
-OpenNeuralingo helps language learners improve their skills through interactive exercises, YouTube video analysis, AI-generated lessons, and real-time conversation practice.
-
-<div align="center">
-  <img width="1200" alt="OpenNeuralingo Dashboard" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
 ## Features
 
-### Listening Module
-- **Loop Markers**: Press `Space` to create precise loop markers that snap to subtitle boundaries
-- **Goal Videos**: Import YouTube videos and break them into manageable study segments
-- **Mini-Tests**: Challenge yourself with listening drills and track your reaction time
-- **Vocabulary Database**: Save difficult phrases with AI-generated definitions
-- **Subtitle Peeking**: Hide subtitles to challenge yourself, then press `S` to peek
+### Listening
+- Loop markers that snap to subtitle boundaries (Space)
+- Goal videos segmented into focused study clips
+- Mini-tests with reaction time tracking
+- Vocabulary capture with AI-generated definitions
+- Subtitle peeking for self-checks (S)
 
-### Reading Module
-- **Content Library**: Import PDFs, EPUBs, or YouTube transcripts
-- **AI Comprehension**: Get AI-generated questions to test understanding
-- **Progress Tracking**: Track reading sessions and comprehension scores
+### Reading
+- Import PDFs, EPUBs, YouTube transcripts, and web articles
+- Focus reading mode with AI comprehension prompts
+- Session tracking with progress dashboards
+- Vocabulary tools for review
 
-### Speaking Module
-- **Live Conversation**: Practice speaking with AI in real-time
-- **Scenario Practice**: Role-play specific situations (ordering food, job interviews, etc.)
-- **TTS Playback**: Hear correct pronunciation with high-quality text-to-speech
+### Speaking
+- Live conversation practice with AI
+- Scenario-based role play
+- Text-to-speech playback for pronunciation
 
-### Writing Module
-- **Composition Practice**: Write on various topics with AI feedback
-- **Grammar Correction**: Get detailed corrections and suggestions
-- **Session History**: Review past writing sessions and improvements
+### Writing
+- Composition practice with AI feedback
+- Grammar corrections and suggestions
+- Session history and review
+
+### Platform
+- Flashcards and vocabulary manager
+- Assessment profiles, results, and mastery tracking
+- Library and watch history management
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS |
+| Frontend | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 |
 | Backend | Python 3.10+, Flask 3.0 |
 | Database | SQLite |
 | AI | Google Gemini API |
@@ -51,105 +52,97 @@ OpenNeuralingo helps language learners improve their skills through interactive 
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18 or higher
-- [Python](https://python.org) 3.10 or higher
-- [Google Gemini API Key](https://aistudio.google.com/app/apikey) (for AI features)
+- [Node.js](https://nodejs.org/) 18+
+- [Python](https://python.org) 3.10+ and pip
+- [Google Gemini API key](https://aistudio.google.com/app/apikey) (required for AI features)
+- Optional: [Google Cloud Text-to-Speech API key](https://console.cloud.google.com/apis/credentials) for higher quality voices
+- Optional: Google Cloud Speech-to-Text or AssemblyAI for subtitle generation
 
 ### Installation
 
-1. **Clone the repository**
+1. Clone the repository
    ```bash
    git clone https://github.com/cantonsir/open-neuralingo.git
    cd open-neuralingo
    ```
 
-2. **Install frontend dependencies**
+2. Install frontend dependencies
    ```bash
    npm install
    ```
 
-3. **Install backend dependencies**
+3. Install backend dependencies
    ```bash
-   # Recommended: use a virtual environment
    python -m venv venv
-   
-   # Activate virtual environment
-   # Windows:
+
+   # Windows
    venv\Scripts\activate
-   # macOS/Linux:
+
+   # macOS/Linux
    source venv/bin/activate
-   
-   # Install dependencies
+
    pip install -r backend/requirements.txt
    ```
 
-4. **Configure environment variables**
-   
-   Copy the example environment file and add your API key:
+4. Configure environment variables
    ```bash
    cp .env.example .env.local
    ```
-   
-   Edit `.env.local`:
-   ```env
-   VITE_GEMINI_API_KEY=your_gemini_api_key_here
-   ```
+   Update `.env.local` with your API keys.
 
 ### Running the Application
 
-You need to run both the backend and frontend servers.
+Run both the backend and frontend servers.
 
-**Terminal 1 - Backend Server**
+Terminal 1 - Backend
 ```bash
 python backend/run.py
-C:\Users\Jayden\anaconda3\python.exe backend/run.py
 ```
-The backend runs on http://localhost:3001
+Backend runs on http://localhost:3001
 
-**Terminal 2 - Frontend Server**
+Terminal 2 - Frontend
 ```bash
 npm run dev
 ```
-The frontend runs on http://localhost:3000
+Frontend runs on http://localhost:3000
 
 Open http://localhost:3000 in your browser to use OpenNeuralingo.
 
-### Troubleshooting
-
-**Port already in use**
-```bash
-# Kill process on port 3001 (backend)
-npx kill-port 3001
-
-# Kill process on port 3000 (frontend)
-npx kill-port 3000
-```
-
-**Database issues**
-
-The SQLite database (`openneuralingo.db`) is created automatically in the project root. To reset:
-```bash
-rm openneuralingo.db
-```
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Space` | Create loop marker (snaps to subtitle) |
-| `S` | Peek at subtitles |
-| `K` or `P` | Play / Pause video |
-| `←` | Previous sentence |
-| `→` | Next sentence |
-
 ## Configuration
 
-See [.env.example](.env.example) for all available environment variables.
+See [.env.example](.env.example) for the full set of variables.
+
+### Frontend (.env.local)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `VITE_GEMINI_API_KEY` | Yes | Google Gemini API key for AI features |
-| `VITE_CLOUD_TTS_API_KEY` | Yes | Google Cloud TTS API key for higher quality voices |
+| `VITE_CLOUD_TTS_API_KEY` | No | Google Cloud TTS key for higher quality voices |
+
+### Backend (environment variables)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DB_FILE` | No | SQLite database path (default: openneuralingo.db in project root) |
+| `UPLOAD_FOLDER` | No | Upload directory (default: uploads) |
+| `HOST` | No | Server host (default: 0.0.0.0) |
+| `PORT` | No | Server port (default: 3001) |
+| `DEBUG` | No | Debug mode (default: true) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No | Google Cloud service account JSON for speech-to-text |
+| `GOOGLE_SUBTITLES_BUCKET` | No | Cloud Storage bucket for long audio transcription |
+| `ASSEMBLYAI_API_KEY` | No | AssemblyAI API key for fallback transcription |
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start the Vite dev server |
+| `npm run build` | Build the frontend for production |
+| `npm run preview` | Preview the production build |
+
+## API
+
+Backend endpoint documentation is available in [backend/README.md](backend/README.md).
 
 ## Project Structure
 
@@ -177,14 +170,43 @@ open-neuralingo/
 └── package.json            # Node.js dependencies
 ```
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Space` | Create loop marker (snaps to subtitle) |
+| `S` | Peek at subtitles |
+| `K` or `P` | Play or pause video |
+| `Left` | Previous sentence |
+| `Right` | Next sentence |
+
+## Troubleshooting
+
+Port already in use
+```bash
+# Backend (3001)
+npx kill-port 3001
+
+# Frontend (3000)
+npx kill-port 3000
+```
+
+Reset the database
+```bash
+# macOS/Linux
+rm openneuralingo.db
+
+# Windows (cmd)
+del openneuralingo.db
+
+# Windows (PowerShell)
+Remove-Item openneuralingo.db
+```
+
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-Built with care for language learners everywhere.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
