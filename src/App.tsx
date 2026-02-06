@@ -127,7 +127,7 @@ function App() {
   const [readingData, setReadingData] = useState<{ libraryId: string; title: string; content?: string } | null>(null);
   const [readingMarkers, setReadingMarkers] = useState<Marker[]>([]);
   const [speakingData, setSpeakingData] = useState<{ mode: 'live' | 'tts'; topic: string; contextId?: string } | null>(null);
-  const [writingData, setWritingData] = useState<{ topic: string; contextId?: string; content?: string } | null>(null);
+  const [writingData, setWritingData] = useState<{ id?: string; topic: string; contextId?: string; content?: string } | null>(null);
 
   const handleDiscardReadingMarker = (id: string) => {
     setReadingMarkers((prev) => prev.filter((marker) => marker.id !== id));
@@ -356,6 +356,7 @@ function App() {
                     view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
                   view === 'writer' && writingData ? (
                     <WritingView
+                      sessionId={writingData.id}
                       topic={writingData.topic}
                       contextId={writingData.contextId}
                       initialContent={writingData.content}

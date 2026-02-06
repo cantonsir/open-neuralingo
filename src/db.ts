@@ -886,10 +886,36 @@ export const api = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(session),
             });
-            if (!response.ok) throw new Error('Failed to save writing session');
+            if (!response.ok) {
+                let errorMessage = 'Failed to save writing session';
+                try {
+                    const errorData = await response.json();
+                    if (errorData?.error) {
+                        errorMessage = errorData.error;
+                    }
+                } catch (_e) {
+                    // Fallback to default message
+                }
+                throw new Error(errorMessage);
+            }
             return await response.json();
         } catch (error) {
             console.error('API saveWritingSession error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Delete a writing session by ID.
+     */
+    async deleteWritingSession(sessionId: string): Promise<void> {
+        try {
+            const response = await fetch(`${API_BASE}/writing/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+            if (!response.ok) throw new Error('Failed to delete writing session');
+        } catch (error) {
+            console.error('API deleteWritingSession error:', error);
             throw error;
         }
     },

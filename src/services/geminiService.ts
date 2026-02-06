@@ -43,6 +43,8 @@ const languageLabels: Record<string, string> = {
     'zh-HK': 'Cantonese',
     'zh-CN': 'Mandarin Chinese',
     de: 'German',
+    fr: 'French',
+    es: 'Spanish',
 };
 
 const speakingSpeedLabels: Record<number, string> = {
@@ -2177,6 +2179,763 @@ function getFallbackSpeakingAnalysis(
             avgAccuracy: 50,
             totalConversationTurns,
             avgResponseTime: Math.round(avgResponseTime),
+        },
+    };
+}
+
+
+// ===== WRITING ASSESSMENT =====
+
+export interface WritingTranslationResponse {
+    promptId: string;
+    scenario: string;
+    sourceText: string;
+    expectedTranslation: string;
+    initialTranslation: string;
+    correctedTranslation: string;
+    hasGrammarError: boolean;
+    isCorrected: boolean;
+    translationTimeMs: number;
+    correctionTimeMs: number;
+}
+
+export type WritingHintLevel = 'minimal' | 'guided' | 'detailed';
+
+export interface WritingSentenceHint {
+    sentenceIndex: number;
+    focusArea: string;
+    suspectFragment: string;
+    minimalHintFirstLanguage: string;
+    minimalHintTargetLanguage: string;
+    guidedHintFirstLanguage: string;
+    guidedHintTargetLanguage: string;
+    detailedHintFirstLanguage: string;
+    detailedHintTargetLanguage: string;
+}
+
+export interface WritingAnalysis {
+    overallLevel: number;
+    grammarLevel: number;
+    vocabularyLevel: number;
+    translationAccuracy: number;
+    selfCorrectionRate: number;
+    strengths: string[];
+    weaknesses: string[];
+    sentenceReports: Array<{
+        promptId: string;
+        sourceText: string;
+        initialTranslation: string;
+        correctedTranslation: string;
+        hasGrammarError: boolean;
+        corrected: boolean;
+    }>;
+    recommendations: {
+        recommendedLevel: number;
+        focusAreas: string[];
+        practiceTypes: string[];
+        nextSteps: string[];
+    };
+    statistics: {
+        totalSentences: number;
+        sentencesWithErrors: number;
+        sentencesCorrected: number;
+        avgTranslationTime: number;
+        avgCorrectionTime: number;
+    };
+}
+
+interface WritingProfileInput {
+    targetLanguage: string;
+    firstLanguage: string;
+    writingLevel: number;
+    writingPurposes: string[];
+    difficulties: string[];
+    goals: string[];
+    interests: string;
+}
+
+const writingLevelLabels: Record<number, string> = {
+    0: 'Beginner',
+    1: 'Elementary',
+    2: 'Intermediate',
+    3: 'Advanced',
+    4: 'Native-like',
+};
+
+/**
+ * Generate translation prompts for writing assessment.
+ * Prompts are shown in first language and translated into target language.
+ */
+export async function generateWritingTestPrompts(
+    profile: WritingProfileInput,
+    count: number = 5
+): Promise<TranslationPrompt[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const sourceLangLabel = languageLabels[profile.firstLanguage] || profile.firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    if (!apiKey) {
+        return getFallbackWritingPrompts(sourceLangLabel, targetLangLabel, count);
+    }
+
+    const level = writingLevelLabels[profile.writingLevel] || 'Intermediate';
+    const purposes = profile.writingPurposes?.length > 0
+        ? profile.writingPurposes.join(', ')
+        : 'general writing';
+    const difficulties = profile.difficulties?.length > 0
+        ? profile.difficulties.join(', ')
+        : 'general grammar and vocabulary';
+    const goals = profile.goals?.length > 0
+        ? profile.goals.join(', ')
+        : 'improve writing fluency';
+    const interests = profile.interests || 'general daily topics';
+
+    const prompt = `You are a writing assessment designer. Generate exactly ${count} translation prompts.
+
+Learner profile:
+- First language: ${sourceLangLabel}
+- Target language: ${targetLangLabel}
+- Writing level: ${level}
+- Writing purposes: ${purposes}
+- Difficulties: ${difficulties}
+- Goals: ${goals}
+- Interests: ${interests}
+
+Task:
+- Create ${count} standalone sentences in ${sourceLangLabel}
+- Learner will translate each sentence into ${targetLangLabel}
+- Sentences must be natural and practical
+- Keep sentence length suitable for ${level}
+- Include varied grammar structures across sentences
+- Return sentence-only prompts (no paragraphs)
+
+Return ONLY a valid JSON array with exactly ${count} objects:
+[
+  {
+    "id": "prompt-1",
+    "scenario": "Daily life",
+    "sourceText": "sentence in ${sourceLangLabel}",
+    "expectedTranslation": "correct translation in ${targetLangLabel}",
+    "difficulty": 1
+  }
+]
+
+Difficulty must be 1-5. Return ONLY JSON, no markdown.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.6,
+                        maxOutputTokens: 3072,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+
+        if (!jsonMatch) {
+            throw new Error('No JSON array found in response');
+        }
+
+        const prompts: TranslationPrompt[] = JSON.parse(jsonMatch[0]);
+
+        return prompts.slice(0, count).map((item, index) => ({
+            ...item,
+            id: `writing-prompt-${Date.now()}-${index}`,
+        }));
+    } catch (error) {
+        console.error('Error generating writing prompts:', error);
+        return getFallbackWritingPrompts(sourceLangLabel, targetLangLabel, count);
+    }
+}
+
+function getFallbackWritingPrompts(
+    _sourceLanguage: string,
+    _targetLanguage: string,
+    count: number
+): TranslationPrompt[] {
+    const fallbackPrompts: TranslationPrompt[] = [
+        {
+            id: 'w-fb-1',
+            scenario: 'Daily life',
+            sourceText: 'I usually write in my journal before going to bed.',
+            expectedTranslation: '',
+            difficulty: 1,
+        },
+        {
+            id: 'w-fb-2',
+            scenario: 'Work',
+            sourceText: 'Please send me the updated report by this afternoon.',
+            expectedTranslation: '',
+            difficulty: 2,
+        },
+        {
+            id: 'w-fb-3',
+            scenario: 'Study',
+            sourceText: 'Although the assignment was difficult, I finished it on time.',
+            expectedTranslation: '',
+            difficulty: 3,
+        },
+        {
+            id: 'w-fb-4',
+            scenario: 'Travel',
+            sourceText: 'If I had more time, I would explore the city museum tomorrow.',
+            expectedTranslation: '',
+            difficulty: 4,
+        },
+        {
+            id: 'w-fb-5',
+            scenario: 'Opinion',
+            sourceText: 'In my opinion, clear communication is more important than perfect grammar.',
+            expectedTranslation: '',
+            difficulty: 5,
+        },
+    ];
+
+    return fallbackPrompts.slice(0, count);
+}
+
+/**
+ * Detect which translated sentences likely contain grammar errors.
+ * Returns minimal feedback: sentence indices only.
+ */
+export async function detectWritingGrammarIssues(
+    profile: WritingProfileInput,
+    prompts: TranslationPrompt[],
+    translations: string[]
+): Promise<{ errorIndices: number[] }> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    const sourceLangLabel = languageLabels[profile.firstLanguage] || profile.firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    const fallbackIndices = translations
+        .map((text, index) => ({ text, index }))
+        .filter(item => !item.text || item.text.trim().split(/\s+/).length < 2)
+        .map(item => item.index);
+
+    if (!apiKey) {
+        return { errorIndices: fallbackIndices };
+    }
+
+    const rows = prompts.map((promptItem, index) => ({
+        index,
+        sourceText: promptItem.sourceText,
+        expectedTranslation: promptItem.expectedTranslation,
+        userTranslation: translations[index] || '',
+    }));
+
+    const prompt = `You are a grammar checker for language assessment.
+
+The learner translates from ${sourceLangLabel} into ${targetLangLabel}.
+For each translated sentence, determine whether there is a grammar error.
+
+Important:
+- Return minimal feedback only
+- Do NOT rewrite sentences
+- Do NOT explain error types
+- Only provide indices of sentences with grammar issues
+- If uncertain, do not mark as error
+
+Data:
+${JSON.stringify(rows, null, 2)}
+
+Return ONLY valid JSON object:
+{
+  "errorIndices": [1, 3]
+}
+
+Indices are zero-based.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.2,
+                        maxOutputTokens: 1024,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+        if (!jsonMatch) {
+            throw new Error('No JSON object found in response');
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        const validIndices: number[] = Array.isArray(parsed.errorIndices)
+            ? (parsed.errorIndices as unknown[])
+                .map(value => Number(value))
+                .filter((value): value is number => Number.isInteger(value) && value >= 0 && value < prompts.length)
+            : [];
+
+        const uniqueSorted: number[] = [...new Set<number>(validIndices)].sort((a, b) => a - b);
+        return { errorIndices: uniqueSorted };
+    } catch (error) {
+        console.error('Error detecting writing grammar issues:', error);
+        return { errorIndices: fallbackIndices };
+    }
+}
+
+/**
+ * Generate optional correction hints with selectable detail levels.
+ * Hints do not provide full corrected sentences.
+ */
+export async function generateWritingCorrectionHints(
+    profile: WritingProfileInput,
+    prompts: TranslationPrompt[],
+    translations: string[],
+    errorIndices: number[]
+): Promise<Record<number, WritingSentenceHint>> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    const sourceLangLabel = languageLabels[profile.firstLanguage] || profile.firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    const validIndices = [...new Set(errorIndices)]
+        .filter(index => Number.isInteger(index) && index >= 0 && index < prompts.length)
+        .sort((a, b) => a - b);
+
+    if (validIndices.length === 0) {
+        return {};
+    }
+
+    const rows = validIndices.map(index => ({
+        sentenceIndex: index,
+        sourceText: prompts[index]?.sourceText || '',
+        expectedTranslation: prompts[index]?.expectedTranslation || '',
+        userTranslation: translations[index] || '',
+    }));
+
+    if (!apiKey) {
+        return getFallbackWritingHints(rows, sourceLangLabel, targetLangLabel);
+    }
+
+    const prompt = `You are a writing tutor.
+
+Task:
+Generate 3 levels of hints for each flagged translation sentence.
+The learner translates from ${sourceLangLabel} to ${targetLangLabel}.
+
+Important constraints:
+- Do NOT provide the full corrected sentence
+- Do NOT rewrite the whole answer
+- Keep hints actionable and concise
+- Help learner know WHERE to edit
+
+Hint levels:
+1) minimalHint: short nudge only
+2) guidedHint: include likely grammar area and location clue
+3) detailedHint: stronger clue, still no full corrected sentence
+
+Language requirement:
+- Fields ending with FirstLanguage must be written in ${sourceLangLabel}
+- Fields ending with TargetLanguage must be written in ${targetLangLabel}
+- If you mention specific terms, wrap them in quotes in both languages and keep the same term order.
+
+Input data:
+${JSON.stringify(rows, null, 2)}
+
+Return ONLY a JSON array with this exact object shape:
+[
+  {
+    "sentenceIndex": 0,
+    "focusArea": "verb tense",
+    "suspectFragment": "have saw",
+    "minimalHintFirstLanguage": "[in ${sourceLangLabel}]",
+    "minimalHintTargetLanguage": "[in ${targetLangLabel}]",
+    "guidedHintFirstLanguage": "[in ${sourceLangLabel}]",
+    "guidedHintTargetLanguage": "[in ${targetLangLabel}]",
+    "detailedHintFirstLanguage": "[in ${sourceLangLabel}]",
+    "detailedHintTargetLanguage": "[in ${targetLangLabel}]"
+  }
+]
+
+If suspectFragment is unclear, return an empty string.
+Return ONLY JSON.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.4,
+                        maxOutputTokens: 2048,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+
+        if (!jsonMatch) {
+            throw new Error('No JSON array found in response');
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]) as unknown[];
+        const normalized: Record<number, WritingSentenceHint> = {};
+
+        parsed.forEach(item => {
+            const row = item as Partial<WritingSentenceHint> & Partial<{ minimalHint: string; guidedHint: string; detailedHint: string }>;
+            const index = Number(row.sentenceIndex);
+            if (!Number.isInteger(index) || !validIndices.includes(index)) {
+                return;
+            }
+
+            normalized[index] = {
+                sentenceIndex: index,
+                focusArea: (row.focusArea || 'grammar').toString(),
+                suspectFragment: (row.suspectFragment || '').toString(),
+                minimalHintFirstLanguage: (row.minimalHintFirstLanguage || row.minimalHint || 'Check the grammar in this sentence.').toString(),
+                minimalHintTargetLanguage: (row.minimalHintTargetLanguage || row.minimalHint || 'Check the grammar in this sentence.').toString(),
+                guidedHintFirstLanguage: (row.guidedHintFirstLanguage || row.guidedHint || 'Review verb tense, word order, and article usage.').toString(),
+                guidedHintTargetLanguage: (row.guidedHintTargetLanguage || row.guidedHint || 'Review verb tense, word order, and article usage.').toString(),
+                detailedHintFirstLanguage: (row.detailedHintFirstLanguage || row.detailedHint || 'Recheck the sentence structure and verb forms near the likely error segment.').toString(),
+                detailedHintTargetLanguage: (row.detailedHintTargetLanguage || row.detailedHint || 'Recheck the sentence structure and verb forms near the likely error segment.').toString(),
+            };
+        });
+
+        if (Object.keys(normalized).length === 0) {
+            return getFallbackWritingHints(rows, sourceLangLabel, targetLangLabel);
+        }
+
+        validIndices.forEach(index => {
+            if (!normalized[index]) {
+                const fallback = buildFallbackHint(rows.find(row => row.sentenceIndex === index), sourceLangLabel, targetLangLabel);
+                normalized[index] = fallback;
+            }
+        });
+
+        return normalized;
+    } catch (error) {
+        console.error('Error generating writing hints:', error);
+        return getFallbackWritingHints(rows, sourceLangLabel, targetLangLabel);
+    }
+}
+
+function getFallbackWritingHints(
+    rows: Array<{ sentenceIndex: number; sourceText: string; expectedTranslation: string; userTranslation: string }>,
+    sourceLangLabel: string,
+    targetLangLabel: string
+): Record<number, WritingSentenceHint> {
+    const output: Record<number, WritingSentenceHint> = {};
+    rows.forEach(row => {
+        output[row.sentenceIndex] = buildFallbackHint(row, sourceLangLabel, targetLangLabel);
+    });
+    return output;
+}
+
+function buildFallbackHint(
+    row?: { sentenceIndex: number; sourceText: string; expectedTranslation: string; userTranslation: string },
+    sourceLangLabel: string = 'First language',
+    targetLangLabel: string = 'Target language'
+): WritingSentenceHint {
+    const sentenceIndex = row?.sentenceIndex ?? -1;
+    const userTranslation = row?.userTranslation || '';
+    const expectedTranslation = row?.expectedTranslation || '';
+
+    const userTokens = userTranslation.toLowerCase().split(/\s+/).filter(Boolean);
+    const expectedTokens = expectedTranslation.toLowerCase().split(/\s+/).filter(Boolean);
+
+    const suspectFragment = userTokens.length > 0
+        ? userTokens.slice(0, Math.min(4, userTokens.length)).join(' ')
+        : '';
+
+    let focusArea = 'grammar';
+    let minimalHint = 'Check this sentence for grammar issues.';
+    let guidedHint = 'Review verb tense and word order in the sentence.';
+    let detailedHint = 'Check verb forms, articles, and connectors, then edit the phrase that feels unnatural.';
+
+    if (userTokens.length <= 2) {
+        focusArea = 'sentence completeness';
+        minimalHint = 'This sentence may be incomplete.';
+        guidedHint = 'Try writing a full sentence with subject + verb + object.';
+        detailedHint = 'Expand the sentence so it expresses the full meaning from the source text.';
+    } else if (expectedTokens.length > 0 && userTokens.length > expectedTokens.length + 4) {
+        focusArea = 'wordiness';
+        minimalHint = 'The sentence may be too long or redundant.';
+        guidedHint = 'Trim extra words and keep the key meaning only.';
+        detailedHint = 'Compare against the source meaning and remove unnecessary phrases before checking grammar.';
+    } else if (userTranslation.match(/\bhave\s+saw\b/i)) {
+        focusArea = 'verb tense';
+        minimalHint = 'Check your verb tense.';
+        guidedHint = 'The phrase "have saw" likely needs tense correction.';
+        detailedHint = 'Match the tense with the time expression and use the correct verb form in "have saw".';
+    }
+
+    return {
+        sentenceIndex,
+        focusArea,
+        suspectFragment,
+        minimalHintFirstLanguage: minimalHint,
+        minimalHintTargetLanguage: minimalHint,
+        guidedHintFirstLanguage: guidedHint,
+        guidedHintTargetLanguage: guidedHint,
+        detailedHintFirstLanguage: detailedHint,
+        detailedHintTargetLanguage: detailedHint,
+    };
+}
+
+/**
+ * Analyze writing mini-test responses (translation + self-correction).
+ */
+export async function analyzeWritingTestResults(
+    profile: WritingProfileInput,
+    prompts: TranslationPrompt[],
+    responses: WritingTranslationResponse[]
+): Promise<WritingAnalysis> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    const totalSentences = responses.length;
+    const sentencesWithErrors = responses.filter(r => r.hasGrammarError).length;
+    const sentencesCorrected = responses.filter(r => r.hasGrammarError && r.isCorrected).length;
+
+    const translationTimes = responses.map(r => r.translationTimeMs).filter(ms => ms > 0);
+    const correctionTimes = responses
+        .filter(r => r.hasGrammarError)
+        .map(r => r.correctionTimeMs)
+        .filter(ms => ms > 0);
+
+    const avgTranslationTime = translationTimes.length > 0
+        ? translationTimes.reduce((sum, value) => sum + value, 0) / translationTimes.length
+        : 0;
+    const avgCorrectionTime = correctionTimes.length > 0
+        ? correctionTimes.reduce((sum, value) => sum + value, 0) / correctionTimes.length
+        : 0;
+
+    if (!apiKey) {
+        return getFallbackWritingAnalysis(profile, responses, {
+            totalSentences,
+            sentencesWithErrors,
+            sentencesCorrected,
+            avgTranslationTime,
+            avgCorrectionTime,
+        });
+    }
+
+    const level = writingLevelLabels[profile.writingLevel] || 'Intermediate';
+    const sourceLangLabel = languageLabels[profile.firstLanguage] || profile.firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    const responseRows = responses.map((item, index) => ({
+        item: index + 1,
+        promptId: item.promptId,
+        sourceText: item.sourceText,
+        expectedTranslation: item.expectedTranslation,
+        initialTranslation: item.initialTranslation,
+        correctedTranslation: item.correctedTranslation,
+        hasGrammarError: item.hasGrammarError,
+        isCorrected: item.isCorrected,
+        translationTimeMs: item.translationTimeMs,
+        correctionTimeMs: item.correctionTimeMs,
+    }));
+
+    const prompt = `You are a writing assessment expert.
+
+Learner profile:
+- Writing level: ${level}
+- First language: ${sourceLangLabel}
+- Target language: ${targetLangLabel}
+- Difficulties: ${profile.difficulties.join(', ') || 'general'}
+- Goals: ${profile.goals.join(', ') || 'general improvement'}
+
+Mini-test data (translation then self-correction):
+${JSON.stringify(responseRows, null, 2)}
+
+Evaluate:
+1) Translation accuracy against expected translations
+2) Grammar quality of initial translations
+3) Self-correction effectiveness after feedback
+
+Return ONLY a JSON object with this EXACT structure:
+{
+  "overallLevel": 1,
+  "grammarLevel": 1,
+  "vocabularyLevel": 1,
+  "translationAccuracy": 0,
+  "selfCorrectionRate": 0,
+  "strengths": ["..."],
+  "weaknesses": ["..."],
+  "sentenceReports": [
+    {
+      "promptId": "...",
+      "sourceText": "...",
+      "initialTranslation": "...",
+      "correctedTranslation": "...",
+      "hasGrammarError": true,
+      "corrected": true
+    }
+  ],
+  "recommendations": {
+    "recommendedLevel": 1,
+    "focusAreas": ["..."],
+    "practiceTypes": ["..."],
+    "nextSteps": ["..."]
+  },
+  "statistics": {
+    "totalSentences": ${totalSentences},
+    "sentencesWithErrors": ${sentencesWithErrors},
+    "sentencesCorrected": ${sentencesCorrected},
+    "avgTranslationTime": ${Math.round(avgTranslationTime)},
+    "avgCorrectionTime": ${Math.round(avgCorrectionTime)}
+  }
+}
+
+Constraints:
+- Levels must be integers 1-5
+- Percentages must be 0-100
+- Keep feedback practical and concise`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 3072,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+
+        if (!jsonMatch) {
+            throw new Error('No JSON object found in response');
+        }
+
+        const parsed: WritingAnalysis = JSON.parse(jsonMatch[0]);
+
+        return {
+            ...parsed,
+            sentenceReports: Array.isArray(parsed.sentenceReports) && parsed.sentenceReports.length > 0
+                ? parsed.sentenceReports
+                : responses.map(item => ({
+                    promptId: item.promptId,
+                    sourceText: item.sourceText,
+                    initialTranslation: item.initialTranslation,
+                    correctedTranslation: item.correctedTranslation,
+                    hasGrammarError: item.hasGrammarError,
+                    corrected: item.isCorrected,
+                })),
+            statistics: {
+                totalSentences,
+                sentencesWithErrors,
+                sentencesCorrected,
+                avgTranslationTime: Math.round(avgTranslationTime),
+                avgCorrectionTime: Math.round(avgCorrectionTime),
+                ...(parsed.statistics || {}),
+            },
+        };
+    } catch (error) {
+        console.error('Error analyzing writing test results:', error);
+        return getFallbackWritingAnalysis(profile, responses, {
+            totalSentences,
+            sentencesWithErrors,
+            sentencesCorrected,
+            avgTranslationTime,
+            avgCorrectionTime,
+        });
+    }
+}
+
+function getFallbackWritingAnalysis(
+    profile: WritingProfileInput,
+    responses: WritingTranslationResponse[],
+    statistics: {
+        totalSentences: number;
+        sentencesWithErrors: number;
+        sentencesCorrected: number;
+        avgTranslationTime: number;
+        avgCorrectionTime: number;
+    }
+): WritingAnalysis {
+    const estimatedLevel = Math.max(1, Math.min(5, profile.writingLevel + 1));
+    const selfCorrectionRate = statistics.sentencesWithErrors > 0
+        ? (statistics.sentencesCorrected / statistics.sentencesWithErrors) * 100
+        : 100;
+
+    return {
+        overallLevel: estimatedLevel,
+        grammarLevel: Math.max(1, estimatedLevel - (statistics.sentencesWithErrors > 0 ? 1 : 0)),
+        vocabularyLevel: estimatedLevel,
+        translationAccuracy: Math.max(45, 70 - statistics.sentencesWithErrors * 6),
+        selfCorrectionRate,
+        strengths: [
+            'Completed all translation prompts',
+            statistics.sentencesCorrected > 0 ? 'Applied self-correction after grammar feedback' : 'Stayed consistent across prompts',
+        ],
+        weaknesses: statistics.sentencesWithErrors > 0
+            ? ['Grammar consistency needs more practice']
+            : ['Continue increasing sentence complexity'],
+        sentenceReports: responses.map(item => ({
+            promptId: item.promptId,
+            sourceText: item.sourceText,
+            initialTranslation: item.initialTranslation,
+            correctedTranslation: item.correctedTranslation,
+            hasGrammarError: item.hasGrammarError,
+            corrected: item.isCorrected,
+        })),
+        recommendations: {
+            recommendedLevel: estimatedLevel,
+            focusAreas: statistics.sentencesWithErrors > 0
+                ? ['Sentence structure and grammar', 'Editing and revision habits']
+                : ['Vocabulary expansion', 'Complex sentence patterns'],
+            practiceTypes: ['Short translation drills', 'Grammar self-edit exercises'],
+            nextSteps: ['Retake the mini-test after targeted grammar practice'],
+        },
+        statistics: {
+            totalSentences: statistics.totalSentences,
+            sentencesWithErrors: statistics.sentencesWithErrors,
+            sentencesCorrected: statistics.sentencesCorrected,
+            avgTranslationTime: Math.round(statistics.avgTranslationTime),
+            avgCorrectionTime: Math.round(statistics.avgCorrectionTime),
         },
     };
 }

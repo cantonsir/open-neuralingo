@@ -5,13 +5,14 @@ import { View } from '../../types';
 import { api } from '../../db';
 
 interface WritingViewProps {
+    sessionId?: string;
     topic: string;
     contextId?: string;
     initialContent?: string;
     onBack: (view: View) => void;
 }
 
-export default function WritingView({ topic, contextId, initialContent, onBack }: WritingViewProps) {
+export default function WritingView({ sessionId, topic, contextId, initialContent, onBack }: WritingViewProps) {
     const [text, setText] = useState(initialContent || '');
     const [contextContent, setContextContent] = useState('');
     const [showContext, setShowContext] = useState(!!contextId);
@@ -39,15 +40,17 @@ export default function WritingView({ topic, contextId, initialContent, onBack }
         try {
             setIsSaving(true);
             await api.saveWritingSession({
+                id: sessionId,
                 topic,
                 content: text,
                 contextId,
                 createdAt: Date.now()
             });
-            onBack('dashboard' as View); // Return to dashboard
+            onBack('compose' as View);
         } catch (error) {
             console.error("Failed to save", error);
-            alert("Failed to save writing session");
+            const message = error instanceof Error ? error.message : 'Failed to save writing session';
+            alert(`Failed to save writing session: ${message}`);
         } finally {
             setIsSaving(false);
         }
@@ -59,7 +62,7 @@ export default function WritingView({ topic, contextId, initialContent, onBack }
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-10">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={() => onBack('home')}
+                        onClick={() => onBack('compose')}
                         className="p-2 -ml-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5" />

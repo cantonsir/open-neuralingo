@@ -414,6 +414,46 @@ def init_db():
             updated_at INTEGER
         )
     ''')
+
+    # Writing assessment profile table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS writing_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            target_language TEXT,
+            first_language TEXT,
+            writing_level INTEGER,
+            writing_purposes TEXT,
+            difficulties TEXT,
+            goals TEXT,
+            interests TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    ''')
+
+    # Writing assessment results table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS writing_assessments (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT,
+            taken_at INTEGER,
+            prompts TEXT,
+            responses TEXT,
+            analysis TEXT,
+            overall_level INTEGER,
+            grammar_level INTEGER,
+            vocabulary_level INTEGER,
+            translation_accuracy REAL,
+            self_correction_rate REAL,
+            total_sentences INTEGER,
+            sentences_with_errors INTEGER,
+            sentences_corrected INTEGER,
+            avg_translation_time REAL,
+            avg_correction_time REAL,
+            FOREIGN KEY (profile_id) REFERENCES writing_profiles(id)
+        )
+    ''')
     
     # Listening table
     c.execute('''

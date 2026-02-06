@@ -166,6 +166,7 @@ export default function WritingDashboard({ setView, setWritingData }: WritingDas
                             key={session.id}
                             onClick={() => {
                                 setWritingData({
+                                    id: session.id,
                                     topic: session.topic,
                                     contextId: session.contextId,
                                     content: session.content
