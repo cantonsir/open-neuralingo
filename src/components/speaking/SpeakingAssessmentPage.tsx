@@ -15,41 +15,75 @@ export default function SpeakingAssessmentPage() {
     const [cachedAnalysis, setCachedAnalysis] = useState<SpeakingAnalysis | null>(null);
 
     useEffect(() => {
-        // Try to restore state from localStorage first
-        const savedState = localStorage.getItem('speakingAssessmentState');
-        if (savedState) {
-            try {
-                const state = JSON.parse(savedState);
-                if (state.testResponse && state.testPrompts && state.testResponse.translationResponses.length > 0) {
-                    // Restore completed test state
-                    setProfile(state.profile);
-                    setHasProfile(true);
-                    setTestResponse(state.testResponse);
-                    setTestPrompts(state.testPrompts);
-                    setCachedAnalysis(state.analysis || null);
-                    setLoading(false);
-                    return;
+        const loadProfileAndAssessment = async () => {
+            // Try to restore state from localStorage first
+            const savedState = localStorage.getItem('speakingAssessmentState');
+            if (savedState) {
+                try {
+                    const state = JSON.parse(savedState);
+                    if (state.testResponse && state.testPrompts && state.testResponse.translationResponses.length > 0) {
+                        // Restore completed test state
+                        setProfile(state.profile);
+                        setHasProfile(true);
+                        setTestResponse(state.testResponse);
+                        setTestPrompts(state.testPrompts);
+                        setCachedAnalysis(state.analysis || null);
+                        setLoading(false);
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Error restoring state:', err);
+                    localStorage.removeItem('speakingAssessmentState');
                 }
-            } catch (err) {
-                console.error('Error restoring state:', err);
-                localStorage.removeItem('speakingAssessmentState');
             }
-        }
 
-        // Check if profile exists
-        fetch('/api/speaking/profile')
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.id) {
-                    setProfile(data);
+            // Check if profile exists
+            try {
+                const profileRes = await fetch('/api/speaking/profile');
+                const profileData = await profileRes.json();
+
+                if (profileData && profileData.id) {
+                    setProfile(profileData);
                     setHasProfile(true);
+
+                    // Try to fetch the latest assessment from backend
+                    try {
+                        const assessmentsRes = await fetch('/api/speaking/assessments');
+                        const assessmentsData = await assessmentsRes.json();
+
+                        if (assessmentsData && assessmentsData.length > 0) {
+                            // Get the most recent assessment
+                            const latestAssessment = assessmentsData[0];
+
+                            // Fetch full assessment details
+                            const detailsRes = await fetch(`/api/speaking/assessment/${latestAssessment.id}`);
+                            const details = await detailsRes.json();
+
+                            if (details && details.prompts && details.responses) {
+                                // Reconstruct test response
+                                const testResp: SpeakingTestResponse = {
+                                    translationResponses: details.responses,
+                                    conversationTranscript: details.conversationTranscript || [],
+                                    totalTestTimeMs: 0,
+                                };
+
+                                setTestResponse(testResp);
+                                setTestPrompts(details.prompts);
+                                setCachedAnalysis(details.analysis || null);
+                            }
+                        }
+                    } catch (assessmentErr) {
+                        console.error('Error loading assessments:', assessmentErr);
+                    }
                 }
                 setLoading(false);
-            })
-            .catch(err => {
+            } catch (err) {
                 console.error('Error loading speaking profile:', err);
                 setLoading(false);
-            });
+            }
+        };
+
+        loadProfileAndAssessment();
     }, []);
 
     const handleProfileComplete = async (profileData: SpeakingProfileData) => {
