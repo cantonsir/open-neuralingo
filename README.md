@@ -97,6 +97,7 @@ Run both the backend and frontend servers.
 Terminal 1 - Backend
 ```bash
 python backend/run.py
+C:\Users\Jayden\anaconda3\python.exe backend/run.py
 ```
 Backend runs on http://localhost:3001
 

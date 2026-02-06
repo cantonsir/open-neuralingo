@@ -530,6 +530,49 @@ def init_db():
         )
     ''')
 
+    # Speaking assessment profile table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS speaking_profiles (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            target_language TEXT,
+            first_language TEXT,
+            speaking_level INTEGER,
+            context_preferences TEXT,
+            speaking_comfort TEXT,
+            difficulties TEXT,
+            goals TEXT,
+            interests TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    ''')
+
+    # Speaking assessment results table
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS speaking_assessments (
+            id TEXT PRIMARY KEY,
+            profile_id TEXT,
+            taken_at INTEGER,
+            prompts TEXT,
+            responses TEXT,
+            conversation_transcript TEXT,
+            analysis TEXT,
+            overall_level INTEGER,
+            pronunciation_level INTEGER,
+            grammar_level INTEGER,
+            vocabulary_level INTEGER,
+            fluency_level INTEGER,
+            primary_barrier TEXT,
+            translation_accuracy REAL,
+            conversation_coherence REAL,
+            total_prompts INTEGER,
+            avg_accuracy REAL,
+            avg_response_time REAL,
+            FOREIGN KEY (profile_id) REFERENCES speaking_profiles(id)
+        )
+    ''')
+
     # Review log table (Anki-style) - tracks every single review
     c.execute('''
         CREATE TABLE IF NOT EXISTS review_log (

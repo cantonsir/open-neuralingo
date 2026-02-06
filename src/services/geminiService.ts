@@ -891,23 +891,39 @@ export async function generateConversationScript(topic: string, context?: string
 
 export async function generateChatResponse(history: { role: string, text: string }[], topic: string): Promise<string> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) return "I'm having trouble connecting to the AI.";
+    if (!apiKey) {
+        console.error('No API key found');
+        return "I'm having trouble connecting to the AI.";
+    }
 
-    // USER REQUEST: Live Conversation uses gemini-2.5-flash-native-audio-preview-12-2025
-    const LIVE_MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
+    // Use gemini-2.0-flash for text-based conversations (more reliable than audio preview models)
+    const TEXT_MODEL = 'gemini-2.0-flash';
 
-    const systemInstruction = `You are a helpful language tutor roleplaying about "${topic}".
-    Keep your responses natural, conversational, and concise (1-2 sentences).
-    Do not use markdown formatting.`;
+    // Build system instruction and initial prompt
+    let systemInstruction = '';
+    let contents = [];
 
-    const contents = history.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
-    }));
+    if (history.length === 0) {
+        // First message - use topic as instruction to AI
+        systemInstruction = `You are a helpful language tutor. ${topic}`;
+        // Start conversation with a greeting from the model
+        contents = [{ role: 'user', parts: [{ text: 'Hello' }] }];
+    } else {
+        // Ongoing conversation
+        systemInstruction = `You are a helpful language tutor having a conversation about the topic.
+Keep your responses natural, conversational, and concise (1-2 sentences).
+Ask engaging follow-up questions to keep the conversation going.
+Do not use markdown formatting.`;
+
+        contents = history.map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.text }]
+        }));
+    }
 
     try {
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${LIVE_MODEL}:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${TEXT_MODEL}:generateContent?key=${apiKey}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -915,39 +931,31 @@ export async function generateChatResponse(history: { role: string, text: string
                     systemInstruction: { parts: [{ text: systemInstruction }] },
                     contents: contents,
                     generationConfig: {
-                        maxOutputTokens: 100,
-                        temperature: 0.7
+                        maxOutputTokens: 150,
+                        temperature: 0.8
                     }
                 }),
             }
         );
 
         if (!response.ok) {
-            console.warn(`Native audio preview model failed (${response.status}), falling back to 2.0 Flash.`);
-            // Fallback to text model if the specific audio preview model fails or isn't available for text-only
-            // Note: Native audio model might strictly require audio input/output, so fallback is important.
-            const fallbackResponse = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        systemInstruction: { parts: [{ text: systemInstruction }] },
-                        contents: contents
-                    }),
-                }
-            );
-            if (!fallbackResponse.ok) throw new Error('Both models failed');
-
-            const data = await fallbackResponse.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || "I didn't catch that.";
+            const errorText = await response.text();
+            console.error(`API error (${response.status}):`, errorText);
+            throw new Error(`API returned ${response.status}`);
         }
 
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || "I didn't catch that.";
+        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!aiText) {
+            console.error('No text in API response:', data);
+            return "I didn't catch that. Could you try again?";
+        }
+
+        return aiText.trim();
     } catch (e) {
-        console.error("Chat AI Error", e);
-        return "I'm sorry, I'm having trouble connecting right now.";
+        console.error("Chat AI Error:", e);
+        return "I'm sorry, I'm having trouble connecting right now. Let's try continuing our conversation.";
     }
 }
 
@@ -1804,4 +1812,371 @@ Return ONLY valid JSON with this structure:
             },
         };
     }
+}
+
+
+// ===== SPEAKING ASSESSMENT =====
+
+export interface TranslationPrompt {
+    id: string;
+    scenario: string;
+    sourceText: string;
+    expectedTranslation: string;
+    difficulty: number;
+    grammarFocus?: string;
+    vocabularyFocus?: string;
+}
+
+export interface TranslationResponse {
+    promptId: string;
+    sourceText: string;
+    expectedTranslation: string;
+    userTranscript: string;
+    responseTimeMs: number;
+    accuracy?: number;
+}
+
+export interface ConversationExchange {
+    role: 'ai' | 'user';
+    text: string;
+    timestamp: number;
+}
+
+export interface SpeakingAnalysis {
+    overallLevel: number;
+    pronunciationLevel: number;
+    grammarLevel: number;
+    vocabularyLevel: number;
+    fluencyLevel: number;
+    primaryBarrier: 'pronunciation' | 'grammar' | 'vocabulary' | 'fluency';
+    strengths: string[];
+    weaknesses: string[];
+    translationAccuracy: number;
+    conversationCoherence: number;
+    grammarErrors: Array<{
+        pattern: string;
+        examples: string[];
+        count: number;
+        severity: 'minor' | 'moderate' | 'severe';
+    }>;
+    vocabularyGaps: Array<{
+        category: string;
+        examples: string[];
+        count: number;
+    }>;
+    recommendations: {
+        recommendedLevel: number;
+        focusAreas: string[];
+        practiceTypes: string[];
+        nextSteps: string[];
+    };
+    statistics: {
+        totalPromptsAnswered: number;
+        avgAccuracy: number;
+        totalConversationTurns: number;
+        avgResponseTime: number;
+    };
+}
+
+interface SpeakingProfileInput {
+    targetLanguage: string;
+    firstLanguage: string;
+    speakingLevel: number;
+    contextPreferences: string[];
+    speakingComfort: string;
+    difficulties: string[];
+    goals: string[];
+    interests: string;
+}
+
+const speakingLevelLabels: Record<number, string> = {
+    0: 'Beginner',
+    1: 'Elementary',
+    2: 'Intermediate',
+    3: 'Advanced',
+    4: 'Native-like',
+};
+
+/**
+ * Generate speaking test prompts (oral translation sentences)
+ */
+export async function generateSpeakingTestPrompts(
+    profile: SpeakingProfileInput,
+    firstLanguage: string,
+    count: number = 8
+): Promise<TranslationPrompt[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    if (!apiKey) {
+        console.error('Missing VITE_GEMINI_API_KEY');
+        return getFallbackSpeakingPrompts(firstLanguage, profile.targetLanguage, count);
+    }
+
+    const level = speakingLevelLabels[profile.speakingLevel] || 'Intermediate';
+    const contexts = profile.contextPreferences.length > 0
+        ? profile.contextPreferences.join(', ')
+        : 'casual conversation, daily life';
+    const difficulties = profile.difficulties.length > 0
+        ? profile.difficulties.join(', ')
+        : 'general';
+    const interests = profile.interests || 'general topics';
+
+    const sourceLangLabel = languageLabels[firstLanguage] || firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    const prompt = `You are a language assessment expert. Generate ${count} oral translation prompts for a speaking test.
+
+The learner's first language is ${sourceLangLabel} and they are learning ${targetLangLabel}.
+Their speaking level is: ${level}
+They want to practice in these contexts: ${contexts}
+Their difficulties include: ${difficulties}
+Their interests: ${interests}
+
+Generate sentences in ${sourceLangLabel} that the learner must translate orally into ${targetLangLabel}.
+
+Rules:
+- Group the sentences into 3-4 different real-life scenarios (e.g., "Ordering at a restaurant", "Asking for directions", "Job interview")
+- Start with easier sentences and gradually increase difficulty
+- Include grammar patterns relevant to their level
+- Make sentences natural and conversational
+- Each sentence should test specific vocabulary or grammar skills
+- Provide the expected translation in ${targetLangLabel}
+
+Return a JSON array with exactly ${count} objects:
+[
+  {
+    "id": "prompt-1",
+    "scenario": "Ordering at a restaurant",
+    "sourceText": "sentence in ${sourceLangLabel}",
+    "expectedTranslation": "expected translation in ${targetLangLabel}",
+    "difficulty": 1,
+    "grammarFocus": "present tense questions",
+    "vocabularyFocus": "food and dining"
+  }
+]
+
+Difficulty should be 1-5. Return ONLY the JSON array, no other text.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 4096,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+            throw new Error('No JSON array found in response');
+        }
+
+        const prompts: TranslationPrompt[] = JSON.parse(jsonMatch[0]);
+
+        return prompts.map((p, index) => ({
+            ...p,
+            id: `prompt-${Date.now()}-${index}`,
+        }));
+    } catch (error) {
+        console.error('Error generating speaking prompts:', error);
+        return getFallbackSpeakingPrompts(firstLanguage, profile.targetLanguage, count);
+    }
+}
+
+function getFallbackSpeakingPrompts(
+    _firstLanguage: string,
+    _targetLanguage: string,
+    count: number
+): TranslationPrompt[] {
+    const fallbackPrompts: TranslationPrompt[] = [
+        { id: 'fb-1', scenario: 'Greetings', sourceText: 'Hello, how are you today?', expectedTranslation: '', difficulty: 1 },
+        { id: 'fb-2', scenario: 'Greetings', sourceText: 'My name is... Nice to meet you.', expectedTranslation: '', difficulty: 1 },
+        { id: 'fb-3', scenario: 'Restaurant', sourceText: 'I would like to order a coffee, please.', expectedTranslation: '', difficulty: 2 },
+        { id: 'fb-4', scenario: 'Restaurant', sourceText: 'Could you recommend something from the menu?', expectedTranslation: '', difficulty: 2 },
+        { id: 'fb-5', scenario: 'Directions', sourceText: 'Excuse me, how do I get to the train station?', expectedTranslation: '', difficulty: 3 },
+        { id: 'fb-6', scenario: 'Directions', sourceText: 'Is it far from here? Can I walk there?', expectedTranslation: '', difficulty: 3 },
+        { id: 'fb-7', scenario: 'Shopping', sourceText: 'How much does this cost? Do you have a smaller size?', expectedTranslation: '', difficulty: 3 },
+        { id: 'fb-8', scenario: 'Shopping', sourceText: 'I would like to return this item. I bought it yesterday.', expectedTranslation: '', difficulty: 4 },
+        { id: 'fb-9', scenario: 'Work', sourceText: 'I have a meeting at three o\'clock this afternoon.', expectedTranslation: '', difficulty: 4 },
+        { id: 'fb-10', scenario: 'Work', sourceText: 'Could you send me the report by the end of the day?', expectedTranslation: '', difficulty: 5 },
+    ];
+
+    return fallbackPrompts.slice(0, count);
+}
+
+/**
+ * Analyze speaking test results using Gemini AI
+ */
+export async function analyzeSpeakingTestResults(
+    profile: SpeakingProfileInput,
+    prompts: TranslationPrompt[],
+    responses: TranslationResponse[],
+    conversationTranscript: ConversationExchange[]
+): Promise<SpeakingAnalysis> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    // Calculate client-side statistics
+    const totalPromptsAnswered = responses.length;
+    const responseTimes = responses.map(r => r.responseTimeMs).filter(t => t > 0);
+    const avgResponseTime = responseTimes.length > 0
+        ? responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length
+        : 0;
+    const conversationTurns = conversationTranscript.filter(e => e.role === 'user').length;
+
+    if (!apiKey) {
+        return getFallbackSpeakingAnalysis(profile, totalPromptsAnswered, avgResponseTime, conversationTurns);
+    }
+
+    const level = speakingLevelLabels[profile.speakingLevel] || 'Intermediate';
+    const sourceLangLabel = languageLabels[profile.firstLanguage] || profile.firstLanguage;
+    const targetLangLabel = languageLabels[profile.targetLanguage] || profile.targetLanguage;
+
+    // Build translation comparison data
+    const translationData = responses.map((r, i) => ({
+        promptNumber: i + 1,
+        scenario: prompts[i]?.scenario || 'Unknown',
+        sourceText: r.sourceText,
+        expectedTranslation: r.expectedTranslation,
+        userTranscript: r.userTranscript,
+        responseTimeMs: r.responseTimeMs,
+    }));
+
+    const conversationData = conversationTranscript.map(e => ({
+        role: e.role,
+        text: e.text,
+    }));
+
+    const prompt = `You are a language assessment expert. Analyze the following speaking test results for a ${level} learner translating from ${sourceLangLabel} to ${targetLangLabel}.
+
+PART A - ORAL TRANSLATIONS:
+${JSON.stringify(translationData, null, 2)}
+
+PART B - CONVERSATION WITH AI:
+${JSON.stringify(conversationData, null, 2)}
+
+LEARNER PROFILE:
+- Speaking Level: ${level}
+- Difficulties: ${profile.difficulties.join(', ')}
+- Goals: ${profile.goals.join(', ')}
+- Context Preferences: ${profile.contextPreferences.join(', ')}
+
+Analyze the results and provide a comprehensive assessment. For each translation, compare the user's transcript against the expected translation to evaluate accuracy, grammar, and vocabulary.
+
+Return a JSON object with this EXACT structure:
+{
+    "overallLevel": <1-5>,
+    "pronunciationLevel": <1-5>,
+    "grammarLevel": <1-5>,
+    "vocabularyLevel": <1-5>,
+    "fluencyLevel": <1-5>,
+    "primaryBarrier": "<pronunciation|grammar|vocabulary|fluency>",
+    "strengths": ["strength 1", "strength 2"],
+    "weaknesses": ["weakness 1", "weakness 2"],
+    "translationAccuracy": <0-100 percentage>,
+    "conversationCoherence": <0-100 percentage>,
+    "grammarErrors": [
+        {"pattern": "error type", "examples": ["example from transcript"], "count": <number>, "severity": "<minor|moderate|severe>"}
+    ],
+    "vocabularyGaps": [
+        {"category": "category name", "examples": ["missing word"], "count": <number>}
+    ],
+    "recommendations": {
+        "recommendedLevel": <1-5>,
+        "focusAreas": ["area 1"],
+        "practiceTypes": ["practice type 1"],
+        "nextSteps": ["step 1"]
+    },
+    "statistics": {
+        "totalPromptsAnswered": ${totalPromptsAnswered},
+        "avgAccuracy": <0-100>,
+        "totalConversationTurns": ${conversationTurns},
+        "avgResponseTime": ${Math.round(avgResponseTime)}
+    }
+}
+
+Return ONLY the JSON object, no other text.`;
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.4,
+                        maxOutputTokens: 3072,
+                    },
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('No JSON object found in response');
+        }
+
+        const analysis: SpeakingAnalysis = JSON.parse(jsonMatch[0]);
+        return analysis;
+    } catch (error) {
+        console.error('Error analyzing speaking results:', error);
+        return getFallbackSpeakingAnalysis(profile, totalPromptsAnswered, avgResponseTime, conversationTurns);
+    }
+}
+
+function getFallbackSpeakingAnalysis(
+    profile: SpeakingProfileInput,
+    totalPromptsAnswered: number,
+    avgResponseTime: number,
+    totalConversationTurns: number
+): SpeakingAnalysis {
+    const level = Math.max(1, profile.speakingLevel);
+    return {
+        overallLevel: level,
+        pronunciationLevel: level,
+        grammarLevel: level,
+        vocabularyLevel: level,
+        fluencyLevel: level,
+        primaryBarrier: 'grammar',
+        strengths: ['Completed the speaking assessment'],
+        weaknesses: ['Unable to perform detailed analysis without AI'],
+        translationAccuracy: 50,
+        conversationCoherence: 50,
+        grammarErrors: [],
+        vocabularyGaps: [],
+        recommendations: {
+            recommendedLevel: level,
+            focusAreas: ['Continue practicing speaking regularly'],
+            practiceTypes: ['Oral translation exercises', 'Conversation practice'],
+            nextSteps: ['Retake the test with AI analysis enabled'],
+        },
+        statistics: {
+            totalPromptsAnswered,
+            avgAccuracy: 50,
+            totalConversationTurns,
+            avgResponseTime: Math.round(avgResponseTime),
+        },
+    };
 }
