@@ -1,5 +1,6 @@
 // Gemini AI Service for generating personalized test sentences
 
+import { GrammarError, GrammarErrorType, GrammarErrorSeverity } from '../types';
 import { getLanguageName } from '../utils/languageOptions';
 
 interface AssessmentResult {
@@ -85,6 +86,126 @@ const MODEL_TEXT = 'gemini-2.0-flash'; // Using 2.0 Flash as it's the latest sta
 // Wait, the user said "gemini-3-flash-preview". I should try to use it.
 const REQUESTED_TEXT_MODEL = 'gemini-2.0-flash';
 const REQUESTED_LIVE_MODEL = 'gemini-2.0-flash';
+
+// Writing-first rollout model chain (user requested: gemini-3.0-flash-preview)
+const WRITING_MODEL_PRIMARY = (import.meta.env.VITE_GEMINI_WRITING_MODEL || 'gemini-3.0-flash-preview').trim();
+const WRITING_MODEL_FALLBACKS = ['gemini-3-flash-preview', 'gemini-2.0-flash'];
+const WRITING_UNAVAILABLE_STORAGE_KEY = 'writing_unavailable_models_v1';
+const WRITING_UNAVAILABLE_TTL_MS = 1000 * 60 * 60 * 24;
+
+function readUnavailableWritingModels(): Record<string, number> {
+    if (typeof window === 'undefined') {
+        return {};
+    }
+
+    try {
+        const raw = window.localStorage.getItem(WRITING_UNAVAILABLE_STORAGE_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return {};
+        return parsed as Record<string, number>;
+    } catch {
+        return {};
+    }
+}
+
+function writeUnavailableWritingModels(map: Record<string, number>): void {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    try {
+        window.localStorage.setItem(WRITING_UNAVAILABLE_STORAGE_KEY, JSON.stringify(map));
+    } catch {
+        // Ignore localStorage write errors
+    }
+}
+
+function isModelTemporarilyUnavailable(model: string): boolean {
+    const map = readUnavailableWritingModels();
+    const timestamp = map[model];
+    if (!timestamp) return false;
+
+    const expired = Date.now() - timestamp > WRITING_UNAVAILABLE_TTL_MS;
+    if (expired) {
+        delete map[model];
+        writeUnavailableWritingModels(map);
+        return false;
+    }
+
+    return true;
+}
+
+function markModelTemporarilyUnavailable(model: string): void {
+    const map = readUnavailableWritingModels();
+    map[model] = Date.now();
+    writeUnavailableWritingModels(map);
+}
+
+const unavailableWritingModels = new Set<string>();
+
+function getWritingModelChain(): string[] {
+    return [WRITING_MODEL_PRIMARY, ...WRITING_MODEL_FALLBACKS].filter((model, index, arr) => model && arr.indexOf(model) === index);
+}
+
+function extractResponseText(data: any): string {
+    const parts = data?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return '';
+
+    return parts
+        .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+        .join('')
+        .trim();
+}
+
+async function generateWritingText(
+    apiKey: string,
+    body: Record<string, unknown>
+): Promise<{ text: string; model: string }> {
+    let lastError: unknown = null;
+
+    for (const model of getWritingModelChain()) {
+        if (unavailableWritingModels.has(model) || isModelTemporarilyUnavailable(model)) {
+            unavailableWritingModels.add(model);
+            continue;
+        }
+
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                }
+            );
+
+            if (!response.ok) {
+                const errText = await response.text();
+                if (response.status === 404 || response.status === 400) {
+                    unavailableWritingModels.add(model);
+                    markModelTemporarilyUnavailable(model);
+                }
+                lastError = new Error(`Model ${model} failed: ${response.status} ${errText}`);
+                continue;
+            }
+
+            const data = await response.json();
+            const text = extractResponseText(data);
+
+            if (!text) {
+                lastError = new Error(`Model ${model} returned empty text`);
+                continue;
+            }
+
+            return { text, model };
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('All writing models failed');
+}
 
 function buildPrompt(assessment: AssessmentResult): string {
     const language = languageLabels[assessment.targetLanguage] || 'English';
@@ -813,6 +934,43 @@ export interface WritingFeedback {
     suggestions: string[];
 }
 
+export async function summarizeWritingTitle(content: string): Promise<string> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return 'Untitled Draft';
+
+    const prompt = `Create a concise title (3-8 words) for this student writing draft.
+
+Rules:
+- Keep it descriptive and natural.
+- Do not add quotation marks.
+- Return title text only.
+
+Draft:
+"""
+${content.slice(0, 4000)}
+"""`;
+
+    try {
+        const { text } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.3,
+                maxOutputTokens: 40,
+            },
+        });
+
+        const title = text
+            .replace(/^"|"$/g, '')
+            .replace(/^title:\s*/i, '')
+            .trim();
+
+        return title || 'Untitled Draft';
+    } catch (error) {
+        console.error('Title summarization error:', error);
+        return 'Untitled Draft';
+    }
+}
+
 export async function improveWriting(text: string, topic: string): Promise<WritingFeedback> {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) throw new Error("No API Key");
@@ -833,18 +991,22 @@ Return ONLY valid JSON:
 }`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, // USER REQUEST: 3-flash for text
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-            }
-        );
-        const data = await response.json();
-        const textRes = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const { text: textRes, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 1024,
+                responseMimeType: 'application/json',
+            },
+        });
+
+        console.log('[improveWriting] model:', model);
         const jsonMatch = textRes.match(/\{[\s\S]*\}/);
-        return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        if (!jsonMatch) {
+            throw new Error('No JSON object found in writing feedback response');
+        }
+
+        return JSON.parse(jsonMatch[0]);
     } catch (e) {
         console.error("Writing AI Error", e);
         throw e;
@@ -2323,27 +2485,15 @@ Return ONLY a valid JSON array with exactly ${count} objects:
 Difficulty must be 1-5. Return ONLY JSON, no markdown.`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.6,
-                        maxOutputTokens: 3072,
-                    },
-                }),
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const { text, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.6,
+                maxOutputTokens: 3072,
+                responseMimeType: 'application/json',
+            },
+        });
+        console.log('[generateWritingTestPrompts] model:', model);
         const jsonMatch = text.match(/\[[\s\S]*\]/);
 
         if (!jsonMatch) {
@@ -2461,27 +2611,15 @@ Return ONLY valid JSON object:
 Indices are zero-based.`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.2,
-                        maxOutputTokens: 1024,
-                    },
-                }),
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const { text, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 1024,
+                responseMimeType: 'application/json',
+            },
+        });
+        console.log('[detectWritingGrammarIssues] model:', model);
         const jsonMatch = text.match(/\{[\s\S]*\}/);
 
         if (!jsonMatch) {
@@ -2581,27 +2719,15 @@ If suspectFragment is unclear, return an empty string.
 Return ONLY JSON.`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.4,
-                        maxOutputTokens: 2048,
-                    },
-                }),
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const { text, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 2048,
+                responseMimeType: 'application/json',
+            },
+        });
+        console.log('[generateWritingCorrectionHints] model:', model);
         const jsonMatch = text.match(/\[[\s\S]*\]/);
 
         if (!jsonMatch) {
@@ -2823,27 +2949,15 @@ Constraints:
 - Keep feedback practical and concise`;
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.3,
-                        maxOutputTokens: 3072,
-                    },
-                }),
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const { text, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.3,
+                maxOutputTokens: 3072,
+                responseMimeType: 'application/json',
+            },
+        });
+        console.log('[analyzeWritingTestResults] model:', model);
         const jsonMatch = text.match(/\{[\s\S]*\}/);
 
         if (!jsonMatch) {
@@ -2938,4 +3052,322 @@ function getFallbackWritingAnalysis(
             avgCorrectionTime: Math.round(statistics.avgCorrectionTime),
         },
     };
+}
+
+
+// ===== GRAMMAR CORRECTION: PROGRESSIVE TEACHING =====
+
+/**
+ * Analyze free-form text and return all grammar errors with 3-level hints.
+ * The corrected sentences are included but hidden from the student in the UI.
+ */
+export async function analyzeGrammarErrors(
+    text: string,
+    targetLanguage: string
+): Promise<GrammarError[]> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) throw new Error('No API Key');
+
+    const langLabel = getLanguageName(targetLanguage) || targetLanguage;
+
+    const prompt = `You are a strict grammar analysis expert for ${langLabel} language learners.
+
+Analyze the following text written by a student learning ${langLabel}.
+Identify ALL sentences that contain grammar errors.
+
+IMPORTANT:
+- Flag ALL grammar errors including: wrong tense, subject-verb agreement, word order, unnecessary/missing articles, wrong prepositions, sentence fragments, run-on sentences, and misused words
+- Flag unnecessary articles before proper nouns (e.g., "the John" should be "John")
+- Flag unnecessary or wrong prepositions (e.g., "in this month" should be "this month")
+- Flag sentence fragments (e.g., sentences starting with "Because" or "And" that lack an independent clause)
+- Be thorough: it is better to flag a borderline error than to miss a real one
+- For each error, generate 3 progressive hint levels
+- Include the corrected sentence (this will be used for validation, NOT shown to student)
+
+STUDENT TEXT:
+"""
+${text}
+"""
+
+Return ONLY a valid JSON array. If there are no errors, return an empty array [].
+Each object must have this exact structure:
+[
+  {
+    "id": 0,
+    "originalSentence": "The exact sentence from the text that has the error",
+    "errorType": "tense",
+    "severity": "major",
+    "correctedSentence": "The corrected version of the sentence",
+    "hintLevel1": "There seems to be an issue with the verb in this sentence.",
+    "hintLevel2": "The verb tense doesn't match the time reference. Check whether present or past tense is needed.",
+    "hintLevel3": "For example, 'Yesterday I go to school' should use past tense: 'Yesterday I went to school'. Apply the same pattern to your sentence."
+  }
+]
+
+Rules for hints:
+- hintLevel1: Identify WHICH PART of the sentence has the issue (vague, just point to the area)
+- hintLevel2: NAME the grammar rule being violated and explain it briefly
+- hintLevel3: Show a SIMILAR correct example that demonstrates the rule (do NOT give the actual answer)
+- Keep each hint concise (max 20 words per hint)
+
+errorType must be one of: "tense", "agreement", "word_order", "article", "preposition", "spelling", "punctuation", "vocabulary", "other"
+severity must be one of: "minor", "major"
+
+id should be sequential starting from 0.
+Return ONLY JSON.`;
+
+    try {
+        const { text: textRes, model } = await generateWritingText(apiKey, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 4096,
+                responseMimeType: 'application/json',
+            },
+        });
+        console.log('[analyzeGrammarErrors] model:', model);
+        console.log('[analyzeGrammarErrors] Raw AI response:', textRes.substring(0, 500));
+
+        const parseJsonArrayLoosely = (raw: string): { parsed: any[]; matched: boolean } => {
+            const trimmed = raw.trim();
+            if (!trimmed) return { parsed: [], matched: false };
+
+            const candidates: string[] = [];
+            const pushCandidate = (value: string) => {
+                const normalized = value.trim();
+                if (normalized) candidates.push(normalized);
+            };
+
+            const countChar = (input: string, char: string) => (input.match(new RegExp(`\\${char}`, 'g')) || []).length;
+
+            const tryParseCandidates = (inputCandidates: string[]): any[] | null => {
+                const seen = new Set<string>();
+                for (const candidate of inputCandidates) {
+                    if (seen.has(candidate)) continue;
+                    seen.add(candidate);
+
+                    try {
+                        const parsed = JSON.parse(candidate);
+                        if (Array.isArray(parsed)) return parsed;
+                        if (parsed && typeof parsed === 'object') return [parsed];
+                    } catch {
+                        // Try next candidate
+                    }
+                }
+                return null;
+            };
+
+            pushCandidate(trimmed);
+
+            const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+            if (fenced?.[1]) {
+                pushCandidate(fenced[1]);
+            }
+
+            const firstBracket = trimmed.indexOf('[');
+            const lastBracket = trimmed.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket > firstBracket) {
+                pushCandidate(trimmed.slice(firstBracket, lastBracket + 1));
+            }
+
+            if (firstBracket !== -1) {
+                let bracketSlice = trimmed.slice(firstBracket).trim();
+                const trailingFenceIndex = bracketSlice.indexOf('```');
+                if (trailingFenceIndex !== -1) {
+                    bracketSlice = bracketSlice.slice(0, trailingFenceIndex).trim();
+                }
+
+                pushCandidate(bracketSlice);
+
+                let balanced = bracketSlice;
+                const objectOpen = countChar(balanced, '{');
+                const objectClose = countChar(balanced, '}');
+                if (objectClose < objectOpen) {
+                    balanced += '}'.repeat(objectOpen - objectClose);
+                }
+
+                const arrayOpen = countChar(balanced, '[');
+                const arrayClose = countChar(balanced, ']');
+                if (arrayClose < arrayOpen) {
+                    balanced += ']'.repeat(arrayOpen - arrayClose);
+                }
+
+                balanced = balanced.replace(/,\s*([}\]])/g, '$1');
+                pushCandidate(balanced);
+            }
+
+            const firstBrace = trimmed.indexOf('{');
+            const lastBrace = trimmed.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+                pushCandidate(`[${trimmed.slice(firstBrace, lastBrace + 1)}]`);
+            }
+
+            const parsedFromCandidates = tryParseCandidates(candidates);
+            if (parsedFromCandidates) {
+                return { parsed: parsedFromCandidates, matched: true };
+            }
+
+            const extractBalancedObjects = (input: string): string[] => {
+                const objects: string[] = [];
+                let start = -1;
+                let depth = 0;
+                let inString = false;
+                let escaped = false;
+
+                for (let i = 0; i < input.length; i += 1) {
+                    const ch = input[i];
+
+                    if (inString) {
+                        if (escaped) {
+                            escaped = false;
+                        } else if (ch === '\\') {
+                            escaped = true;
+                        } else if (ch === '"') {
+                            inString = false;
+                        }
+                        continue;
+                    }
+
+                    if (ch === '"') {
+                        inString = true;
+                        continue;
+                    }
+
+                    if (ch === '{') {
+                        if (depth === 0) start = i;
+                        depth += 1;
+                    } else if (ch === '}') {
+                        if (depth > 0) depth -= 1;
+                        if (depth === 0 && start !== -1) {
+                            objects.push(input.slice(start, i + 1));
+                            start = -1;
+                        }
+                    }
+                }
+
+                return objects;
+            };
+
+            const objectChunks = extractBalancedObjects(trimmed);
+            if (objectChunks.length > 0) {
+                const parsedChunks: any[] = [];
+                for (const chunk of objectChunks) {
+                    try {
+                        parsedChunks.push(JSON.parse(chunk));
+                    } catch {
+                        // Skip invalid chunk
+                    }
+                }
+
+                if (parsedChunks.length > 0) {
+                    return { parsed: parsedChunks, matched: true };
+                }
+            }
+
+            return { parsed: [], matched: false };
+        };
+
+        const parseResult = parseJsonArrayLoosely(textRes);
+        const parsed = parseResult.parsed;
+        console.log('[analyzeGrammarErrors] Parsed errors count:', parsed.length, 'matched:', parseResult.matched);
+
+        if (!parseResult.matched) {
+            console.warn('[analyzeGrammarErrors] Could not parse JSON array. Full text:', textRes);
+            throw new Error('Failed to parse grammar analysis response');
+        }
+
+        // Normalize and validate each error
+        return parsed.map((item: any, index: number) => ({
+            id: index,
+            originalSentence: String(item.originalSentence || ''),
+            errorType: (['tense', 'agreement', 'word_order', 'article', 'preposition', 'spelling', 'punctuation', 'vocabulary', 'other'].includes(item.errorType)
+                ? item.errorType
+                : 'other') as GrammarErrorType,
+            severity: (item.severity === 'minor' ? 'minor' : 'major') as GrammarErrorSeverity,
+            correctedSentence: String(item.correctedSentence || ''),
+            hintLevel1: String(item.hintLevel1 || 'Check this sentence carefully.'),
+            hintLevel2: String(item.hintLevel2 || 'There is a grammar rule being violated here.'),
+            hintLevel3: String(item.hintLevel3 || 'Try looking at similar sentences for guidance.'),
+            status: 'pending' as const,
+            attempts: 0,
+            currentHintLevel: 0,
+        }));
+    } catch (error) {
+        console.error('Error analyzing grammar errors:', error);
+        throw error;
+    }
+}
+
+/**
+ * Multi-round chat with the grammar tutor for a specific error.
+ * The AI validates student attempts and provides progressive hints.
+ * It also handles free-form questions from the student.
+ */
+export async function chatWithGrammarTutor(
+    history: { role: 'user' | 'assistant'; text: string }[],
+    currentError: GrammarError,
+    targetLanguage: string
+): Promise<string> {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return "I cannot connect to the grammar tutor service.";
+
+    const langLabel = getLanguageName(targetLanguage) || targetLanguage;
+
+    const systemPrompt = `You are a patient, encouraging grammar instructor helping a ${langLabel} learner fix grammar errors in their writing.
+
+CURRENT ERROR BEING WORKED ON:
+- Original sentence: "${currentError.originalSentence}"
+- Correct answer: "${currentError.correctedSentence}"
+- Error type: ${currentError.errorType}
+- Current hint level: ${currentError.currentHintLevel} (out of 3)
+- Attempts so far: ${currentError.attempts}
+
+YOUR RULES:
+1. If the student's message is an ATTEMPT to correct the sentence:
+   - Compare their attempt with the correct answer "${currentError.correctedSentence}"
+   - Be flexible: accept answers that are grammatically correct even if slightly different from the expected answer, as long as the specific grammar error is fixed
+   - If CORRECT: Congratulate briefly and confirm. Start your response with "[CORRECT][ATTEMPT]"
+   - If WRONG but close: Acknowledge what they got right, then provide the next hint level
+   - If WRONG: Gently point out it's not quite right, then provide the next hint level
+   - For all wrong attempts, start response with "[ATTEMPT]"
+
+2. If the student is ASKING A QUESTION about grammar:
+   - Answer their question naturally and helpfully
+   - Stay focused on the current error's grammar topic
+   - Do NOT reveal the full correct answer in your explanation
+   - Use different examples to illustrate the rule
+   - Start response with "[QUESTION]"
+
+3. Hint progression (only advance when their attempt is wrong):
+   - After hint level 3, if they still can't get it: reveal the answer with a full explanation. Start your response with "[REVEALED][ATTEMPT]"
+
+4. NEVER reveal the correct answer "${currentError.correctedSentence}" directly unless:
+   - The student explicitly asks to see the answer (start with "[REVEALED][QUESTION]")
+   - They have exhausted all 3 hint levels and still can't get it (start with "[REVEALED][ATTEMPT]")
+
+5. Keep responses concise (2-4 sentences max).
+6. Be encouraging but honest about what's wrong.
+7. Respond in English (the instructional language), but discuss the ${langLabel} grammar naturally.
+8. Always finish complete sentences. Never cut off your answer mid-word or mid-sentence.`;
+
+    const contents = history.map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+    }));
+
+    try {
+        const { text, model } = await generateWritingText(apiKey, {
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            generationConfig: {
+                temperature: 0.5,
+                maxOutputTokens: 450,
+            },
+        });
+        console.log('[chatWithGrammarTutor] model:', model);
+        return text || "I didn't quite understand that. Could you try again?";
+    } catch (e) {
+        console.error("Grammar Tutor Chat Error", e);
+        return "Sorry, I'm having trouble connecting to the grammar tutor.";
+    }
 }

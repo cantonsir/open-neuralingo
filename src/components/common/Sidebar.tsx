@@ -142,6 +142,13 @@ export default function Sidebar({
 
     // Fetch due count for flashcards
     useEffect(() => {
+        const srsModules: Module[] = ['listening', 'reading', 'speaking', 'writing'];
+
+        if (!srsModules.includes(activeModule)) {
+            setDueCount(0);
+            return;
+        }
+
         const fetchDueCount = async () => {
             try {
                 const stats = await api.fetchSrsStats(activeModule as FlashcardModule);
@@ -528,9 +535,9 @@ export default function Sidebar({
                         <NavItem
                             icon={<PenTool size={20} />}
                             label="Composition"
-                            isActive={view === 'compose' || view === 'correction'}
+                            isActive={view === 'compose' || view === 'writer' || view === 'correction'}
                             collapsed={collapsed}
-                            onClick={() => setView('correction')}
+                            onClick={() => setView('compose')}
                             activeColorTheme="purple"
                         />
                     </>

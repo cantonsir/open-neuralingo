@@ -227,6 +227,19 @@ export interface WritingSession {
   updatedAt: number;
 }
 
+export interface WritingAiReview {
+  id: string;
+  sessionId?: string;
+  topic: string;
+  originalText: string;
+  correctedText: string;
+  score: number;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+  createdAt: number;
+}
+
 export interface ListeningSession {
   id: string;
   prompt: string;
@@ -272,6 +285,45 @@ export interface YouTubeSubtitleMetadata {
 export interface YouTubeSubtitleData {
   metadata: YouTubeSubtitleMetadata;
   subtitles: YouTubeSubtitleSegment[];
+}
+
+// === Grammar Correction Types ===
+
+export type GrammarErrorSeverity = 'minor' | 'major';
+export type GrammarErrorType = 'tense' | 'agreement' | 'word_order' | 'article' | 'preposition' | 'spelling' | 'punctuation' | 'vocabulary' | 'other';
+export type CorrectionStatus = 'pending' | 'active' | 'completed' | 'revealed';
+
+export interface GrammarError {
+  id: number;
+  originalSentence: string;
+  errorType: GrammarErrorType;
+  severity: GrammarErrorSeverity;
+  correctedSentence: string;
+  hintLevel1: string;
+  hintLevel2: string;
+  hintLevel3: string;
+  status: CorrectionStatus;
+  attempts: number;
+  currentHintLevel: number;
+}
+
+export interface CorrectionMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  errorId?: number;
+  timestamp: number;
+}
+
+export interface CorrectionSession {
+  originalText: string;
+  errors: GrammarError[];
+  messages: CorrectionMessage[];
+  currentErrorIndex: number;
+  completedCount: number;
+  selfCorrectedCount: number;
+  hintNeededCount: number;
+  revealedCount: number;
 }
 
 // Google Developers YouTube API Demo Video (Extremely stable for testing)

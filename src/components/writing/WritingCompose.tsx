@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, ChevronDown, ChevronUp, Edit, Sparkles, Trash2 } from 'lucide-react';
-import { View } from '../../types';
+import { Clock, ChevronDown, ChevronUp, Edit, Sparkles, Trash2, X } from 'lucide-react';
+import { View, WritingAiReview } from '../../types';
 import { api } from '../../db';
+import { summarizeWritingTitle } from '../../services/geminiService';
 import UnifiedInput from '../common/UnifiedInput';
 
 interface AppState {
@@ -25,7 +26,8 @@ interface WritingSession {
 
 interface WritingComposeCache {
     initialized: boolean;
-    topic: string;
+    draftContent: string;
+    titleInput: string;
     contextId: string;
     library: LibraryItem[];
     history: WritingSession[];
@@ -35,7 +37,8 @@ interface WritingComposeCache {
 
 const writingComposeCache: WritingComposeCache = {
     initialized: false,
-    topic: '',
+    draftContent: '',
+    titleInput: '',
     contextId: '',
     library: [],
     history: [],
@@ -44,13 +47,18 @@ const writingComposeCache: WritingComposeCache = {
 };
 
 export default function WritingCompose({ setView, setWritingData }: AppState) {
-    const [topic, setTopic] = useState(writingComposeCache.topic);
+    const [draftContent, setDraftContent] = useState(writingComposeCache.draftContent);
+    const [titleInput, setTitleInput] = useState(writingComposeCache.titleInput);
     const [contextId, setContextId] = useState(writingComposeCache.contextId);
     const [library, setLibrary] = useState<LibraryItem[]>(writingComposeCache.library);
     const [history, setHistory] = useState<WritingSession[]>(writingComposeCache.history);
     const [expandedSession, setExpandedSession] = useState<string | null>(writingComposeCache.expandedSession);
     const [isUploading, setIsUploading] = useState(false);
+    const [isStarting, setIsStarting] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(writingComposeCache.isSidebarOpen);
+    const [reviewsBySession, setReviewsBySession] = useState<Record<string, WritingAiReview[]>>({});
+    const [loadingReviewsSessionId, setLoadingReviewsSessionId] = useState<string | null>(null);
+    const [selectedReview, setSelectedReview] = useState<WritingAiReview | null>(null);
 
     useEffect(() => {
         let isMounted = true;
@@ -83,26 +91,34 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
 
     useEffect(() => {
         writingComposeCache.initialized = true;
-        writingComposeCache.topic = topic;
+        writingComposeCache.draftContent = draftContent;
+        writingComposeCache.titleInput = titleInput;
         writingComposeCache.contextId = contextId;
         writingComposeCache.library = library;
         writingComposeCache.history = history;
         writingComposeCache.expandedSession = expandedSession;
         writingComposeCache.isSidebarOpen = isSidebarOpen;
-    }, [topic, contextId, library, history, expandedSession, isSidebarOpen]);
+    }, [draftContent, titleInput, contextId, library, history, expandedSession, isSidebarOpen]);
 
-    const startWriting = () => {
-        if (!topic.trim() && !contextId) {
-            alert('Please enter a topic or select a context.');
+    const startWriting = async () => {
+        if (!draftContent.trim()) {
+            alert('Please write your draft content first.');
             return;
         }
 
-        setWritingData({
-            topic: topic.trim() || 'Untitled',
-            contextId,
-            content: '',
-        });
-        setView('writer' as View);
+        try {
+            setIsStarting(true);
+            const resolvedTitle = titleInput.trim() || await summarizeWritingTitle(draftContent);
+
+            setWritingData({
+                topic: resolvedTitle || 'Untitled Draft',
+                contextId,
+                content: draftContent,
+            });
+            setView('writer' as View);
+        } finally {
+            setIsStarting(false);
+        }
     };
 
     const openWritingSession = (session: WritingSession) => {
@@ -141,10 +157,33 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
         ? library.find(item => item.id === contextId)?.title || 'Selected context'
         : '';
 
+    const loadReviewsForSession = async (sessionId: string) => {
+        if (reviewsBySession[sessionId]) {
+            return;
+        }
+
+        try {
+            setLoadingReviewsSessionId(sessionId);
+            const reviews = await api.fetchWritingReviews(sessionId);
+            setReviewsBySession(prev => ({ ...prev, [sessionId]: reviews }));
+        } catch (error) {
+            console.error('Failed to load writing reviews:', error);
+            setReviewsBySession(prev => ({ ...prev, [sessionId]: [] }));
+        } finally {
+            setLoadingReviewsSessionId(null);
+        }
+    };
+
     const renderSessionCard = (session: WritingSession, compact: boolean = false) => (
         <div className={`bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm transition-all hover:shadow-md ${compact ? 'text-sm' : ''}`}>
             <div
-                onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}
+                onClick={() => {
+                    const willExpand = expandedSession !== session.id;
+                    setExpandedSession(willExpand ? session.id : null);
+                    if (willExpand) {
+                        loadReviewsForSession(session.id);
+                    }
+                }}
                 className={`flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors ${compact ? 'p-3' : 'p-4'}`}
             >
                 <div className="flex-1 min-w-0">
@@ -189,6 +228,38 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                         {session.content?.substring(0, 300) || '(Empty)'}
                         {(session.content?.length || 0) > 300 && '...'}
                     </p>
+
+                    <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <h5 className="text-xs uppercase tracking-wider font-bold text-gray-400 mb-2">Saved AI Reviews</h5>
+                        {loadingReviewsSessionId === session.id ? (
+                            <p className="text-xs text-gray-500">Loading reviews...</p>
+                        ) : (reviewsBySession[session.id] || []).length === 0 ? (
+                            <p className="text-xs text-gray-500">No saved AI reviews yet.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {(reviewsBySession[session.id] || []).slice(0, 3).map(review => (
+                                    <div key={review.id} className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                        <div className="flex items-center justify-between text-xs mb-1">
+                                            <span className="font-semibold text-indigo-600 dark:text-indigo-300">Score {review.score}/100</span>
+                                            <span className="text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
+                                            {(review.suggestions && review.suggestions[0]) || (review.strengths && review.strengths[0]) || 'Saved review'}
+                                        </p>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedReview(review);
+                                            }}
+                                            className="mt-2 text-[11px] px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
+                                        >
+                                            Open Review
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -237,10 +308,11 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                             </div>
                         </div>
 
-                        {(topic || contextId) && (
+                        {(draftContent || contextId || titleInput) && (
                             <button
                                 onClick={() => {
-                                    setTopic('');
+                                    setDraftContent('');
+                                    setTitleInput('');
                                     setContextId('');
                                 }}
                                 className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -254,11 +326,11 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                 <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-400 dark:hover:scrollbar-thumb-gray-500">
                     <div className="w-full min-h-full flex items-center justify-center p-4 md:p-8">
                         <div className="max-w-3xl w-full">
-                            {!topic.trim() && !contextId ? (
+                            {!draftContent.trim() && !contextId ? (
                                 <div className="text-center py-20 opacity-60">
                                     <Sparkles className="w-12 h-12 mx-auto text-gray-400 mb-4" />
                                     <h3 className="text-lg font-medium text-gray-600 dark:text-gray-300">Start a new writing session</h3>
-                                    <p className="text-sm text-gray-500">Type your topic below and hit send to enter the writer.</p>
+                                    <p className="text-sm text-gray-500">Paste or write your full draft below. Title can be auto-generated.</p>
                                 </div>
                             ) : (
                                 <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
@@ -268,13 +340,25 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                                     </p>
                                     <div className="space-y-2 text-sm">
                                         <p className="text-gray-700 dark:text-gray-200">
-                                            <span className="font-semibold">Topic:</span> {topic.trim() || 'Untitled'}
+                                            <span className="font-semibold">Title:</span> {titleInput.trim() || 'Will be generated automatically'}
+                                        </p>
+                                        <p className="text-gray-700 dark:text-gray-200">
+                                            <span className="font-semibold">Words:</span> {draftContent.trim() ? draftContent.trim().split(/\s+/).length : 0}
                                         </p>
                                         {contextId && (
                                             <p className="text-gray-700 dark:text-gray-200">
                                                 <span className="font-semibold">Context:</span> {selectedContextTitle}
                                             </p>
                                         )}
+                                    </div>
+                                    <div className="mt-4">
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Optional title</label>
+                                        <input
+                                            value={titleInput}
+                                            onChange={(e) => setTitleInput(e.target.value)}
+                                            placeholder="Leave empty to auto-generate from draft"
+                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
+                                        />
                                     </div>
                                 </div>
                             )}
@@ -285,8 +369,8 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                 <div className="flex-shrink-0 p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
                     <div className="w-full">
                         <UnifiedInput
-                            value={topic}
-                            onChange={setTopic}
+                            value={draftContent}
+                            onChange={setDraftContent}
                             contextId={contextId}
                             onClearContext={() => setContextId('')}
                             library={library}
@@ -308,14 +392,48 @@ export default function WritingCompose({ setView, setWritingData }: AppState) {
                             }}
                             isUploading={isUploading}
                             themeColor="purple"
-                            placeholder="Describe what you want to write..."
+                            placeholder="Write your composition draft here..."
                             enableSpeechInput={true}
                             onSubmit={startWriting}
-                            isLoading={false}
+                            isLoading={isStarting}
                         />
                     </div>
                 </div>
             </div>
+
+            {selectedReview && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                    <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xl">
+                        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Saved AI Review</h3>
+                                <p className="text-xs text-gray-500">{selectedReview.topic} • Score {selectedReview.score}/100</p>
+                            </div>
+                            <button onClick={() => setSelectedReview(null)} className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 space-y-4 text-sm">
+                            <div>
+                                <h4 className="font-semibold mb-1 text-gray-700 dark:text-gray-200">Top Suggestions</h4>
+                                <ul className="list-disc ml-5 space-y-1 text-gray-600 dark:text-gray-300">
+                                    {(selectedReview.suggestions || []).map((item, idx) => (
+                                        <li key={`s-${idx}`}>{item}</li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <div>
+                                <h4 className="font-semibold mb-1 text-gray-700 dark:text-gray-200">Corrected Draft</h4>
+                                <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 whitespace-pre-wrap text-gray-700 dark:text-gray-200">
+                                    {selectedReview.correctedText}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

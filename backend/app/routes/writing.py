@@ -92,11 +92,100 @@ def save_writing_session():
         return jsonify({'error': str(e)}), 500
 
 
+@writing_bp.route('/writing/reviews', methods=['GET'])
+def get_writing_reviews():
+    """Get saved AI writing reviews, optionally filtered by sessionId."""
+    session_id = request.args.get('sessionId')
+
+    try:
+        with get_db() as conn:
+            if session_id:
+                rows = conn.execute('''
+                    SELECT * FROM writing_ai_reviews
+                    WHERE session_id = ?
+                    ORDER BY created_at DESC
+                ''', (session_id,)).fetchall()
+            else:
+                rows = conn.execute('''
+                    SELECT * FROM writing_ai_reviews
+                    ORDER BY created_at DESC
+                    LIMIT 200
+                ''').fetchall()
+
+            review_list = []
+            for row in rows:
+                item = dict(row)
+                review_list.append({
+                    'id': item['id'],
+                    'sessionId': item['session_id'],
+                    'topic': item['topic'],
+                    'originalText': item['original_text'],
+                    'correctedText': item['corrected_text'],
+                    'score': item['score'],
+                    'strengths': json.loads(item['strengths_json']) if item['strengths_json'] else [],
+                    'weaknesses': json.loads(item['weaknesses_json']) if item['weaknesses_json'] else [],
+                    'suggestions': json.loads(item['suggestions_json']) if item['suggestions_json'] else [],
+                    'createdAt': item['created_at'],
+                })
+
+            return jsonify(review_list)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@writing_bp.route('/writing/reviews', methods=['POST'])
+def save_writing_review():
+    """Save an AI writing review result for later learner review."""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    required_fields = ['topic', 'originalText', 'correctedText', 'score']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Missing required field: {field}'}), 400
+
+    try:
+        with get_db() as conn:
+            review_id = str(uuid.uuid4())
+            created_at = data.get('createdAt', int(time.time() * 1000))
+
+            conn.execute('''
+                INSERT INTO writing_ai_reviews
+                (id, session_id, topic, original_text, corrected_text, score,
+                 strengths_json, weaknesses_json, suggestions_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                review_id,
+                data.get('sessionId'),
+                data.get('topic', 'Untitled'),
+                data.get('originalText', ''),
+                data.get('correctedText', ''),
+                int(data.get('score', 0)),
+                json.dumps(data.get('strengths', [])),
+                json.dumps(data.get('weaknesses', [])),
+                json.dumps(data.get('suggestions', [])),
+                created_at,
+            ))
+
+            conn.commit()
+            return jsonify({'status': 'success', 'id': review_id}), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @writing_bp.route('/writing/sessions/<session_id>', methods=['DELETE'])
 def delete_writing_session(session_id):
     """Delete a writing session by ID."""
     try:
         with get_db() as conn:
+            conn.execute(
+                'DELETE FROM writing_ai_reviews WHERE session_id = ?',
+                (session_id,)
+            )
+
             result = conn.execute(
                 'DELETE FROM writing_sessions WHERE id = ?',
                 (session_id,)

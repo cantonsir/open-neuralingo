@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
 import { improveWriting, WritingFeedback } from '../../services/geminiService';
-import { Loader2, CheckCircle, XCircle, Wand2, ArrowRight } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Wand2, ArrowRight, Save, Check } from 'lucide-react';
+import { api } from '../../db';
 
 interface WritingAssessmentProps {
     originalText: string;
     topic: string;
+    sessionId?: string;
+    contextId?: string;
+    onSessionLinked?: (sessionId: string) => void;
     onClose: () => void;
 }
 
-export default function WritingAssessment({ originalText, topic, onClose }: WritingAssessmentProps) {
+export default function WritingAssessment({ originalText, topic, sessionId, contextId, onSessionLinked, onClose }: WritingAssessmentProps) {
     const [feedback, setFeedback] = useState<WritingFeedback | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isSavingReview, setIsSavingReview] = useState(false);
+    const [isReviewSaved, setIsReviewSaved] = useState(false);
 
     // Fetch feedback on mount
     React.useEffect(() => {
@@ -26,6 +32,46 @@ export default function WritingAssessment({ originalText, topic, onClose }: Writ
         };
         getFeedback();
     }, [originalText, topic]);
+
+    const handleSaveReview = async () => {
+        if (!feedback || isSavingReview || isReviewSaved) {
+            return;
+        }
+
+        try {
+            setIsSavingReview(true);
+            let linkedSessionId = sessionId;
+
+            if (!linkedSessionId) {
+                const savedSession = await api.saveWritingSession({
+                    topic,
+                    content: originalText,
+                    contextId,
+                    createdAt: Date.now(),
+                });
+                linkedSessionId = savedSession.id;
+                onSessionLinked?.(linkedSessionId);
+            }
+
+            await api.saveWritingReview({
+                sessionId: linkedSessionId,
+                topic,
+                originalText,
+                correctedText: feedback.correctedText,
+                score: feedback.score,
+                strengths: feedback.strengths,
+                weaknesses: feedback.weaknesses,
+                suggestions: feedback.suggestions,
+                createdAt: Date.now(),
+            });
+            setIsReviewSaved(true);
+        } catch (error) {
+            console.error('Failed to save AI review', error);
+            alert('Failed to save AI review. Please try again.');
+        } finally {
+            setIsSavingReview(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -115,13 +161,28 @@ export default function WritingAssessment({ originalText, topic, onClose }: Writ
                     )}
                 </div>
 
-                <div className="p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 sticky bottom-0 flex justify-end">
+                <div className="p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 sticky bottom-0 flex items-center justify-between gap-3">
+                    <div className="text-xs text-gray-500">
+                        {sessionId
+                            ? (isReviewSaved ? 'AI review saved to this writing session.' : 'You can save this AI review for future study.')
+                            : (isReviewSaved ? 'AI review saved. A linked writing session was created automatically.' : 'Save AI review to store it in your writing history.')}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleSaveReview}
+                            disabled={loading || !feedback || isSavingReview || isReviewSaved}
+                            className="px-4 py-2 rounded-lg font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {isReviewSaved ? <Check className="w-4 h-4 text-green-600" /> : <Save className="w-4 h-4" />}
+                            {isSavingReview ? 'Saving...' : isReviewSaved ? 'Saved' : 'Save AI Review'}
+                        </button>
                     <button
                         onClick={onClose}
                         className="px-6 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg font-medium"
                     >
                         Close Report
                     </button>
+                    </div>
                 </div>
             </div>
         </div>

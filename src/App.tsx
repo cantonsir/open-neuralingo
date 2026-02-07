@@ -353,7 +353,7 @@ function App() {
                       />
                     </div>
                   ) :
-                    view === 'correction' || view === 'compose' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
+                    view === 'compose' || view === 'correction' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
                   view === 'writer' && writingData ? (
                     <WritingView
                       sessionId={writingData.id}

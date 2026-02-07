@@ -415,6 +415,32 @@ def init_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS writing_ai_reviews (
+            id TEXT PRIMARY KEY,
+            session_id TEXT,
+            topic TEXT,
+            original_text TEXT,
+            corrected_text TEXT,
+            score INTEGER,
+            strengths_json TEXT,
+            weaknesses_json TEXT,
+            suggestions_json TEXT,
+            created_at INTEGER,
+            FOREIGN KEY (session_id) REFERENCES writing_sessions(id)
+        )
+    ''')
+
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_writing_ai_reviews_session_id
+        ON writing_ai_reviews(session_id)
+    ''')
+
+    c.execute('''
+        CREATE INDEX IF NOT EXISTS idx_writing_ai_reviews_created_at
+        ON writing_ai_reviews(created_at)
+    ''')
+
     # Writing assessment profile table
     c.execute('''
         CREATE TABLE IF NOT EXISTS writing_profiles (

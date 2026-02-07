@@ -1,4 +1,4 @@
-import { Marker, SpeakingSession, WritingSession, ListeningSession, ReadingSession, SrsStats, IntervalsPreview, LearningStatus, SortOption, ReviewRating, Subtitle } from './types';
+import { Marker, SpeakingSession, WritingSession, WritingAiReview, ListeningSession, ReadingSession, SrsStats, IntervalsPreview, LearningStatus, SortOption, ReviewRating, Subtitle } from './types';
 
 const API_BASE = '/api';
 
@@ -902,6 +902,62 @@ export const api = {
         } catch (error) {
             console.error('API saveWritingSession error:', error);
             throw error;
+        }
+    },
+
+    /**
+     * Save an AI review result for a writing draft.
+     */
+    async saveWritingReview(review: {
+        sessionId?: string;
+        topic: string;
+        originalText: string;
+        correctedText: string;
+        score: number;
+        strengths: string[];
+        weaknesses: string[];
+        suggestions: string[];
+        createdAt?: number;
+    }): Promise<{ status: string; id: string }> {
+        try {
+            const response = await fetch(`${API_BASE}/writing/reviews`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(review),
+            });
+
+            if (!response.ok) {
+                let errorMessage = 'Failed to save AI review';
+                try {
+                    const errorData = await response.json();
+                    if (errorData?.error) {
+                        errorMessage = errorData.error;
+                    }
+                } catch (_e) {
+                    // Keep default message
+                }
+                throw new Error(errorMessage);
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('API saveWritingReview error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Fetch saved AI reviews, optionally filtered by writing session.
+     */
+    async fetchWritingReviews(sessionId?: string): Promise<WritingAiReview[]> {
+        try {
+            const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+            const response = await fetch(`${API_BASE}/writing/reviews${query}`);
+            if (!response.ok) throw new Error('Failed to fetch writing reviews');
+            return await response.json();
+        } catch (error) {
+            console.error('API fetchWritingReviews error:', error);
+            return [];
         }
     },
 
