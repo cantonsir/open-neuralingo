@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sun, Moon, Keyboard, Globe } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Sun, Moon, Globe, RotateCcw } from 'lucide-react';
 import { Theme } from '../../types';
 import { SUPPORTED_LANGUAGES } from '../../utils/languageOptions';
 
@@ -12,6 +12,7 @@ interface SettingsPanelProps {
     onLanguageChange: (language: string) => void;
     firstLanguage?: string;
     onFirstLanguageChange?: (language: string) => void;
+    onResetSetup?: () => void;
 }
 
 const shortcuts = [
@@ -30,13 +31,12 @@ export default function SettingsPanel({
     targetLanguage,
     onLanguageChange,
     firstLanguage = 'en',
-    onFirstLanguageChange
+    onFirstLanguageChange,
+    onResetSetup,
 }: SettingsPanelProps) {
     const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>('general');
 
     if (!isOpen) return null;
-
-    const currentLang = SUPPORTED_LANGUAGES.find(l => l.code === targetLanguage) || SUPPORTED_LANGUAGES[0];
 
     return (
         <>
@@ -153,6 +153,27 @@ export default function SettingsPanel({
                                         }`} />
                                 </button>
                             </div>
+
+                            {/* Onboarding Setup Reset */}
+                            {onResetSetup && (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60 rounded-xl">
+                                    <div className="flex items-start gap-3">
+                                        <RotateCcw size={18} className="text-amber-600 dark:text-amber-300 mt-0.5" />
+                                        <div className="flex-1">
+                                            <div className="font-medium text-amber-900 dark:text-amber-200">Onboarding Setup</div>
+                                            <p className="text-xs text-amber-700/80 dark:text-amber-300/90 mt-1">
+                                                Re-show first-time language setup without clearing your saved languages.
+                                            </p>
+                                            <button
+                                                onClick={onResetSetup}
+                                                className="mt-3 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                                            >
+                                                Show setup again
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* App Info */}
                             <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl">

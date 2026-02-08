@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, Globe, Home } from 'lucide-react';
+import { Headphones, LayoutDashboard, PlayCircle, BookOpen, Layers, Settings, GraduationCap, ClipboardCheck, ChevronRight, ChevronLeft, Mic, PenTool, Book, ChevronDown, Volume2, Globe, Home } from 'lucide-react';
 import { Module, View, Theme } from '../../types';
 import { api, FlashcardModule } from '../../db';
 
@@ -166,7 +166,7 @@ export default function Sidebar({
     }, [activeModule, savedCardsCount]);
 
     const modules: { id: Module; label: string; icon: React.ReactNode }[] = [
-        { id: 'listening', label: 'Listening Trainer', icon: <Zap size={18} /> },
+        { id: 'listening', label: 'Listening Trainer', icon: <Headphones size={18} /> },
         { id: 'reading', label: 'Reading Practice', icon: <Book size={18} /> },
         { id: 'speaking', label: 'Speaking Roleplay', icon: <Mic size={18} /> },
         { id: 'writing', label: 'Writing Assistant', icon: <PenTool size={18} /> },

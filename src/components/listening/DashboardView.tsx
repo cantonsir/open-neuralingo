@@ -7,7 +7,8 @@ import {
     Flame,
     ArrowRight,
     Layers,
-    TrendingUp
+    TrendingUp,
+    X
 } from 'lucide-react';
 import { api, HistoryItem } from '../../db';
 import CommonDashboard from '../common/CommonDashboard';
@@ -29,6 +30,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
     const [stats, setStats] = useState({
         videosWatched: 0,
         wordsLearned: 0,
@@ -36,74 +38,59 @@ export default function DashboardView({
         dayStreak: 0
     });
 
+    const computeStats = (historyData: HistoryItem[]) => {
+        const totalSeconds = historyData.reduce((acc, item) => {
+            if (item.duration) {
+                const parts = item.duration.split(':').map(Number);
+                let seconds = 0;
+                if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                else if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
+                return acc + seconds;
+            }
+            return acc + 300;
+        }, 0);
+        const practiceHours = parseFloat((totalSeconds / 3600).toFixed(1));
+
+        const sortedDates = historyData
+            .map(item => new Date(item.watchedAt).setHours(0, 0, 0, 0))
+            .sort((a, b) => b - a);
+        const uniqueDays = [...new Set(sortedDates)];
+
+        let streak = 0;
+        const today = new Date().setHours(0, 0, 0, 0);
+        const yesterday = today - 86400000;
+
+        if (uniqueDays.length > 0) {
+            if (uniqueDays[0] === today) {
+                streak = 1;
+                for (let i = 1; i < uniqueDays.length; i++) {
+                    if (uniqueDays[i] === today - (i * 86400000)) streak++;
+                    else break;
+                }
+            } else if (uniqueDays[0] === yesterday) {
+                streak = 1;
+                for (let i = 1; i < uniqueDays.length; i++) {
+                    if (uniqueDays[i] === yesterday - (i * 86400000)) streak++;
+                    else break;
+                }
+            }
+        }
+
+        return {
+            videosWatched: historyData.length,
+            wordsLearned: 0,
+            practiceHours,
+            dayStreak: streak
+        };
+    };
+
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
             try {
                 const historyData = await api.fetchHistory();
                 setHistory(historyData);
-
-                // Calculate Stats
-
-                // 1. Practice Hours (Time)
-                // specific duration logic or default to 5 mins per video if missing
-                const totalSeconds = historyData.reduce((acc, item) => {
-                    if (item.duration) {
-                        const parts = item.duration.split(':').map(Number);
-                        let seconds = 0;
-                        if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                        else if (parts.length === 2) seconds = parts[0] * 60 + parts[1];
-                        return acc + seconds;
-                    }
-                    return acc + 300; // fallback 5 mins
-                }, 0);
-                const practiceHours = parseFloat((totalSeconds / 3600).toFixed(1));
-
-                // 2. Streak
-                // Sort by date descending
-                const sortedDates = historyData
-                    .map(item => new Date(item.watchedAt).setHours(0, 0, 0, 0))
-                    .sort((a, b) => b - a);
-
-                // Unique days
-                const uniqueDays = [...new Set(sortedDates)];
-
-                let streak = 0;
-                const today = new Date().setHours(0, 0, 0, 0);
-                const yesterday = today - 86400000;
-
-                if (uniqueDays.length > 0) {
-                    // If played today, start streak from today
-                    // If performed yesterday, start streak from yesterday (to keep it alive if not played today yet?? usually streak implies "current streak")
-                    // Usually if you haven't played today, streak is technically valid if you played yesterday.
-
-                    if (uniqueDays[0] === today) {
-                        streak = 1;
-                        for (let i = 1; i < uniqueDays.length; i++) {
-                            if (uniqueDays[i] === today - (i * 86400000)) {
-                                streak++;
-                            } else {
-                                break;
-                            }
-                        }
-                    } else if (uniqueDays[0] === yesterday) {
-                        streak = 1;
-                        for (let i = 1; i < uniqueDays.length; i++) {
-                            if (uniqueDays[i] === yesterday - (i * 86400000)) {
-                                streak++;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                setStats({
-                    videosWatched: historyData.length,
-                    wordsLearned: 0, // This is passed via props usually (savedCardsCount)
-                    practiceHours,
-                    dayStreak: streak
-                });
+                setStats(computeStats(historyData));
 
                 setLoading(false);
             } catch (error) {
@@ -113,6 +100,22 @@ export default function DashboardView({
         };
         loadData();
     }, []);
+
+    const handleDeleteRecent = async (videoId: string) => {
+        try {
+            setDeletingVideoId(videoId);
+            await api.deleteFromHistory(videoId);
+            setHistory(prev => {
+                const next = prev.filter(item => item.videoId !== videoId);
+                setStats(computeStats(next));
+                return next;
+            });
+        } catch (error) {
+            console.error('Failed to delete recent video:', error);
+        } finally {
+            setDeletingVideoId(null);
+        }
+    };
 
     // Helper to generate last 7 days data
     const getWeeklyData = () => {
@@ -171,7 +174,10 @@ export default function DashboardView({
                     Recent Videos
                 </h3>
                 {history.length > 4 && (
-                    <button className="text-sm text-yellow-600 hover:text-yellow-700 font-medium flex items-center gap-1">
+                    <button
+                        onClick={() => onNavigate('history')}
+                        className="text-sm text-yellow-600 hover:text-yellow-700 font-medium flex items-center gap-1"
+                    >
                         View all <ArrowRight size={14} />
                     </button>
                 )}
@@ -201,6 +207,17 @@ export default function DashboardView({
                                         <Play size={20} fill="white" className="text-white ml-1" />
                                     </div>
                                 </div>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteRecent(item.videoId);
+                                    }}
+                                    disabled={deletingVideoId !== null}
+                                    className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-black/60 hover:bg-red-500 disabled:hover:bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all disabled:opacity-100"
+                                    title="Remove from recent videos"
+                                >
+                                    <X size={12} className="text-white" />
+                                </button>
                             </div>
                             <div className="p-3">
                                 <h4 className="font-medium text-gray-900 dark:text-white text-sm line-clamp-2 group-hover:text-yellow-600 transition-colors">

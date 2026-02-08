@@ -170,7 +170,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
     onRetakeAssessment,
     onStartTest,
 }) => {
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['partA', 'partB']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
     const [showHistory, setShowHistory] = useState(false);
     const [isAIFeedbackExpanded, setIsAIFeedbackExpanded] = useState(true);
     const [isDetailedReviewExpanded, setIsDetailedReviewExpanded] = useState(false);
@@ -212,7 +212,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
             <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Target className="w-6 h-6 text-purple-600" />
+                        <Target className="w-6 h-6 text-amber-600" />
                         Listening Assessment Results
                     </h2>
                     <div className="flex items-center gap-3">
@@ -225,7 +225,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                         </button>
                         <button
                             onClick={onStartTest}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
                         >
                             <Play className="w-4 h-4" />
                             Take Test
@@ -391,10 +391,10 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                         <button
                             onClick={() => toggleSection('partB')}
-                            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-b border-gray-200 dark:border-gray-700"
+                            className="w-full px-6 py-4 flex items-center justify-between bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-b border-gray-200 dark:border-gray-700"
                         >
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm">
+                                <div className="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-sm">
                                     B
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -414,8 +414,8 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                                     <>
                                         {/* Score Cards */}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 text-center">
-                                                <div className="text-3xl font-bold text-purple-600">{understoodCount}/10</div>
+                                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl p-4 text-center">
+                                                <div className="text-3xl font-bold text-amber-600">{understoodCount}/10</div>
                                                 <div className="text-xs text-gray-500">Understood</div>
                                             </div>
                                             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 text-center">
@@ -483,10 +483,10 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                                             <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
                                                 <button
                                                     onClick={() => setIsAIFeedbackExpanded(!isAIFeedbackExpanded)}
-                                                    className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                                    className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                                                 >
                                                     <span className="flex items-center gap-2">
-                                                        <Sparkles size={18} className="text-purple-500" />
+                                                        <Sparkles size={18} className="text-amber-500" />
                                                         AI Feedback
                                                     </span>
                                                     <ChevronDown
@@ -537,7 +537,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                                             <div className="border-t border-gray-100 dark:border-gray-800 pt-4 mt-4">
                                                 <button
                                                     onClick={() => setIsDetailedReviewExpanded(!isDetailedReviewExpanded)}
-                                                    className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                                                    className="w-full flex items-center justify-between text-md font-bold text-gray-900 dark:text-white mb-4 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                                                 >
                                                     <span className="flex items-center gap-2">
                                                         Detailed Review
@@ -611,7 +611,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                                         </p>
                                         <button
                                             onClick={onStartTest}
-                                            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
+                                            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all"
                                         >
                                             <Play size={18} />
                                             Take Mini-Test
@@ -667,7 +667,7 @@ const ListeningAssessmentResults: React.FC<ListeningAssessmentResultsProps> = ({
                         </button>
                         <button
                             onClick={onStartTest}
-                            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all"
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all"
                         >
                             <Play className="w-5 h-5" />
                             {testResults ? 'Retake Mini-Test' : 'Take Mini-Test'}

@@ -40,6 +40,8 @@ import { useLearningData } from './hooks/useLearningData';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useDeck } from './hooks/useDeck';
 
+const INITIAL_SETUP_STORAGE_KEY = 'initialSetupComplete';
+
 function App() {
   // --- Core App State ---
   const [activeModule, setActiveModule] = useState<Module>('landing');
@@ -50,6 +52,44 @@ function App() {
   const { theme, toggleTheme } = useTheme();
   const { targetLanguage, setTargetLanguage } = useTargetLanguage();
   const { firstLanguage, setFirstLanguage } = useFirstLanguage();
+  const [isSetupComplete, setIsSetupComplete] = useState<boolean>(() => {
+    try {
+      const setupValue = localStorage.getItem(INITIAL_SETUP_STORAGE_KEY);
+      if (setupValue === 'true') return true;
+      if (setupValue === 'false') return false;
+
+      const hasLegacyPreferences = Boolean(
+        localStorage.getItem('firstLanguage') || localStorage.getItem('targetLanguage')
+      );
+      return hasLegacyPreferences;
+    } catch {
+      return true;
+    }
+  });
+
+  const handleCompleteSetup = useCallback((nextFirstLanguage: string, nextTargetLanguage: string) => {
+    setFirstLanguage(nextFirstLanguage);
+    setTargetLanguage(nextTargetLanguage);
+    setIsSetupComplete(true);
+
+    try {
+      localStorage.setItem(INITIAL_SETUP_STORAGE_KEY, 'true');
+    } catch {
+      // Ignore localStorage write errors
+    }
+  }, [setFirstLanguage, setTargetLanguage]);
+
+  const handleResetSetup = useCallback(() => {
+    setIsSetupComplete(false);
+    setActiveModule('landing');
+    setView('home');
+
+    try {
+      localStorage.setItem(INITIAL_SETUP_STORAGE_KEY, 'false');
+    } catch {
+      // Ignore localStorage write errors
+    }
+  }, []);
 
   // --- Subtitles ---
   const { subtitles, setSubtitles } = useSubtitles();
@@ -174,6 +214,10 @@ function App() {
         onLanguageChange={setTargetLanguage}
         firstLanguage={firstLanguage}
         onFirstLanguageChange={setFirstLanguage}
+        onResetSetup={() => {
+          handleResetSetup();
+          setIsSettingsOpen(false);
+        }}
       />
 
       {/* Main Content Area */}
@@ -182,7 +226,11 @@ function App() {
         {activeModule === 'landing' && (
           <ModuleLandingPage
             onSelectModule={setActiveModule}
-            theme={theme}
+            firstLanguage={firstLanguage}
+            targetLanguage={targetLanguage}
+            isSetupComplete={isSetupComplete}
+            onCompleteSetup={handleCompleteSetup}
+            onResetSetup={handleResetSetup}
           />
         )}
 
@@ -259,6 +307,7 @@ function App() {
                         onDeleteCard={handleDeleteFromDeck}
                         onUpdateCard={handleUpdateCard}
                         onDiscardSessionMarker={handleDiscardReadingMarker}
+                        onProcessQueue={() => setView('flashcards')}
                       />
                     </div>
                   ) :
@@ -299,6 +348,7 @@ function App() {
                         onSaveToDeck={handleSaveToDeck}
                         onDeleteCard={handleDeleteFromDeck}
                         onUpdateCard={handleUpdateCard}
+                        onProcessQueue={() => setView('flashcards')}
                       />
                     </div>
                   ) :
@@ -351,6 +401,7 @@ function App() {
                         onSaveToDeck={handleSaveToDeck}
                         onDeleteCard={handleDeleteFromDeck}
                         onUpdateCard={handleUpdateCard}
+                        onProcessQueue={() => setView('flashcards')}
                       />
                     </div>
                   ) :

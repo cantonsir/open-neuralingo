@@ -81,14 +81,14 @@ export default function HistoryView({ onPlayVideo, savedCardsCount, markersCount
 
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="h-full flex items-center justify-center">
                 <div className="text-gray-500">Loading history...</div>
             </div>
         );
     }
 
     return (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="h-full overflow-y-auto p-6">
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-4 mb-8">
                 <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-200 dark:border-yellow-800/30 rounded-xl p-4">

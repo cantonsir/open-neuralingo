@@ -1,274 +1,214 @@
-/**
- * ModuleLandingPage - Clean landing page with full multilingual rotation
- *
- * Features:
- * - ALL content rotates through 10 languages every 5 seconds
- * - Clean, simple design optimized for mobile
- * - Smooth fade animations between language changes
- * - Responsive and accessible
- */
-import React, { useState, useEffect } from 'react';
-import { Module, Theme } from '../../types';
-import { Headphones, BookOpen, Mic, Edit3, Globe } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Book, Headphones, Mic, PenTool, RotateCcw } from 'lucide-react';
+import { Module } from '../../types';
+import { SUPPORTED_LANGUAGES } from '../../utils/languageOptions';
 
 interface ModuleLandingPageProps {
   onSelectModule: (module: Module) => void;
-  theme: Theme;
+  firstLanguage: string;
+  targetLanguage: string;
+  isSetupComplete: boolean;
+  onCompleteSetup: (firstLanguage: string, targetLanguage: string) => void;
+  onResetSetup: () => void;
 }
 
-interface LanguageContent {
-  language: string;
-  code: string;
-  headline: string;
-  subtitle: string;
-  modules: {
-    listening: string;
-    reading: string;
-    speaking: string;
-    writing: string;
-  };
-}
+const moduleData: Array<{
+  id: Module;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+}> = [
+  {
+    id: 'listening',
+    label: 'Listening',
+    description: 'Practice with loops and focused replay.',
+    icon: Headphones,
+  },
+  {
+    id: 'reading',
+    label: 'Reading',
+    description: 'Build comprehension with rich content.',
+    icon: Book,
+  },
+  {
+    id: 'speaking',
+    label: 'Speaking',
+    description: 'Improve fluency with roleplay prompts.',
+    icon: Mic,
+  },
+  {
+    id: 'writing',
+    label: 'Writing',
+    description: 'Draft responses and refine your style.',
+    icon: PenTool,
+  },
+];
 
-const ModuleLandingPage: React.FC<ModuleLandingPageProps> = ({ onSelectModule, theme }) => {
-  const [currentLanguageIndex, setCurrentLanguageIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-
-  const languages: LanguageContent[] = [
-    {
-      language: 'English',
-      code: '🇬🇧',
-      headline: 'Master Your Language Skills',
-      subtitle: 'Choose a module to begin',
-      modules: { listening: 'Listening', reading: 'Reading', speaking: 'Speaking', writing: 'Writing' }
-    },
-    {
-      language: 'Español',
-      code: '🇪🇸',
-      headline: 'Domina Tus Habilidades Lingüísticas',
-      subtitle: 'Elige un módulo para comenzar',
-      modules: { listening: 'Escuchar', reading: 'Leer', speaking: 'Hablar', writing: 'Escribir' }
-    },
-    {
-      language: 'Français',
-      code: '🇫🇷',
-      headline: 'Maîtrisez Vos Compétences',
-      subtitle: 'Choisissez un module',
-      modules: { listening: 'Écouter', reading: 'Lire', speaking: 'Parler', writing: 'Écrire' }
-    },
-    {
-      language: 'Deutsch',
-      code: '🇩🇪',
-      headline: 'Beherrsche Deine Sprachfähigkeiten',
-      subtitle: 'Wähle ein Modul',
-      modules: { listening: 'Hören', reading: 'Lesen', speaking: 'Sprechen', writing: 'Schreiben' }
-    },
-    {
-      language: 'Italiano',
-      code: '🇮🇹',
-      headline: 'Padroneggia Le Tue Abilità',
-      subtitle: 'Scegli un modulo',
-      modules: { listening: 'Ascolto', reading: 'Lettura', speaking: 'Parlato', writing: 'Scrittura' }
-    },
-    {
-      language: 'Português',
-      code: '🇵🇹',
-      headline: 'Domine Suas Habilidades',
-      subtitle: 'Escolha um módulo',
-      modules: { listening: 'Escuta', reading: 'Leitura', speaking: 'Fala', writing: 'Escrita' }
-    },
-    {
-      language: 'Русский',
-      code: '🇷🇺',
-      headline: 'Овладейте Языковыми Навыками',
-      subtitle: 'Выберите модуль',
-      modules: { listening: 'Аудирование', reading: 'Чтение', speaking: 'Говорение', writing: 'Письмо' }
-    },
-    {
-      language: '日本語',
-      code: '🇯🇵',
-      headline: '言語スキルをマスター',
-      subtitle: 'モジュールを選択',
-      modules: { listening: 'リスニング', reading: '読解', speaking: 'スピーキング', writing: 'ライティング' }
-    },
-    {
-      language: '한국어',
-      code: '🇰🇷',
-      headline: '언어 능력 마스터',
-      subtitle: '모듈을 선택하세요',
-      modules: { listening: '듣기', reading: '읽기', speaking: '말하기', writing: '쓰기' }
-    },
-    {
-      language: '中文',
-      code: '🇨🇳',
-      headline: '掌握语言技能',
-      subtitle: '选择一个模块',
-      modules: { listening: '听力', reading: '阅读', speaking: '口语', writing: '写作' }
-    },
-    {
-      language: 'हिन्दी',
-      code: '🇮🇳',
-      headline: 'अपने भाषा कौशल में महारत हासिल करें',
-      subtitle: 'एक मॉड्यूल चुनें',
-      modules: { listening: 'सुनना', reading: 'पढ़ना', speaking: 'बोलना', writing: 'लिखना' }
-    },
-    {
-      language: 'العربية',
-      code: '🇸🇦',
-      headline: 'أتقن مهاراتك اللغوية',
-      subtitle: 'اختر وحدة للبدء',
-      modules: { listening: 'الاستماع', reading: 'القراءة', speaking: 'التحدث', writing: 'الكتابة' }
-    },
-    {
-      language: 'Türkçe',
-      code: '🇹🇷',
-      headline: 'Dil Becerilerinizde Ustalaşın',
-      subtitle: 'Bir modül seçin',
-      modules: { listening: 'Dinleme', reading: 'Okuma', speaking: 'Konuşma', writing: 'Yazma' }
-    },
-    {
-      language: 'Tiếng Việt',
-      code: '🇻🇳',
-      headline: 'Thành Thạo Kỹ Năng Ngôn Ngữ',
-      subtitle: 'Chọn một mô-đun',
-      modules: { listening: 'Nghe', reading: 'Đọc', speaking: 'Nói', writing: 'Viết' }
-    },
-    {
-      language: 'ไทย',
-      code: '🇹🇭',
-      headline: 'เชี่ยวชาญทักษะภาษา',
-      subtitle: 'เลือกโมดูล',
-      modules: { listening: 'การฟัง', reading: 'การอ่าน', speaking: 'การพูด', writing: 'การเขียน' }
-    },
-    {
-      language: 'Nederlands',
-      code: '🇳🇱',
-      headline: 'Beheers Je Taalvaardigheden',
-      subtitle: 'Kies een module',
-      modules: { listening: 'Luisteren', reading: 'Lezen', speaking: 'Spreken', writing: 'Schrijven' }
-    },
-    {
-      language: 'Polski',
-      code: '🇵🇱',
-      headline: 'Opanuj Swoje Umiejętności Językowe',
-      subtitle: 'Wybierz moduł',
-      modules: { listening: 'Słuchanie', reading: 'Czytanie', speaking: 'Mówienie', writing: 'Pisanie' }
-    },
-    {
-      language: 'Svenska',
-      code: '🇸🇪',
-      headline: 'Bemästra Dina Språkfärdigheter',
-      subtitle: 'Välj en modul',
-      modules: { listening: 'Lyssna', reading: 'Läsa', speaking: 'Tala', writing: 'Skriva' }
-    },
-  ];
+const ModuleLandingPage: React.FC<ModuleLandingPageProps> = ({
+  onSelectModule,
+  firstLanguage,
+  targetLanguage,
+  isSetupComplete,
+  onCompleteSetup,
+  onResetSetup,
+}) => {
+  const [step, setStep] = useState<'setup' | 'module'>(isSetupComplete ? 'module' : 'setup');
+  const [selectedFirstLanguage, setSelectedFirstLanguage] = useState(firstLanguage || 'en');
+  const [selectedTargetLanguage, setSelectedTargetLanguage] = useState(targetLanguage || 'en');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIsTransitioning(true);
-      setTimeout(() => {
-        setCurrentLanguageIndex((prev) => (prev + 1) % languages.length);
-        setIsTransitioning(false);
-      }, 500);
-    }, 8000);
+    setStep(isSetupComplete ? 'module' : 'setup');
+  }, [isSetupComplete]);
 
-    return () => clearInterval(interval);
-  }, [languages.length]);
+  useEffect(() => {
+    setSelectedFirstLanguage(firstLanguage || 'en');
+  }, [firstLanguage]);
 
-  const currentLang = languages[currentLanguageIndex];
+  useEffect(() => {
+    setSelectedTargetLanguage(targetLanguage || 'en');
+  }, [targetLanguage]);
 
-  const moduleData = [
-    {
-      id: 'listening' as Module,
-      icon: Headphones,
-      gradient: 'from-orange-500 to-amber-500',
-      hoverShadow: 'hover:shadow-[0_0_30px_rgba(251,146,60,0.4)]',
-      hoverBorder: 'hover:border-orange-300 dark:hover:border-orange-600'
-    },
-    {
-      id: 'reading' as Module,
-      icon: BookOpen,
-      gradient: 'from-blue-500 to-indigo-500',
-      hoverShadow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]',
-      hoverBorder: 'hover:border-indigo-300 dark:hover:border-indigo-600'
-    },
-    {
-      id: 'speaking' as Module,
-      icon: Mic,
-      gradient: 'from-emerald-500 to-teal-500',
-      hoverShadow: 'hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]',
-      hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-600'
-    },
-    {
-      id: 'writing' as Module,
-      icon: Edit3,
-      gradient: 'from-purple-500 to-fuchsia-500',
-      hoverShadow: 'hover:shadow-[0_0_30px_rgba(168,85,247,0.4)]',
-      hoverBorder: 'hover:border-purple-300 dark:hover:border-purple-600'
-    },
-  ];
+  const firstLanguageName = useMemo(() => {
+    return SUPPORTED_LANGUAGES.find((lang) => lang.code === selectedFirstLanguage)?.name || 'English';
+  }, [selectedFirstLanguage]);
+
+  const targetLanguageName = useMemo(() => {
+    return SUPPORTED_LANGUAGES.find((lang) => lang.code === selectedTargetLanguage)?.name || 'English';
+  }, [selectedTargetLanguage]);
+
+  const isSameLanguage = selectedFirstLanguage === selectedTargetLanguage;
+
+  const handleContinue = () => {
+    if (isSameLanguage) {
+      setError('Please choose different languages for native and learning language.');
+      return;
+    }
+
+    setError('');
+    onCompleteSetup(selectedFirstLanguage, selectedTargetLanguage);
+    setStep('module');
+  };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center px-4 sm:px-6 md:px-8 py-4 sm:py-8 md:py-12">
-      <div className="max-w-4xl mx-auto w-full">
-        {/* Hero Section */}
-        <div className="text-center mb-4 sm:mb-6 md:mb-10">
-          {/* Language indicator */}
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 mb-2 sm:mb-3">
-            <Globe size={12} className="sm:w-3.5 sm:h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
-              {currentLang.code} {currentLang.language}
-            </span>
-          </div>
-
-          {/* Animated headline - only text changes */}
-          <div>
-            <h1 className={`text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold text-gray-900 dark:text-white mb-1 sm:mb-2 tracking-tight leading-[1.1] transition-all duration-500 ease-in-out ${isTransitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
-              {currentLang.headline}
+    <div className="min-h-screen overflow-y-auto bg-[#f5f5f7] dark:bg-[#0b0b0f]">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl items-center px-4 py-8 [font-family:-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display','Helvetica_Neue',Helvetica,Arial,sans-serif] md:py-12">
+        <section className="w-full rounded-[28px] border border-slate-200/80 bg-white px-6 py-6 shadow-[0_20px_44px_-30px_rgba(15,23,42,0.3)] dark:border-slate-800 dark:bg-[#111113] md:px-8 md:py-8">
+          <div className="border-b border-slate-200/80 pb-5 dark:border-slate-800">
+            <h1 className="text-[2rem] font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-100 md:text-[2.7rem]">
+              OpenNeuralingo
             </h1>
-            <p className={`text-xs sm:text-sm md:text-base text-gray-500 dark:text-gray-400 font-light transition-all duration-500 ease-in-out ${isTransitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
-              {currentLang.subtitle}
-            </p>
           </div>
-        </div>
 
-        {/* Module Grid */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:gap-4 max-w-2xl mx-auto">
-          {moduleData.map((module, idx) => (
-            <button
-              key={module.id}
-              onClick={() => onSelectModule(module.id)}
-              className={`group relative bg-gray-50/50 dark:bg-gray-900/30
-                         rounded-xl sm:rounded-2xl
-                         p-4 sm:p-5 md:p-6 lg:p-8
-                         border-2 border-gray-200/40 dark:border-gray-800/40
-                         hover:bg-gray-50 dark:hover:bg-gray-900/50
-                         ${module.hoverBorder}
-                         ${module.hoverShadow}
-                         transition-all duration-300 ease-out cursor-pointer
-                         active:scale-[0.98]
-                         focus:outline-none focus:ring-2 focus:ring-indigo-400/20 focus:ring-offset-2
-                         motion-reduce:transition-none motion-reduce:hover:transform-none
-                         min-h-[100px] sm:min-h-[120px] md:min-h-[140px]
-                         flex flex-col items-center justify-center text-center`}
-              aria-label={`Navigate to ${module.id} module`}
-              tabIndex={0}
-            >
-              {/* Icon */}
-              <div className="relative mb-2 sm:mb-3 text-gray-700 dark:text-gray-300 group-hover:scale-105 transition-transform duration-300 ease-out motion-reduce:transition-none">
-                <module.icon
-                  size={28}
-                  strokeWidth={1.5}
-                  className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors duration-300"
-                />
+          {step === 'setup' ? (
+            <div className="mt-8">
+              <h2 className="text-[1.55rem] font-semibold tracking-[-0.02em] text-slate-900 dark:text-white">
+                Set your language pair
+              </h2>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                Set your native and learning language once. You can change this later in Settings.
+              </p>
+
+              <div className="mt-6 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-[#f8f8fa] p-4 dark:border-slate-800 dark:bg-[#17171b]">
+                  <label htmlFor="native-language" className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                    Native language
+                  </label>
+                  <select
+                    id="native-language"
+                    value={selectedFirstLanguage}
+                    onChange={(e) => {
+                      setSelectedFirstLanguage(e.target.value);
+                      setError('');
+                    }}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-3 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.flag ? `${lang.flag} ` : ''}
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-[#f8f8fa] p-4 dark:border-slate-800 dark:bg-[#17171b]">
+                  <label htmlFor="learning-language" className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+                    Learning language
+                  </label>
+                  <select
+                    id="learning-language"
+                    value={selectedTargetLanguage}
+                    onChange={(e) => {
+                      setSelectedTargetLanguage(e.target.value);
+                      setError('');
+                    }}
+                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400 focus:ring-3 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-slate-500 dark:focus:ring-slate-800"
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.flag ? `${lang.flag} ` : ''}
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Module Title - only text changes */}
-              <h3 className={`text-base sm:text-lg md:text-xl font-medium text-gray-900 dark:text-white tracking-tight leading-tight transition-all duration-500 ease-in-out ${isTransitioning ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}`}>
-                {currentLang.modules[module.id]}
-              </h3>
-            </button>
-          ))}
-        </div>
+              {error && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleContinue}
+                className="group mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                Continue
+                <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="mt-6">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-[#f8f8fa] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-[#17171b]">
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {firstLanguageName} {'->'} {targetLanguageName}
+                </p>
+
+                <button
+                  onClick={() => {
+                    onResetSetup();
+                    setStep('setup');
+                  }}
+                  className="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <RotateCcw size={13} />
+                  Change
+                </button>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {moduleData.map((module) => (
+                  <button
+                    key={module.id}
+                    onClick={() => onSelectModule(module.id)}
+                    className="group rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_14px_28px_-22px_rgba(15,23,42,0.55)] dark:border-slate-800 dark:bg-[#111113] dark:hover:border-slate-700"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <module.icon size={18} />
+                      </div>
+                      <ArrowRight size={17} className="text-slate-300 transition-colors group-hover:text-slate-500 dark:text-slate-600 dark:group-hover:text-slate-300" />
+                    </div>
+                    <h3 className="mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">{module.label}</h3>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{module.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

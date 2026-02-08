@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Marker, SrsStats } from '../../types';
+import { Marker, SrsStats, SortOption as FlashcardSortOption } from '../../types';
 import { FlashcardModule, api } from '../../db';
 import { BookOpen, Activity, Play, Save, Flag, Volume2, Sparkles, CheckCircle2, Circle, Eye, Search, Filter, Download, BarChart3, Calendar, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
 import { formatTime } from '../../utils';
@@ -19,12 +19,31 @@ interface VocabularyManagerProps {
     onDeleteCard?: (id: string) => void; // New prop for DB delete
     onUpdateCard?: (id: string, updates: Partial<Marker>) => void; // New prop for DB update
     onDiscardSessionMarker?: (id: string) => void; // Prop for session discard
+    onProcessQueue?: () => void;
 }
 
-type SortOption = 'newest' | 'oldest' | 'most-practiced' | 'due-first';
+type VocabSortOption = 'newest' | 'oldest' | 'most-practiced' | 'due-first';
 type FilterSource = 'all' | 'loop' | 'shadow';
 
 const cleanToken = (token: string) => token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+const getFlashcardSortKey = (module: string) => `flashcard-sort-${module}`;
+const getFlashcardNewLimitKey = (module: string) => `flashcard-new-limit-${module}`;
+
+const getFlashcardSortOption = (module: FlashcardModule): FlashcardSortOption => {
+    const raw = localStorage.getItem(getFlashcardSortKey(module));
+    if (raw === 'due_first' || raw === 'random' || raw === 'newest' || raw === 'oldest') {
+        return raw;
+    }
+    return 'due_first';
+};
+
+const getFlashcardNewLimit = (module: FlashcardModule): number | undefined => {
+    const raw = localStorage.getItem(getFlashcardNewLimitKey(module));
+    if (!raw) return undefined;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
 
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     module,
@@ -36,7 +55,8 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
     onSaveToDeck,
     onDeleteCard,
     onUpdateCard,
-    onDiscardSessionMarker
+    onDiscardSessionMarker,
+    onProcessQueue
 }) => {
     const [viewMode, setViewMode] = useState<'session' | 'collection'>('session');
     const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
@@ -45,13 +65,16 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
 
     // Search and Filter State
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortBy, setSortBy] = useState<SortOption>('newest');
+    const [sortBy, setSortBy] = useState<VocabSortOption>('newest');
     const [filterSource, setFilterSource] = useState<FilterSource>('all');
     const [showFilters, setShowFilters] = useState(false);
     const [showStats, setShowStats] = useState(true);
+    const [queueOnly, setQueueOnly] = useState(false);
 
     // Stats State
     const [srsStats, setSrsStats] = useState<SrsStats | null>(null);
+    const [queueIds, setQueueIds] = useState<string[]>([]);
+    const [isQueueLoading, setIsQueueLoading] = useState(false);
 
     // Bulk Items State
     const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -66,6 +89,54 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
             api.fetchSrsStats(module).then(setSrsStats);
         }
     }, [viewMode, module, savedCards]);
+
+    // Load current flashcard queue order when in collection mode
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadQueue = async () => {
+            if (viewMode !== 'collection') {
+                setQueueIds([]);
+                return;
+            }
+
+            setIsQueueLoading(true);
+            try {
+                const sortOption = getFlashcardSortOption(module);
+                const newLimit = getFlashcardNewLimit(module);
+                const dueCards = await api.fetchDueCards(module, true, sortOption, newLimit, false);
+                const queue = dueCards
+                    .filter(card => card.misunderstoodIndices && card.misunderstoodIndices.length > 0)
+                    .map(card => card.id);
+
+                if (!cancelled) {
+                    setQueueIds(queue);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setQueueIds([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsQueueLoading(false);
+                }
+            }
+        };
+
+        loadQueue();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [viewMode, module, savedCards]);
+
+    const queuePositionById = useMemo(() => {
+        const map = new Map<string, number>();
+        queueIds.forEach((id, index) => {
+            map.set(id, index + 1);
+        });
+        return map;
+    }, [queueIds]);
 
     // Module specific colors
     const getModuleColor = () => {
@@ -181,6 +252,19 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
             result = result.filter(m => m.source === filterSource);
         }
 
+        if (viewMode === 'collection' && queueOnly) {
+            result = result.filter(m => queuePositionById.has(m.id));
+        }
+
+        if (viewMode === 'collection' && queueOnly) {
+            result.sort((a, b) => {
+                const posA = queuePositionById.get(a.id) || Number.MAX_SAFE_INTEGER;
+                const posB = queuePositionById.get(b.id) || Number.MAX_SAFE_INTEGER;
+                return posA - posB;
+            });
+            return result;
+        }
+
         // Sort
         switch (sortBy) {
             case 'oldest':
@@ -203,17 +287,19 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         }
 
         return result;
-    }, [activeMarkers, searchQuery, filterSource, sortBy]);
+    }, [activeMarkers, searchQuery, filterSource, sortBy, viewMode, queueOnly, queuePositionById]);
 
     // Derived state for the currently selected marker object
     const selectedMarker = filteredMarkers.find(m => m.id === selectedMarkerId) || (filteredMarkers.length > 0 ? filteredMarkers[0] : undefined);
 
     // Effect to sync ID if we defaulted
     useEffect(() => {
-        if (!selectedMarkerId && selectedMarker) {
+        if (!selectedMarker) return;
+        const selectedStillVisible = selectedMarkerId ? filteredMarkers.some(m => m.id === selectedMarkerId) : false;
+        if (!selectedMarkerId || !selectedStillVisible) {
             setSelectedMarkerId(selectedMarker.id);
         }
-    }, [selectedMarkerId, selectedMarker]);
+    }, [selectedMarkerId, selectedMarker, filteredMarkers]);
 
 
     const renderSidebarItem = (marker: Marker) => {
@@ -242,6 +328,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
         const conceptualCount = groups.length;
         const hasPhrase = groups.some(g => g.length > 1);
         const pressCount = marker.pressCount || 1;
+        const queuePosition = queuePositionById.get(marker.id);
 
         const primaryGroup = groups.length > 0 ? groups[0] : [];
         const markedText = primaryGroup.length > 0
@@ -303,6 +390,11 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                     {conceptualCount > 0 && (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded border ${badgeColorClass}`}>
                             {conceptualCount} Marked
+                        </span>
+                    )}
+                    {viewMode === 'collection' && queuePosition && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40 font-semibold">
+                            Q{queuePosition}
                         </span>
                     )}
                     {marker.source && (
@@ -736,7 +828,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                             <div className="flex-1 relative">
                                 <select
                                     value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                                    onChange={(e) => setSortBy(e.target.value as VocabSortOption)}
                                     className="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-1.5 px-3 pr-8 text-xs font-medium text-gray-600 dark:text-gray-400 focus:outline-none focus:border-blue-500"
                                 >
                                     <option value="newest">Newest First</option>
@@ -791,20 +883,46 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({
                             </span>
                         </div>
                         {viewMode === 'collection' && (
-                            <button
-                                onClick={handleExport}
-                                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                                title="Export vocabulary"
-                            >
-                                <Download size={12} /> Export
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setQueueOnly(prev => !prev)}
+                                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${queueOnly
+                                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400'
+                                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                        }`}
+                                    title="Show only cards in current flashcard queue"
+                                >
+                                    <Filter size={12} />
+                                    {isQueueLoading ? 'Queue...' : queueOnly ? `Queue Only (${queueIds.length})` : `Queue (${queueIds.length})`}
+                                </button>
+                                {onProcessQueue && queueIds.length > 0 && (
+                                    <button
+                                        onClick={onProcessQueue}
+                                        className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                                        title="Go directly to flashcard queue"
+                                    >
+                                        <Play size={12} fill="currentColor" /> Process Queue
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleExport}
+                                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                    title="Export vocabulary"
+                                >
+                                    <Download size={12} /> Export
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {filteredMarkers.length === 0 ? (
                         <div className="p-8 text-center text-gray-500 dark:text-gray-600 text-sm">
-                            {searchQuery ? 'No matching items found.' : 'No items in queue.'}
+                            {searchQuery
+                                ? 'No matching items found.'
+                                : viewMode === 'collection' && queueOnly
+                                    ? 'No cards in the current flashcard queue.'
+                                    : 'No items available.'}
                         </div>
                     ) : (
                         filteredMarkers.map(renderSidebarItem)

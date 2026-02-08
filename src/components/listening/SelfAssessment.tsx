@@ -438,7 +438,7 @@ export default function SelfAssessment({
                         <div className="space-y-3">
                             <button
                                 onClick={onStartTest}
-                                className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg"
+                                className="w-full px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold rounded-xl hover:from-amber-600 hover:to-orange-600 transition-all shadow-lg"
                             >
                                 Start Mini-Test (10 questions)
                             </button>
@@ -732,8 +732,8 @@ export default function SelfAssessment({
                                             key={goal.id}
                                             onClick={() => setAnswers(prev => ({ ...prev, learningGoal: goal.id }))}
                                             className={`flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all ${answers.learningGoal === goal.id
-                                                    ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
-                                                    : 'border-gray-200 dark:border-gray-700 hover:border-teal-300 dark:hover:border-teal-700'
+                                                ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
+                                                : 'border-gray-200 dark:border-gray-700 hover:border-teal-300 dark:hover:border-teal-700'
                                                 }`}
                                         >
                                             <span className="text-3xl">{goal.emoji}</span>
@@ -779,10 +779,10 @@ export default function SelfAssessment({
                                                 }}
                                                 disabled={isDisabled}
                                                 className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${isSelected
-                                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                                                        : isDisabled
-                                                            ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
-                                                            : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
+                                                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
+                                                    : isDisabled
+                                                        ? 'border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed'
+                                                        : 'border-gray-200 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
                                                     }`}
                                             >
                                                 <span className="text-xl">{skill.icon}</span>

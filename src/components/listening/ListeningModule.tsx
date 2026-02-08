@@ -626,6 +626,7 @@ export default function ListeningModule({
             onDeleteCard={handleDeleteFromDeck}
             onUpdateCard={handleUpdateCard}
             onDiscardSessionMarker={handleDeleteMarker}
+            onProcessQueue={() => setView('flashcards')}
           />
         </div>
       )}
