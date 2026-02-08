@@ -95,7 +95,7 @@ const ModuleLandingPage: React.FC<ModuleLandingPageProps> = ({
       <div className="mx-auto flex min-h-screen w-full max-w-4xl items-center px-4 py-8 [font-family:-apple-system,BlinkMacSystemFont,'SF_Pro_Text','SF_Pro_Display','Helvetica_Neue',Helvetica,Arial,sans-serif] md:py-12">
         <section className="w-full rounded-[28px] border border-slate-200/80 bg-white px-6 py-6 shadow-[0_20px_44px_-30px_rgba(15,23,42,0.3)] dark:border-slate-800 dark:bg-[#111113] md:px-8 md:py-8">
           <div className="border-b border-slate-200/80 pb-5 dark:border-slate-800">
-            <h1 className="text-[2rem] font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-100 md:text-[2.7rem]">
+            <h1 className="text-center text-[2rem] font-semibold tracking-[-0.03em] text-slate-900 dark:text-slate-100 md:text-[2.7rem]">
               OpenNeuralingo
             </h1>
           </div>
