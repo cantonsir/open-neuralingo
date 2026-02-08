@@ -41,6 +41,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
     const [dueCards, setDueCards] = useState<Marker[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
+    const [isReviewPaused, setIsReviewPaused] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [stats, setStats] = useState<SrsStats | null>(null);
@@ -290,6 +291,29 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
         loadDueCards(true); // includePending = true - show learning cards even if not due yet
     };
 
+    const handleExitReview = () => {
+        if (previewMode) {
+            onExit();
+            return;
+        }
+
+        stopSpeaking();
+        setShowSettings(false);
+        setIsReviewPaused(true);
+    };
+
+    const handleResumeReview = () => {
+        setIsReviewPaused(false);
+    };
+
+    const handleReloadAndResume = async () => {
+        setIsSessionComplete(false);
+        setIsWaiting(false);
+        setCountdown(null);
+        await loadDueCards(true);
+        setIsReviewPaused(false);
+    };
+
     // Format countdown display
     const formatCountdown = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -356,6 +380,65 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
             <div className="flex flex-col items-center justify-center h-full bg-gray-50 dark:bg-gray-950 p-8 text-center transition-colors">
                 <div className={`w-16 h-16 border-4 border-${moduleColor}-500 border-t-transparent rounded-full animate-spin mb-4`} />
                 <p className="text-gray-500 dark:text-gray-400">Loading flashcards...</p>
+            </div>
+        );
+    }
+
+    // Flashcards page (outside review) - preserves current session state
+    if (!previewMode && isReviewPaused) {
+        const hasActiveReview = Boolean(currentCard) || isWaiting;
+
+        return (
+            <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950 p-8 overflow-y-auto">
+                <div className="w-full max-w-3xl mx-auto">
+                    <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-sm p-8">
+                        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Flashcards</h2>
+                        <p className="text-gray-500 dark:text-gray-400 mb-8">Review paused. Continue anytime from where you left off.</p>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/40">
+                                <div className="text-xs text-gray-500 uppercase tracking-wider">Due</div>
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats?.dueToday ?? dueCards.length}</div>
+                            </div>
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/40">
+                                <div className="text-xs text-gray-500 uppercase tracking-wider">Cards</div>
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">{dueCards.length}</div>
+                            </div>
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/40">
+                                <div className="text-xs text-gray-500 uppercase tracking-wider">Progress</div>
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    {dueCards.length > 0 ? `${Math.min(currentIndex + 1, dueCards.length)}/${dueCards.length}` : '0/0'}
+                                </div>
+                            </div>
+                            <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-800/40">
+                                <div className="text-xs text-gray-500 uppercase tracking-wider">Reviewed</div>
+                                <div className="text-2xl font-bold text-gray-900 dark:text-white">{sessionStats.reviewed}</div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                onClick={handleResumeReview}
+                                disabled={!hasActiveReview}
+                                className="px-6 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Continue Review
+                            </button>
+                            <button
+                                onClick={handleReloadAndResume}
+                                className="px-6 py-3 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Reload Queue
+                            </button>
+                            <button
+                                onClick={onExit}
+                                className="px-6 py-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-xl font-bold"
+                            >
+                                Leave Flashcards
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -507,7 +590,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
             {!previewMode && (
                 <div className="absolute top-0 left-0 right-0 p-6 z-10 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
-                        <button onClick={onExit} className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex items-center gap-2 text-xs font-bold tracking-widest text-gray-400 dark:text-gray-500 uppercase">
+                        <button onClick={handleExitReview} className="hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex items-center gap-2 text-xs font-bold tracking-widest text-gray-400 dark:text-gray-500 uppercase">
                             <ArrowLeft size={16} /> Exit Review
                         </button>
                         <div className="flex items-center gap-4">
@@ -754,7 +837,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                                     <Play size={18} fill="currentColor" /> Play Audio
                                 </button>
                                 <p className="text-[10px] text-gray-300 dark:text-gray-600 mt-4 italic">
-                                    (Audio plays from main video)
+                                    (Audio plays in background from this flashcard video)
                                 </p>
                             </>
                         )}

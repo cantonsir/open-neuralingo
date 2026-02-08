@@ -282,9 +282,18 @@ function App() {
               />
             </div>
 
-            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && view !== 'flashcards' && (
+            {/* Persist Reading Dashboard in background to avoid reload */}
+            <div className={view === 'home' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingDashboard onNavigate={setView} />
+            </div>
+
+            {/* Persist Reading Assessment in background to avoid reload */}
+            <div className={view === 'assessment' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingAssessmentPage />
+            </div>
+
+            {view !== 'webpage' && view !== 'library' && view !== 'compose' && view !== 'generator' && view !== 'reader' && view !== 'flashcards' && view !== 'home' && view !== 'assessment' && (
               view === 'learning' ? <ReadingLessons /> :
-                view === 'assessment' ? <ReadingAssessmentPage /> :
                   view === 'statistics' ? (
                     <ReadingStatistics
                       onTakeNewAssessment={() => setView('assessment')}
@@ -311,8 +320,7 @@ function App() {
                       />
                     </div>
                   ) :
-                      // view === 'webpage', 'library', generator, reader, and flashcards are handled above
-                      <ReadingDashboard onNavigate={setView} />
+                      null
             )}
           </>
         )}
@@ -330,7 +338,15 @@ function App() {
               />
             </div>
 
-            {view !== 'flashcards' && (
+            {/* Persist Speaking Dashboard in background to avoid reload */}
+            <div className={view === 'home' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <SpeakingDashboard
+                setView={setView}
+                setSpeakingData={setSpeakingData}
+              />
+            </div>
+
+            {view !== 'flashcards' && view !== 'home' && (
               view === 'library' ? (
                 <ReadingLibrary onNavigate={handleLibraryNavigate} />
               ) :
@@ -361,10 +377,7 @@ function App() {
                       onNavigate={setView}
                     />
                   ) : (
-                    <SpeakingDashboard
-                      setView={setView}
-                      setSpeakingData={setSpeakingData}
-                    />
+                    null
                   )
             )}
           </>
@@ -383,7 +396,15 @@ function App() {
               />
             </div>
 
-            {view !== 'flashcards' && (
+            {/* Persist Writing Dashboard in background to avoid reload */}
+            <div className={view === 'home' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <WritingDashboard
+                setView={setView}
+                setWritingData={setWritingData}
+              />
+            </div>
+
+            {view !== 'flashcards' && view !== 'home' && (
               view === 'library' ? (
                 <ReadingLibrary onNavigate={handleLibraryNavigate} />
               ) :
@@ -415,10 +436,7 @@ function App() {
                       onBack={setView}
                     />
                   ) : (
-                    <WritingDashboard
-                      setView={setView}
-                      setWritingData={setWritingData}
-                    />
+                    null
                   )
             )}
           </>
@@ -426,72 +444,77 @@ function App() {
 
         {/* Listening Module */}
         {activeModule === 'listening' && (
-          view === 'library' ? (
-            <ReadingLibrary onNavigate={handleLibraryNavigate} />
-          ) : (
-          <ListeningModule
-            view={view}
-            setView={setView}
-            targetLanguage={targetLanguage}
-            // Video player
-            videoId={videoPlayer.videoId}
-            videoTitle={videoPlayer.videoTitle}
-            inputUrl={videoPlayer.inputUrl}
-            setInputUrl={videoPlayer.setInputUrl}
-            isFetchingSubs={videoPlayer.isFetchingSubs}
-            fetchSubtitles={videoPlayer.fetchSubtitles}
-            player={videoPlayer.player}
-            setPlayer={videoPlayer.setPlayer}
-            state={videoPlayer.state}
-            setState={handlePlayerStateChange}
-            subtitles={subtitles}
-            setSubtitles={setSubtitles}
-            setVideoId={videoPlayer.setVideoId}
-            setIsSetupMode={videoPlayer.setIsSetupMode}
-            subtitlesVisible={videoPlayer.subtitlesVisible}
-            setSubtitlesVisible={videoPlayer.setSubtitlesVisible}
-            isPeekingSubs={videoPlayer.isPeekingSubs}
-            getCurrentSubtitle={videoPlayer.getCurrentSubtitle}
-            focusedSegment={videoPlayer.focusedSegment}
-            setFocusedSegment={videoPlayer.setFocusedSegment}
-            // Markers
-            markers={markersHook.markers}
-            currentLoopId={videoPlayer.currentLoop?.id || null}
-            handlePlayLoop={videoPlayer.handlePlayLoop}
-            handleStopLoop={videoPlayer.handleStopLoop}
-            handleDeleteMarker={handleDeleteMarker}
-            handleAddTag={markersHook.handleAddTag}
-            handleRemoveTag={markersHook.handleRemoveTag}
-            handleToggleWord={markersHook.handleToggleWord}
-            handleToggleRange={markersHook.handleToggleRange}
-            handleRemoveWord={markersHook.handleRemoveWord}
-            handleUpdateVocabData={markersHook.handleUpdateVocabData}
-            handleToggleWordForSegment={markersHook.handleToggleWordForSegment}
-            handleToggleRangeForSegment={markersHook.handleToggleRangeForSegment}
-            // Controls
-            handlePrevSubtitle={videoPlayer.handlePrevSubtitle}
-            handleNextSubtitle={videoPlayer.handleNextSubtitle}
-            handlePlaySegment={videoPlayer.handlePlaySegment}
-            changePlaybackRate={videoPlayer.changePlaybackRate}
-            // Deck
-            savedCards={savedCards}
-            handleSaveToDeck={handleSaveToDeck}
-            handleDeleteFromDeck={handleDeleteFromDeck}
-            handleUpdateCard={handleUpdateCard}
-            // Learning data
-            assessmentProfile={learningData.assessmentProfile}
-            setAssessmentProfile={learningData.setAssessmentProfile}
-            assessmentResults={learningData.assessmentResults}
-            setAssessmentResults={learningData.setAssessmentResults}
-            assessmentLoaded={learningData.assessmentLoaded}
-            learningGoals={learningData.learningGoals}
-            setLearningGoals={learningData.setLearningGoals}
-            goalsLoaded={learningData.goalsLoaded}
-            goalDetailsCache={learningData.goalDetailsCache}
-            refreshAssessmentData={learningData.refreshAssessmentData}
-            refreshGoalDetails={learningData.refreshGoalDetails}
-          />
-          )
+          <>
+            {/* Persist Library in background to avoid reload */}
+            <div className={view === 'library' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingLibrary onNavigate={handleLibraryNavigate} />
+            </div>
+
+            <div className={view === 'library' ? 'hidden' : 'flex-1 flex overflow-hidden'}>
+              <ListeningModule
+                view={view}
+                setView={setView}
+                targetLanguage={targetLanguage}
+                // Video player
+                videoId={videoPlayer.videoId}
+                videoTitle={videoPlayer.videoTitle}
+                inputUrl={videoPlayer.inputUrl}
+                setInputUrl={videoPlayer.setInputUrl}
+                isFetchingSubs={videoPlayer.isFetchingSubs}
+                fetchSubtitles={videoPlayer.fetchSubtitles}
+                player={videoPlayer.player}
+                setPlayer={videoPlayer.setPlayer}
+                state={videoPlayer.state}
+                setState={handlePlayerStateChange}
+                subtitles={subtitles}
+                setSubtitles={setSubtitles}
+                setVideoId={videoPlayer.setVideoId}
+                setIsSetupMode={videoPlayer.setIsSetupMode}
+                subtitlesVisible={videoPlayer.subtitlesVisible}
+                setSubtitlesVisible={videoPlayer.setSubtitlesVisible}
+                isPeekingSubs={videoPlayer.isPeekingSubs}
+                getCurrentSubtitle={videoPlayer.getCurrentSubtitle}
+                focusedSegment={videoPlayer.focusedSegment}
+                setFocusedSegment={videoPlayer.setFocusedSegment}
+                // Markers
+                markers={markersHook.markers}
+                currentLoopId={videoPlayer.currentLoop?.id || null}
+                handlePlayLoop={videoPlayer.handlePlayLoop}
+                handleStopLoop={videoPlayer.handleStopLoop}
+                handleDeleteMarker={handleDeleteMarker}
+                handleAddTag={markersHook.handleAddTag}
+                handleRemoveTag={markersHook.handleRemoveTag}
+                handleToggleWord={markersHook.handleToggleWord}
+                handleToggleRange={markersHook.handleToggleRange}
+                handleRemoveWord={markersHook.handleRemoveWord}
+                handleUpdateVocabData={markersHook.handleUpdateVocabData}
+                handleToggleWordForSegment={markersHook.handleToggleWordForSegment}
+                handleToggleRangeForSegment={markersHook.handleToggleRangeForSegment}
+                // Controls
+                handlePrevSubtitle={videoPlayer.handlePrevSubtitle}
+                handleNextSubtitle={videoPlayer.handleNextSubtitle}
+                handlePlaySegment={videoPlayer.handlePlaySegment}
+                changePlaybackRate={videoPlayer.changePlaybackRate}
+                // Deck
+                savedCards={savedCards}
+                handleSaveToDeck={handleSaveToDeck}
+                handleDeleteFromDeck={handleDeleteFromDeck}
+                handleUpdateCard={handleUpdateCard}
+                // Learning data
+                assessmentProfile={learningData.assessmentProfile}
+                setAssessmentProfile={learningData.setAssessmentProfile}
+                assessmentResults={learningData.assessmentResults}
+                setAssessmentResults={learningData.setAssessmentResults}
+                assessmentLoaded={learningData.assessmentLoaded}
+                learningGoals={learningData.learningGoals}
+                setLearningGoals={learningData.setLearningGoals}
+                goalsLoaded={learningData.goalsLoaded}
+                goalDetailsCache={learningData.goalDetailsCache}
+                refreshAssessmentData={learningData.refreshAssessmentData}
+                refreshGoalDetails={learningData.refreshGoalDetails}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

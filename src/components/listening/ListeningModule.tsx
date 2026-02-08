@@ -246,9 +246,10 @@ export default function ListeningModule({
     return found || null;
   }, [audioUrl, localSubtitles, state.currentTime]);
 
-  // Pause player when navigating away from loop view
+  // Pause player when leaving active playback surfaces.
+  // Keep playback available in vocab/flashcards for background review audio.
   useEffect(() => {
-    if (view !== 'loop' && player) {
+    if (view !== 'loop' && view !== 'vocab' && view !== 'flashcards' && player) {
       // Safe check for pauseVideo function
       if (typeof player.pauseVideo === 'function') {
         player.pauseVideo();
@@ -380,6 +381,16 @@ export default function ListeningModule({
     console.log('[handleLoadSession] ========== SESSION LOADED ==========');
   };
 
+  const handlePlaySegmentWithSourceSwitch = useCallback((start: number, end: number, targetVideoId?: string) => {
+    if (audioUrl && targetVideoId && targetVideoId !== videoId) {
+      setVideoId(targetVideoId);
+      setAudioUrl(undefined);
+      setAudioTitle('');
+    }
+
+    handlePlaySegment(start, end, targetVideoId);
+  }, [audioUrl, videoId, setVideoId, handlePlaySegment]);
+
   const getActiveSubtitles = useCallback(() => (audioUrl ? localSubtitles : subtitles), [audioUrl, localSubtitles, subtitles]);
 
   const handleTogglePlayback = useCallback(() => {
@@ -439,7 +450,7 @@ export default function ListeningModule({
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
       {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
-      <div className={`flex-1 flex flex-col overflow-hidden ${view === 'loop' ? 'flex' : 'hidden'} relative`}>
+      <div className={view === 'loop' ? 'flex-1 flex flex-col overflow-hidden relative' : 'hidden'}>
         <LoopView
           videoId={audioUrl ? '' : videoId} // Hide videoId if audio is playing
           audioUrl={audioUrl}
@@ -481,24 +492,22 @@ export default function ListeningModule({
         />
       </div>
 
-      {/* Dashboard View */}
-      {view === 'home' && (
-        <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto">
-          <DashboardView
-            onPlayVideo={(videoId) => {
-              setAudioUrl(undefined);
-              setAudioTitle('');
-              fetchSubtitles(videoId);
-            }}
-            onNavigate={(v) => setView(v as View)}
-            savedCardsCount={savedCards.length}
-            markersCount={markers.length}
-          />
-        </div>
-      )}
+      {/* Dashboard View - keep-alive to preserve state */}
+      <div className={view === 'home' ? 'flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto' : 'hidden'}>
+        <DashboardView
+          onPlayVideo={(videoId) => {
+            setAudioUrl(undefined);
+            setAudioTitle('');
+            fetchSubtitles(videoId);
+          }}
+          onNavigate={(v) => setView(v as View)}
+          savedCardsCount={savedCards.length}
+          markersCount={markers.length}
+        />
+      </div>
 
       {/* Compose View - Generate Audio Discussions (keep mounted) */}
-      <div className={`flex-1 bg-gray-50 dark:bg-gray-950 overflow-y-auto ${view === 'compose' ? 'flex' : 'hidden'}`}>
+      <div className={view === 'compose' ? 'flex-1 flex bg-gray-50 dark:bg-gray-950 overflow-y-auto' : 'hidden'}>
         <ListeningCompose
           setView={setView}
           onLoadSession={handleLoadSession}
@@ -523,12 +532,12 @@ export default function ListeningModule({
       )}
 
       {/* Flashcards View - keep-alive to preserve stage */}
-      <div className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden ${view === 'flashcards' ? 'flex' : 'hidden'}`}>
+      <div className={view === 'flashcards' ? 'flex-1 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden' : 'hidden'}>
         <FlashcardPractice
           module="listening"
           savedCards={savedCards}
           onExit={() => setView('home')}
-          onPlayAudio={handlePlaySegment}
+          onPlayAudio={handlePlaySegmentWithSourceSwitch}
         />
       </div>
 
@@ -621,7 +630,7 @@ export default function ListeningModule({
             savedCards={savedCards}
             onRemoveWord={handleRemoveWord}
             onUpdateVocabData={handleUpdateVocabData}
-            onPlaySegment={handlePlaySegment}
+            onPlaySegment={handlePlaySegmentWithSourceSwitch}
             onSaveToDeck={handleSaveToDeck}
             onDeleteCard={handleDeleteFromDeck}
             onUpdateCard={handleUpdateCard}

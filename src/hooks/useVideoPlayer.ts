@@ -152,10 +152,11 @@ export function useVideoPlayer({
 
   const handlePlaySegment = async (start: number, end: number, targetVideoId?: string) => {
     if (targetVideoId && targetVideoId !== videoId) {
+      setPlayer(null);
+      setVideoId(targetVideoId);
       setPendingSegment({ start, end });
-      const shouldNavigate = view !== 'vocab';
+      const shouldNavigate = view !== 'vocab' && view !== 'flashcards';
       await fetchSubtitles(targetVideoId, shouldNavigate);
-      if (shouldNavigate) setView('loop');
       return;
     }
 

@@ -33,6 +33,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isHoveringSubs, setIsHoveringSubs] = useState(false);
   const [isError, setIsError] = useState(false);
 
+  // Clear sticky error state when source changes.
+  useEffect(() => {
+    setIsError(false);
+  }, [videoId, audioUrl]);
+
   // Sync playback rate when it changes in parent
   useEffect(() => {
     if (playerRef.current) {
