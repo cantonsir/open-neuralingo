@@ -125,7 +125,6 @@ const ModuleLandingPage: React.FC<ModuleLandingPageProps> = ({
                   >
                     {SUPPORTED_LANGUAGES.map((lang) => (
                       <option key={lang.code} value={lang.code}>
-                        {lang.flag ? `${lang.flag} ` : ''}
                         {lang.name}
                       </option>
                     ))}
@@ -147,7 +146,6 @@ const ModuleLandingPage: React.FC<ModuleLandingPageProps> = ({
                   >
                     {SUPPORTED_LANGUAGES.map((lang) => (
                       <option key={lang.code} value={lang.code}>
-                        {lang.flag ? `${lang.flag} ` : ''}
                         {lang.name}
                       </option>
                     ))}
