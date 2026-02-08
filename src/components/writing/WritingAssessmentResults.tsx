@@ -40,7 +40,7 @@ const WritingAssessmentResults: React.FC<WritingAssessmentResultsProps> = ({
     onRetakeAssessment,
     onRetakeMiniTest,
 }) => {
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['partA', 'partB']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
     const toggleSection = (section: string) => {
         const next = new Set(expandedSections);

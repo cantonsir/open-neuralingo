@@ -125,13 +125,13 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                 const dotClass = isPhrasePart ? 'bg-green-500' : 'bg-red-500';
 
                 return (
-                    <span key={i} className={`inline-block mx-1 px-1.5 rounded relative border ${colorClass}`}>
+                    <span key={i} className={`inline-block max-w-full break-words mx-0.5 sm:mx-1 px-1.5 rounded relative border ${colorClass}`}>
                         {word}
                         <span className={`absolute top-0 right-0 w-1.5 h-1.5 rounded-full translate-x-1/2 -translate-y-1/2 border border-white dark:border-gray-900 ${dotClass}`}></span>
                     </span>
                 );
             }
-            return <span key={i} className="mx-1">{word}</span>;
+            return <span key={i} className="inline-block max-w-full break-words mx-0.5 sm:mx-1">{word}</span>;
         });
     };
 
@@ -697,7 +697,9 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                     )}
 
                     {/* The Card */}
-                    <div className="w-full max-w-2xl bg-white dark:bg-gray-900 rounded-3xl shadow-xl dark:shadow-2xl border border-gray-100 dark:border-gray-800 p-12 min-h-[400px] flex flex-col items-center justify-center text-center transition-all duration-500 relative overflow-hidden">
+                    <div
+                        className={`w-full ${module === 'reading' ? 'max-w-3xl p-6 sm:p-8 md:p-10' : 'max-w-2xl p-12'} bg-white dark:bg-gray-900 rounded-3xl shadow-xl dark:shadow-2xl border border-gray-100 dark:border-gray-800 min-h-[400px] flex flex-col items-center justify-center text-center transition-all duration-500 relative overflow-hidden`}
+                    >
 
                         {/* Audio Icon (Front Identity) */}
                         {module === 'reading' ? (
@@ -717,7 +719,7 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                                 </div>
 
                                 {!isFlipped && currentCard && (
-                                    <div className="animate-in fade-in zoom-in duration-300 max-w-2xl mx-auto mb-8">
+                                    <div className="animate-in fade-in zoom-in duration-300 w-full max-w-3xl mx-auto mb-8">
                                         {(() => {
                                             const item = getPrimaryMarkedItem(currentCard);
                                             if (!item) {
@@ -728,18 +730,18 @@ const FlashcardPractice: React.FC<FlashcardPracticeProps> = ({ module, savedCard
                                                 : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800';
 
                                             return (
-                                                <div className="bg-gray-50 dark:bg-gray-800/40 rounded-2xl px-8 py-6 border border-gray-100 dark:border-gray-800 shadow-sm">
+                                                <div className="w-full bg-gray-50 dark:bg-gray-800/40 rounded-2xl px-4 sm:px-6 md:px-8 py-5 sm:py-6 border border-gray-100 dark:border-gray-800 shadow-sm">
                                                     <div className="flex flex-col items-center gap-3 mb-4">
                                                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${badgeClass}`}>
                                                             {item.isPhrase ? 'Phrase' : 'Word'}
                                                         </span>
-                                                        <div className={`text-4xl font-extrabold tracking-tight ${item.isPhrase ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                                                        <div className={`text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight break-words ${item.isPhrase ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
                                                             {item.text}
                                                         </div>
                                                     </div>
 
                                                     <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
-                                                        <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed text-center">
+                                                        <p className="text-base sm:text-lg text-gray-700 dark:text-gray-300 leading-relaxed text-center break-words">
                                                             {renderHighlightedSentence(currentCard)}
                                                         </p>
                                                     </div>

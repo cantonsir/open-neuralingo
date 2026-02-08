@@ -52,7 +52,7 @@ const SpeakingAssessmentResults: React.FC<SpeakingAssessmentResultsProps> = ({
     onRetakeAssessment,
     onRetakeMiniTest,
 }) => {
-    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['partA', 'partB']));
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
     const toggleSection = (section: string) => {
         const newExpanded = new Set(expandedSections);

@@ -346,12 +346,35 @@ function App() {
               />
             </div>
 
-            {view !== 'flashcards' && view !== 'home' && (
-              view === 'library' ? (
-                <ReadingLibrary onNavigate={handleLibraryNavigate} />
-              ) :
+            {/* Persist Speaking Library in background to avoid reload */}
+            <div className={view === 'library' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingLibrary onNavigate={handleLibraryNavigate} />
+            </div>
+
+            {/* Persist Speaking Assessment in background to avoid reload */}
+            <div className={view === 'assessment' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <SpeakingAssessment />
+            </div>
+
+            {/* Persist Speaking Conversation setup in background to avoid reload */}
+            <div className={view === 'scenario' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+              <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} speechLanguage={targetLanguage} />
+            </div>
+
+            {/* Persist Speaking Live Conversation in background to avoid reload */}
+            <div className={view === 'conversation' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+              {speakingData ? (
+                <SpeakingView
+                  mode={speakingData.mode}
+                  topic={speakingData.topic}
+                  contextId={speakingData.contextId}
+                  onNavigate={setView}
+                />
+              ) : null}
+            </div>
+
+            {view !== 'flashcards' && view !== 'home' && view !== 'library' && view !== 'assessment' && view !== 'scenario' && view !== 'conversation' && (
               view === 'learning' ? <SpeakingLessons /> :
-                view === 'assessment' ? <SpeakingAssessment /> :
                   view === 'vocab' ? (
                     <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                       <VocabularyManager
@@ -368,17 +391,7 @@ function App() {
                       />
                     </div>
                   ) :
-                    view === 'scenario' ? <SpeakingScenario setView={setView} setSpeakingData={setSpeakingData} speechLanguage={targetLanguage} /> :
-                  view === 'conversation' && speakingData ? (
-                    <SpeakingView
-                      mode={speakingData.mode}
-                      topic={speakingData.topic}
-                      contextId={speakingData.contextId}
-                      onNavigate={setView}
-                    />
-                  ) : (
                     null
-                  )
             )}
           </>
         )}
@@ -404,12 +417,37 @@ function App() {
               />
             </div>
 
-            {view !== 'flashcards' && view !== 'home' && (
-              view === 'library' ? (
-                <ReadingLibrary onNavigate={handleLibraryNavigate} />
-              ) :
+            {/* Persist Writing Library in background to avoid reload */}
+            <div className={view === 'library' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <ReadingLibrary onNavigate={handleLibraryNavigate} />
+            </div>
+
+            {/* Persist Writing Assessment in background to avoid reload */}
+            <div className={view === 'assessment' ? 'flex-1 overflow-hidden' : 'hidden'}>
+              <WritingAssessmentPage />
+            </div>
+
+            {/* Persist Writing Composition in background to avoid reload */}
+            <div className={view === 'compose' || view === 'correction' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+              <WritingCompose setView={setView} setWritingData={setWritingData} />
+            </div>
+
+            {/* Persist Writing Editor in background to avoid reload */}
+            <div className={view === 'writer' ? 'flex-1 flex overflow-hidden' : 'hidden'}>
+              {writingData ? (
+                <WritingView
+                  key={`${writingData.id || 'new'}-${writingData.topic || ''}-${writingData.content?.length || 0}`}
+                  sessionId={writingData.id}
+                  topic={writingData.topic}
+                  contextId={writingData.contextId}
+                  initialContent={writingData.content}
+                  onBack={setView}
+                />
+              ) : null}
+            </div>
+
+            {view !== 'flashcards' && view !== 'home' && view !== 'library' && view !== 'assessment' && view !== 'compose' && view !== 'correction' && view !== 'writer' && (
               view === 'learning' ? <WritingLessons /> :
-                view === 'assessment' ? <WritingAssessmentPage /> :
                   view === 'vocab' ? (
                     <div className="flex-1 bg-gray-50 dark:bg-gray-950 overflow-hidden">
                       <VocabularyManager
@@ -426,18 +464,7 @@ function App() {
                       />
                     </div>
                   ) :
-                    view === 'compose' || view === 'correction' ? <WritingCompose setView={setView} setWritingData={setWritingData} /> :
-                  view === 'writer' && writingData ? (
-                    <WritingView
-                      sessionId={writingData.id}
-                      topic={writingData.topic}
-                      contextId={writingData.contextId}
-                      initialContent={writingData.content}
-                      onBack={setView}
-                    />
-                  ) : (
                     null
-                  )
             )}
           </>
         )}
