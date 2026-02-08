@@ -83,6 +83,7 @@ interface ListeningModuleProps {
 
   setSubtitles: (subtitles: Subtitle[]) => void;
   setVideoId: (id: string) => void;
+  setIsSetupMode: (isSetupMode: boolean) => void;
 }
 
 export default function ListeningModule({
@@ -140,6 +141,7 @@ export default function ListeningModule({
   refreshAssessmentData,
   refreshGoalDetails,
   setVideoId,
+  setIsSetupMode,
 }: ListeningModuleProps) {
   // Learning Section navigation state
   const [learningView, setLearningView] = useState<'home' | 'course' | 'lesson'>('home');
@@ -294,6 +296,9 @@ export default function ListeningModule({
     console.log('[handleLoadSession] Session transcript count:', session.transcript?.length || 0);
 
     // 1. Set Audio URL
+    setPlayer(null);
+    setIsSetupMode(false);
+    setState({ currentTime: 0, duration: 0, isPlaying: false });
     setAudioUrl(session.audioUrl);
     setAudioTitle(session.prompt || 'Audio Session');
     console.log('[handleLoadSession] ✅ Audio URL set');
@@ -375,6 +380,62 @@ export default function ListeningModule({
     console.log('[handleLoadSession] ========== SESSION LOADED ==========');
   };
 
+  const getActiveSubtitles = useCallback(() => (audioUrl ? localSubtitles : subtitles), [audioUrl, localSubtitles, subtitles]);
+
+  const handleTogglePlayback = useCallback(() => {
+    if (!player) return;
+
+    const playerAny = player as any;
+    if (state.isPlaying) {
+      if (typeof playerAny.pauseVideo === 'function') playerAny.pauseVideo();
+      else if (typeof playerAny.pause === 'function') playerAny.pause();
+      return;
+    }
+
+    if (typeof playerAny.playVideo === 'function') playerAny.playVideo();
+    else if (typeof playerAny.play === 'function') playerAny.play();
+  }, [player, state.isPlaying]);
+
+  const handleSeekTo = useCallback((time: number) => {
+    if (!player) return;
+    const playerAny = player as any;
+    if (typeof playerAny.seekTo === 'function') {
+      playerAny.seekTo(time, true);
+    }
+  }, [player]);
+
+  const handlePrevSubtitleForSession = useCallback(async () => {
+    if (!player) return;
+    const activeSubtitles = getActiveSubtitles();
+    if (activeSubtitles.length === 0) return;
+
+    const t = await player.getCurrentTime();
+    const currentIndex = activeSubtitles.findIndex(s => t >= s.start && t < s.end);
+
+    if (currentIndex !== -1) {
+      const prevIndex = Math.max(0, currentIndex - 1);
+      handleSeekTo(activeSubtitles[prevIndex].start);
+      return;
+    }
+
+    for (let i = activeSubtitles.length - 1; i >= 0; i--) {
+      if (activeSubtitles[i].end <= t) {
+        handleSeekTo(activeSubtitles[i].start);
+        return;
+      }
+    }
+  }, [player, getActiveSubtitles, handleSeekTo]);
+
+  const handleNextSubtitleForSession = useCallback(async () => {
+    if (!player) return;
+    const activeSubtitles = getActiveSubtitles();
+    if (activeSubtitles.length === 0) return;
+
+    const t = await player.getCurrentTime();
+    const nextSub = activeSubtitles.find(s => s.start > t);
+    if (nextSub) handleSeekTo(nextSub.start);
+  }, [player, getActiveSubtitles, handleSeekTo]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
       {/* Loop View - ALWAYS MOUNTED, but hidden if not active */}
@@ -407,11 +468,11 @@ export default function ListeningModule({
           onToggleWord={handleToggleWord}
           onToggleRange={handleToggleRange}
           onPlayOnce={handlePlaySegment}
-          onPlayPause={() => state.isPlaying ? player?.pauseVideo() : player?.playVideo()}
-          onPrevSubtitle={handlePrevSubtitle}
-          onNextSubtitle={handleNextSubtitle}
+          onPlayPause={handleTogglePlayback}
+          onPrevSubtitle={handlePrevSubtitleForSession}
+          onNextSubtitle={handleNextSubtitleForSession}
           onChangePlaybackRate={changePlaybackRate}
-          onSeek={(t) => player?.seekTo(t, true)}
+          onSeek={handleSeekTo}
           onFocusSegment={setFocusedSegment}
           onToggleSegmentWord={handleToggleWordForSegment}
           onToggleSegmentRange={handleToggleRangeForSegment}

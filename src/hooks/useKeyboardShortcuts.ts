@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { YouTubePlayer } from 'react-youtube';
 
 interface UseKeyboardShortcutsOptions {
+  enabled: boolean;
   isSetupMode: boolean;
   player: YouTubePlayer | null;
   isPlaying: boolean;
@@ -12,6 +13,7 @@ interface UseKeyboardShortcutsOptions {
 }
 
 export function useKeyboardShortcuts({
+  enabled,
   isSetupMode,
   player,
   isPlaying,
@@ -22,7 +24,7 @@ export function useKeyboardShortcuts({
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isSetupMode) return;
+      if (!enabled || isSetupMode) return;
 
       // Ignore global shortcuts if user is typing in an input field
       const target = e.target as HTMLElement;
@@ -57,6 +59,7 @@ export function useKeyboardShortcuts({
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (!enabled || isSetupMode) return;
       if (e.code === 'KeyS') {
         setIsPeekingSubs(false);
       }
@@ -68,5 +71,5 @@ export function useKeyboardShortcuts({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [addMarker, isSetupMode, player, isPlaying, handlePrevSubtitle, handleNextSubtitle, setIsPeekingSubs]);
+  }, [enabled, addMarker, isSetupMode, player, isPlaying, handlePrevSubtitle, handleNextSubtitle, setIsPeekingSubs]);
 }

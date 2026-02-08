@@ -45,6 +45,19 @@ interface DefinitionData {
     pronunciation?: string;
 }
 
+const buildFallbackDefinition = (selected: string, sentence: string): DefinitionData => {
+    const snippet = sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence;
+    return {
+        english: `"${selected}" appears in this context: ${snippet}`,
+        native: '',
+        pronunciation: ''
+    };
+};
+
+const buildFallbackSentenceMeaning = (sentence: string): string => {
+    return sentence;
+};
+
 export interface VocabSavePayload {
     word: string;
     sentence: string;
@@ -205,15 +218,23 @@ export default function ReadingVocabPanel({
         const loadDefinition = async () => {
             try {
                 const result = await generateBilingualDefinition(localSelectedText, selectedSentence, firstLanguage);
-                if (!isCancelled && result) {
+                if (isCancelled) return;
+
+                if (result) {
                     try {
                         const cleanText = result.replace(/```json/g, '').replace(/```/g, '').trim();
                         const parsed = JSON.parse(cleanText);
-                        setDefinition({
+                        const parsedDefinition = {
                             english: parsed.english || '',
                             native: parsed.native || '',
                             pronunciation: parsed.pronunciation || ''
-                        });
+                        };
+
+                        if (parsedDefinition.english || parsedDefinition.native) {
+                            setDefinition(parsedDefinition);
+                        } else {
+                            setDefinition(buildFallbackDefinition(localSelectedText, selectedSentence));
+                        }
                     } catch {
                         setDefinition({
                             english: result,
@@ -221,10 +242,13 @@ export default function ReadingVocabPanel({
                             pronunciation: ''
                         });
                     }
+                } else {
+                    setDefinition(buildFallbackDefinition(localSelectedText, selectedSentence));
                 }
             } catch (e) {
                 if (!isCancelled) {
-                    setError('Failed to load definition');
+                    setError('AI definition unavailable. Showing context fallback.');
+                    setDefinition(buildFallbackDefinition(localSelectedText, selectedSentence));
                 }
             } finally {
                 if (!isCancelled) {
@@ -238,7 +262,7 @@ export default function ReadingVocabPanel({
             try {
                 const meaning = await generateSentenceMeaning(selectedSentence, firstLanguage);
                 if (!isCancelled) {
-                    const value = meaning || '';
+                    const value = meaning || buildFallbackSentenceMeaning(selectedSentence);
                     setSentenceMeaning(value);
                     if (value) {
                         sentenceMeaningCacheRef.current.set(sentenceKey, value);
@@ -246,7 +270,7 @@ export default function ReadingVocabPanel({
                 }
             } catch (e) {
                 if (!isCancelled) {
-                    setSentenceMeaning('');
+                    setSentenceMeaning(buildFallbackSentenceMeaning(selectedSentence));
                 }
             } finally {
                 if (!isCancelled) {

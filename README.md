@@ -34,7 +34,6 @@ OpenNeuralingo is a full-stack AI language learning platform built for focused s
 - Persistent learner data with session history, assessments, and personal content library
 - Built with production-ready web technologies and modular backend architecture
 
-
 ## Feature Modules
 
 | Module | What You Can Do | Outcomes |

@@ -53,10 +53,25 @@ export default function ReadingWebPage({
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const readerContentRef = useRef<HTMLDivElement>(null);
 
-    // Extract sentence containing the selected word
-    const extractSentence = (text: string, selectedWord: string): string => {
-        // Find the sentence containing the word
+    // Extract sentence containing the selected word, using character offset when available
+    const extractSentence = (text: string, selectedWord: string, charOffset?: number): string => {
         const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+
+        // If we have a character offset, find the specific sentence at that position
+        if (charOffset !== undefined) {
+            let searchFrom = 0;
+            for (const sentence of sentences) {
+                const idx = text.indexOf(sentence, searchFrom);
+                if (idx === -1) { searchFrom += sentence.length; continue; }
+                const sentenceEnd = idx + sentence.length;
+                if (charOffset >= idx && charOffset < sentenceEnd) {
+                    return sentence.trim();
+                }
+                searchFrom = sentenceEnd;
+            }
+        }
+
+        // Fallback: find first sentence containing the word
         const relevantSentence = sentences.find(s => 
             s.toLowerCase().includes(selectedWord.toLowerCase())
         );
@@ -66,9 +81,25 @@ export default function ReadingWebPage({
     const computeSelectionIndices = (sentence: string, selected: string): number[] => {
         const sentenceWords = sentence.split(/\s+/);
         const selectedWordList = selected.split(/\s+/);
-        return sentenceWords.map((word, idx) =>
-            selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
-        ).filter(i => i >= 0);
+        const clean = (w: string) => w.toLowerCase().replace(/[.,!?;:'"()]/g, '');
+        // Find the first contiguous run of words matching the selection
+        for (let i = 0; i <= sentenceWords.length - selectedWordList.length; i++) {
+            const match = selectedWordList.every((sw, j) =>
+                clean(sentenceWords[i + j]) === clean(sw)
+            );
+            if (match) {
+                return Array.from({ length: selectedWordList.length }, (_, j) => i + j);
+            }
+        }
+        // Fallback: find first occurrence of each word individually
+        const result: number[] = [];
+        for (const sw of selectedWordList) {
+            const idx = sentenceWords.findIndex((w, i) =>
+                !result.includes(i) && clean(w) === clean(sw)
+            );
+            if (idx >= 0) result.push(idx);
+        }
+        return result.sort((a, b) => a - b);
     };
 
     const handleReaderSelection = useCallback(() => {
@@ -104,7 +135,16 @@ export default function ReadingWebPage({
             contextText = paragraphElement.textContent || contextText;
         }
 
-        const sentence = extractSentence(contextText, text);
+        // Compute offset of selection within the context text
+        let selectionOffset: number | undefined;
+        if (paragraphElement) {
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(paragraphElement);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            selectionOffset = preRange.toString().length;
+        }
+
+        const sentence = extractSentence(contextText, text, selectionOffset);
         // Vocab panel lookup
         const indices = computeSelectionIndices(sentence, text);
         setSelectedText(text);

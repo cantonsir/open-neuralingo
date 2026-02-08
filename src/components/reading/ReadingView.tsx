@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ArrowLeft, BookOpen, Loader2, Search, ExternalLink, Download } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2, Search, ExternalLink, Download, RotateCcw } from 'lucide-react';
 import { View, Marker, VocabData, LibraryItem, YouTubeSubtitleData } from '../../types';
 import ReadingVocabPanel, { VocabSavePayload, FocusSaveItem } from './ReadingVocabPanel';
 import { analyzeFocusReadingBehavior, FocusReadingAnalysis, FocusAnnotation, classifyAnnotationType } from './focusReadingAI';
@@ -211,6 +211,7 @@ interface ReadingViewProps {
 }
 
 export default function ReadingView({ libraryId, title, content: initialContent, onNavigate, onMarkersUpdate, onSaveToDeck, firstLanguage = 'en', speechLanguage = 'en' }: ReadingViewProps) {
+    const READABLE_CACHE_VERSION = 'v5-subtitle-flow';
     const [content, setContent] = useState<string>('');
     const [libraryItem, setLibraryItem] = useState<LibraryItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -219,6 +220,8 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         paragraphIndex: number;
         sentenceText: string;
         selectedWords: string;
+        startOffset: number;
+        endOffset: number;
     } | null>(null);
     const [selectionKey, setSelectionKey] = useState(0);
     const [sessionMarkers, setSessionMarkers] = useState<Marker[]>([]);
@@ -233,6 +236,7 @@ export default function ReadingView({ libraryId, title, content: initialContent,
     const [isReadableViewEnabled, setIsReadableViewEnabled] = useState(false);
     const [readableContent, setReadableContent] = useState<string | null>(null);
     const [isFormattingReadable, setIsFormattingReadable] = useState(false);
+    const [readableRegenerateToken, setReadableRegenerateToken] = useState(0);
     const readableCacheRef = useRef<Record<string, string>>({});
 
     useEffect(() => {
@@ -286,17 +290,111 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         return hash.toString(16);
     };
 
-    const normalizeReadableText = useCallback((text: string) => text.replace(/\r?\n/g, ''), []);
+    const normalizeReadableText = useCallback((text: string) => text.replace(/\s+/g, ''), []);
+
+    const condenseReadableLines = useCallback((text: string) => {
+        const normalized = text.replace(/\r\n/g, '\n');
+        const lines = normalized.split('\n');
+        const out: string[] = [];
+
+        const isListItem = (line: string) => /^\s*(?:[-*]|\d+\.)\s/.test(line);
+        const isDialogueTurn = (line: string) => /^\s*-\s/.test(line);
+        const endsSentence = (line: string) => /[.!?]["')\]]?$/.test(line.trim());
+
+        const nextNonEmptyLine = (start: number) => {
+            for (let i = start; i < lines.length; i += 1) {
+                const trimmed = lines[i].trim();
+                if (trimmed) return trimmed;
+            }
+            return '';
+        };
+
+        for (let i = 0; i < lines.length; i += 1) {
+            const trimmed = lines[i].trim();
+
+            if (!trimmed) {
+                if (out.length === 0) continue;
+                const last = out[out.length - 1];
+                if (last === '') continue;
+
+                const next = nextNonEmptyLine(i + 1);
+                if (!next) continue;
+
+                if (endsSentence(last) || isListItem(next) || isDialogueTurn(next)) {
+                    out.push('');
+                }
+                continue;
+            }
+
+            if (out.length === 0 || out[out.length - 1] === '') {
+                out.push(trimmed);
+                continue;
+            }
+
+            const prev = out[out.length - 1];
+            const currentIsList = isListItem(trimmed);
+            const currentIsDialogue = isDialogueTurn(trimmed);
+            if (currentIsList || currentIsDialogue) {
+                out.push(trimmed);
+                continue;
+            }
+
+            const separator = /\s$/.test(prev) || /^\s/.test(trimmed) ? '' : ' ';
+            out[out.length - 1] = `${prev}${separator}${trimmed}`;
+        }
+
+        return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }, []);
 
     const isReadableMatch = useCallback((originalText: string, readableText: string) => {
         return normalizeReadableText(originalText) === normalizeReadableText(readableText);
     }, [normalizeReadableText]);
 
-    const getReadableCacheKey = useCallback(() => {
+    const getReadableBaseKey = useCallback(() => {
         const hash = hashText(content);
         if (libraryId) return `library:${libraryId}:${hash}`;
         return `inline:${hash}`;
     }, [libraryId, content]);
+
+    const getReadableCacheKey = useCallback(() => {
+        return `${getReadableBaseKey()}:${READABLE_CACHE_VERSION}`;
+    }, [getReadableBaseKey, READABLE_CACHE_VERSION]);
+
+    const clearReadableCacheHistory = useCallback(() => {
+        const baseKey = getReadableBaseKey();
+
+        for (const key of Object.keys(readableCacheRef.current)) {
+            if (key.startsWith(baseKey)) {
+                delete readableCacheRef.current[key];
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            const storagePrefix = `readable:${baseKey}`;
+            const keysToRemove: string[] = [];
+
+            for (let i = 0; i < window.localStorage.length; i += 1) {
+                const key = window.localStorage.key(i);
+                if (key && key.startsWith(storagePrefix)) {
+                    keysToRemove.push(key);
+                }
+            }
+
+            keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+        }
+    }, [getReadableBaseKey]);
+
+    const handleRegenerateReadable = useCallback(() => {
+        if (!content) return;
+        clearReadableCacheHistory();
+        setReadableContent(null);
+
+        if (!isReadableViewEnabled) {
+            setIsReadableViewEnabled(true);
+        }
+
+        setReadableRegenerateToken((prev) => prev + 1);
+    }, [content, clearReadableCacheHistory, isReadableViewEnabled]);
 
     useEffect(() => {
         if (!isReadableViewEnabled || !content) return;
@@ -304,20 +402,40 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         const cacheKey = getReadableCacheKey();
         const storageKey = `readable:${cacheKey}`;
         const cached = readableCacheRef.current[cacheKey];
-        if (cached && isReadableMatch(content, cached)) {
-            setReadableContent(cached);
-            setIsFormattingReadable(false);
-            return;
+        if (cached) {
+            const condensedCached = condenseReadableLines(cached);
+            if (isReadableMatch(content, condensedCached)) {
+                setReadableContent(condensedCached);
+                if (condensedCached !== cached) {
+                    readableCacheRef.current[cacheKey] = condensedCached;
+                    if (typeof window !== 'undefined') {
+                        window.localStorage.setItem(storageKey, condensedCached);
+                    }
+                }
+                setIsFormattingReadable(false);
+                return;
+            }
+        }
+
+        if (cached && !isReadableMatch(content, cached)) {
+            delete readableCacheRef.current[cacheKey];
         }
 
         if (typeof window !== 'undefined') {
             const stored = window.localStorage.getItem(storageKey);
-            if (stored && isReadableMatch(content, stored)) {
-                readableCacheRef.current[cacheKey] = stored;
-                setReadableContent(stored);
-                setIsFormattingReadable(false);
-                return;
+            if (stored) {
+                const condensedStored = condenseReadableLines(stored);
+                if (isReadableMatch(content, condensedStored)) {
+                    readableCacheRef.current[cacheKey] = condensedStored;
+                    if (condensedStored !== stored) {
+                        window.localStorage.setItem(storageKey, condensedStored);
+                    }
+                    setReadableContent(condensedStored);
+                    setIsFormattingReadable(false);
+                    return;
+                }
             }
+
             if (stored && !isReadableMatch(content, stored)) {
                 window.localStorage.removeItem(storageKey);
             }
@@ -328,21 +446,20 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         generateReadableText(content)
             .then((formatted) => {
                 if (isCancelled) return;
-                if (formatted && formatted.trim() && isReadableMatch(content, formatted)) {
-                    readableCacheRef.current[cacheKey] = formatted;
+                const condensed = formatted ? condenseReadableLines(formatted) : null;
+                if (condensed && condensed.trim() && isReadableMatch(content, condensed)) {
+                    readableCacheRef.current[cacheKey] = condensed;
                     if (typeof window !== 'undefined') {
-                        window.localStorage.setItem(storageKey, formatted);
+                        window.localStorage.setItem(storageKey, condensed);
                     }
-                    setReadableContent(formatted);
+                    setReadableContent(condensed);
                 } else {
                     setReadableContent(null);
-                    setIsReadableViewEnabled(false);
                 }
             })
             .catch(() => {
                 if (isCancelled) return;
                 setReadableContent(null);
-                setIsReadableViewEnabled(false);
             })
             .finally(() => {
                 if (!isCancelled) {
@@ -353,18 +470,30 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         return () => {
             isCancelled = true;
         };
-    }, [isReadableViewEnabled, content, getReadableCacheKey]);
+    }, [isReadableViewEnabled, content, getReadableCacheKey, isReadableMatch, condenseReadableLines, readableRegenerateToken]);
 
-    // Extract complete sentence(s) containing the selected text
-    const extractSentence = (paragraph: string, selectedText: string): string => {
+    // Extract the single sentence containing the selected text at the given character offset
+    const extractSentence = (paragraph: string, selectedText: string, charOffset?: number): string => {
         // Split into sentences (handle ., !, ?, but avoid abbreviations like "Mr.", "Dr.")
         const sentences = paragraph.match(/[^.!?]+[.!?]+/g) || [paragraph];
 
-        // Find sentence(s) containing the selected text
-        const relevantSentences = sentences.filter(s => s.includes(selectedText));
+        // If we have a character offset, find the specific sentence at that position
+        if (charOffset !== undefined) {
+            let searchFrom = 0;
+            for (const sentence of sentences) {
+                const idx = paragraph.indexOf(sentence, searchFrom);
+                if (idx === -1) { searchFrom += sentence.length; continue; }
+                const sentenceEnd = idx + sentence.length;
+                if (charOffset >= idx && charOffset < sentenceEnd) {
+                    return sentence.trim();
+                }
+                searchFrom = sentenceEnd;
+            }
+        }
 
-        // Return joined sentences or first sentence if not found
-        return relevantSentences.join(' ').trim() || sentences[0];
+        // Fallback: return the first sentence containing the selected text
+        const match = sentences.find(s => s.includes(selectedText));
+        return match?.trim() || sentences[0]?.trim() || paragraph;
     };
 
     const buildLineStarts = useCallback((text: string) => {
@@ -404,14 +533,14 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         const readableToOriginal = new Array(readableContent.length).fill(-1);
         const originalToReadable = new Array(content.length).fill(-1);
 
-        const isNewline = (char: string) => char === '\n' || char === '\r';
+        const isWhitespace = (char: string) => /\s/.test(char);
         let origIndex = 0;
 
         for (let i = 0; i < readableContent.length; i += 1) {
             const ch = readableContent[i];
-            if (isNewline(ch)) continue;
+            if (isWhitespace(ch)) continue;
 
-            while (origIndex < content.length && isNewline(content[origIndex])) {
+            while (origIndex < content.length && isWhitespace(content[origIndex])) {
                 origIndex += 1;
             }
 
@@ -422,6 +551,14 @@ export default function ReadingView({ libraryId, title, content: initialContent,
             readableToOriginal[i] = origIndex;
             originalToReadable[origIndex] = i;
             origIndex += 1;
+        }
+
+        while (origIndex < content.length && isWhitespace(content[origIndex])) {
+            origIndex += 1;
+        }
+
+        if (origIndex < content.length) {
+            return null;
         }
 
         return {
@@ -545,7 +682,7 @@ export default function ReadingView({ libraryId, title, content: initialContent,
 
         if (isFocusModeEnabled) {
             // Focus mode: create annotation instead of vocab lookup
-            const sentenceContext = extractSentence(fullParagraph, trimmedText);
+            const sentenceContext = extractSentence(fullParagraph, trimmedText, startOffset);
             const annotationType = classifyAnnotationType(trimmedText, fullParagraph);
 
             // Check for duplicate — toggle off if already annotated
@@ -572,12 +709,14 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         }
 
         // Normal mode: vocab panel lookup
-        const sentenceText = extractSentence(fullParagraph, trimmedText);
+        const sentenceText = extractSentence(fullParagraph, trimmedText, startOffset);
         setSelectedText(trimmedText);
         setSelectionRange({
             paragraphIndex,
             sentenceText,
             selectedWords: trimmedText,
+            startOffset,
+            endOffset,
         });
         setSelectionKey(prev => prev + 1);
     }, [isFocusModeEnabled, focusAnnotations, isReadableViewEnabled, readableMaps, readableContent, originalParagraphs, findLineIndex]);
@@ -648,6 +787,7 @@ export default function ReadingView({ libraryId, title, content: initialContent,
         setReadableContent(null);
         setIsReadableViewEnabled(false);
         setIsFormattingReadable(false);
+        setReadableRegenerateToken(0);
     }, [libraryId]);
 
     // Handler for removing markers
@@ -764,9 +904,25 @@ export default function ReadingView({ libraryId, title, content: initialContent,
     const computeFocusIndices = (sentence: string, selected: string) => {
         const sentenceWords = sentence.split(/\s+/);
         const selectedWordList = selected.split(/\s+/);
-        return sentenceWords.map((word, idx) =>
-            selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
-        ).filter(i => i >= 0);
+        const clean = (w: string) => w.toLowerCase().replace(/[.,!?;:'"()]/g, '');
+        // Find the first contiguous run of words matching the selection
+        for (let i = 0; i <= sentenceWords.length - selectedWordList.length; i++) {
+            const match = selectedWordList.every((sw, j) =>
+                clean(sentenceWords[i + j]) === clean(sw)
+            );
+            if (match) {
+                return Array.from({ length: selectedWordList.length }, (_, j) => i + j);
+            }
+        }
+        // Fallback: find first occurrence of each word individually
+        const result: number[] = [];
+        for (const sw of selectedWordList) {
+            const idx = sentenceWords.findIndex((w, i) =>
+                !result.includes(i) && clean(w) === clean(sw)
+            );
+            if (idx >= 0) result.push(idx);
+        }
+        return result.sort((a, b) => a - b);
     };
 
     const formatFocusDefinition = (item: FocusSaveItem) => {
@@ -856,43 +1012,77 @@ export default function ReadingView({ libraryId, title, content: initialContent,
                         {title}
                     </h2>
                 </div>
-                <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-300">
-                    <div className="flex items-center gap-2">
-                        <span>Readable View</span>
+                <div className="flex items-center gap-3 text-sm">
+                    {/* Readable View Toggle Group */}
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
                         <button
                             type="button"
-                            onClick={() => setIsReadableViewEnabled((prev) => !prev)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                isReadableViewEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
-                            } ${isFormattingReadable ? 'opacity-60 cursor-wait' : ''}`}
-                            aria-pressed={isReadableViewEnabled}
+                            onClick={() => setIsReadableViewEnabled(false)}
                             disabled={isFormattingReadable}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                !isReadableViewEnabled
+                                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                            } ${isFormattingReadable ? 'opacity-60 cursor-wait' : ''}`}
+                            title="Original text"
                         >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    isReadableViewEnabled ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                            />
+                            Original
                         </button>
-                        {isReadableViewEnabled && isFormattingReadable && (
-                            <span className="text-xs text-gray-400">Formatting...</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsReadableViewEnabled(true)}
+                            disabled={isFormattingReadable}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                isReadableViewEnabled
+                                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                            } ${isFormattingReadable ? 'opacity-60 cursor-wait' : ''}`}
+                            title="AI-formatted readable view"
+                        >
+                            {isFormattingReadable && (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            )}
+                            Readable
+                        </button>
+                        {/* Reorganize button - only shown when Readable View is active */}
+                        {isReadableViewEnabled && (
+                            <button
+                                type="button"
+                                onClick={handleRegenerateReadable}
+                                disabled={!content || isFormattingReadable}
+                                className={`px-1.5 py-1 rounded-md text-xs transition-all text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                title="Clear cache and reorganize"
+                            >
+                                <RotateCcw className={`w-3.5 h-3.5 ${isFormattingReadable ? 'animate-spin' : ''}`} />
+                            </button>
                         )}
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span>Focus Reading</span>
+
+                    {/* Focus Reading Toggle Group */}
+                    <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
                         <button
                             type="button"
-                            onClick={() => setIsFocusModeEnabled((prev) => !prev)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                                isFocusModeEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-700'
+                            onClick={() => setIsFocusModeEnabled(false)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                !isFocusModeEnabled
+                                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
                             }`}
-                            aria-pressed={isFocusModeEnabled}
+                            title="Normal reading"
                         >
-                            <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    isFocusModeEnabled ? 'translate-x-6' : 'translate-x-1'
-                                }`}
-                            />
+                            Normal
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsFocusModeEnabled(true)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                isFocusModeEnabled
+                                    ? 'bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                            }`}
+                            title="Focus mode - highlights line under cursor"
+                        >
+                            Focus
                         </button>
                     </div>
                 </div>
@@ -959,11 +1149,62 @@ export default function ReadingView({ libraryId, title, content: initialContent,
                 selectedText={selectedText}
                 selectedSentence={selectionRange?.sentenceText || null}
                 selectionIndices={selectionRange ? (() => {
-                    const sentenceWords = selectionRange.sentenceText.split(/\s+/);
-                    const selectedWordList = selectionRange.selectedWords.split(/\s+/);
-                    return sentenceWords.map((word, idx) =>
-                        selectedWordList.some(sw => word.toLowerCase().includes(sw.toLowerCase())) ? idx : -1
-                    ).filter(i => i >= 0);
+                    const sentence = selectionRange.sentenceText;
+                    const selected = selectionRange.selectedWords;
+                    const sentenceWords = sentence.split(/\s+/);
+                    const selectedWordCount = selected.split(/\s+/).length;
+
+                    // Find which word index the selected text starts at by
+                    // locating the selected text within the sentence using the
+                    // paragraph-level character offset.
+                    // First, figure out where the sentence starts in the paragraph.
+                    const paragraphs = (content || '').split('\n');
+                    const fullParagraph = paragraphs[selectionRange.paragraphIndex] || '';
+                    const sentenceStartInParagraph = fullParagraph.indexOf(sentence);
+
+                    let targetWordIndex = -1;
+                    if (sentenceStartInParagraph >= 0) {
+                        // The selected word's offset within the sentence
+                        const offsetInSentence = selectionRange.startOffset - sentenceStartInParagraph;
+                        // Walk through sentence words to find which word index corresponds to this offset
+                        let charPos = 0;
+                        for (let i = 0; i < sentenceWords.length; i++) {
+                            // Skip leading whitespace
+                            while (charPos < sentence.length && /\s/.test(sentence[charPos])) charPos++;
+                            const wordEnd = charPos + sentenceWords[i].length;
+                            if (offsetInSentence >= charPos && offsetInSentence < wordEnd) {
+                                targetWordIndex = i;
+                                break;
+                            }
+                            charPos = wordEnd;
+                        }
+                    }
+
+                    if (targetWordIndex >= 0) {
+                        // Return exactly the word indices for the selected range
+                        return Array.from({ length: selectedWordCount }, (_, i) => targetWordIndex + i)
+                            .filter(i => i < sentenceWords.length);
+                    }
+
+                    // Fallback: find first contiguous match of selected words in sentence
+                    const selectedWordList = selected.toLowerCase().split(/\s+/);
+                    for (let i = 0; i <= sentenceWords.length - selectedWordList.length; i++) {
+                        const match = selectedWordList.every((sw, j) =>
+                            sentenceWords[i + j].toLowerCase().replace(/[.,!?;:'"()]/g, '') === sw.replace(/[.,!?;:'"()]/g, '')
+                        );
+                        if (match) {
+                            return Array.from({ length: selectedWordList.length }, (_, j) => i + j);
+                        }
+                    }
+                    // Last resort: return indices of first occurrence of each selected word
+                    const result: number[] = [];
+                    for (const sw of selected.toLowerCase().split(/\s+/)) {
+                        const idx = sentenceWords.findIndex((w, i) =>
+                            !result.includes(i) && w.toLowerCase().replace(/[.,!?;:'"()]/g, '') === sw.replace(/[.,!?;:'"()]/g, '')
+                        );
+                        if (idx >= 0) result.push(idx);
+                    }
+                    return result.sort((a, b) => a - b);
                 })() : null}
                 selectionKey={selectionKey}
                 sessionMarkers={sessionMarkers}

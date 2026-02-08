@@ -161,6 +161,24 @@ export const generateStory = async (topic: string, level: string = "intermediate
     }
 };
 
+const isSubtitleLikeText = (text: string): boolean => {
+    const normalized = text.replace(/\r\n/g, '\n');
+    const dashTurns = (normalized.match(/\s-\s/g) || []).length;
+    const cueTags = (normalized.match(/\((?:audience|laugh|applause|music|cheering|sighs?|gasps?|groans?)\b[^)]*\)/gi) || []).length;
+    const shortLines = normalized.split('\n').filter((line) => line.trim().length > 0 && line.trim().length <= 80).length;
+
+    return dashTurns >= 4 || cueTags >= 3 || shortLines >= 8;
+};
+
+const prepareSubtitleReadableInput = (text: string): string => {
+    return text
+        .replace(/\r\n/g, '\n')
+        // Split inline subtitle turn separators into readable turn lines.
+        .replace(/\s+-\s+/g, '\n- ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+};
+
 export const generateReadableText = async (text: string): Promise<string | null> => {
     const genAI = getGenAI();
     if (!genAI) return null;
@@ -168,20 +186,53 @@ export const generateReadableText = async (text: string): Promise<string | null>
     const input = text.trim();
     if (!input) return text;
 
+    const subtitleLike = isSubtitleLikeText(input);
+    const preparedInput = subtitleLike ? prepareSubtitleReadableInput(input) : input;
+
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-        const prompt = `Reformat the following text to be easier to read.
-Keep the exact wording, punctuation, and order.
-Do NOT paraphrase, summarize, translate, or add headings.
-Do NOT add new bullet points or numbering (keep existing ones only).
-You may insert line breaks and blank lines to separate paragraphs or dialogue lines.
+        const prompt = subtitleLike
+            ? `Reformat the following subtitle transcript to be easier to read while preserving context flow.
+The source is TV/video subtitle text with rapid dialogue turns and reaction cues.
+Keep the exact wording, punctuation, symbols, and order.
+Do NOT paraphrase, summarize, translate, correct grammar, or add headings.
+Do NOT add or remove any words.
+Only adjust line breaks and blank lines.
+
+Formatting rules:
+1) Keep each sentence intact. Never split one sentence across lines.
+2) Start each dialogue turn on a new line when a "- " turn marker appears.
+3) Group related turns into short paragraphs (2-5 turns) so reading flow feels natural.
+4) Keep reaction cues like "(audience laughing)" attached to their nearest line; do not isolate them repeatedly.
+5) Keep existing list markers/bullets as-is.
+6) Preserve all non-newline characters exactly; only newline placement may change.
 
 Return plain text only.
 
 Text:
 """
-${text}
+${preparedInput}
+"""`
+            : `Reformat the following text to be easier to read while preserving context flow.
+Keep the exact wording, punctuation, symbols, and order.
+Do NOT paraphrase, summarize, translate, correct grammar, or add headings.
+Do NOT add or remove any words.
+Only adjust line breaks and blank lines.
+
+Formatting rules:
+1) Keep each sentence intact. Never split one sentence across lines.
+2) Group related sentences by meaning/topic flow into short paragraphs.
+3) Prefer 2-4 related sentences per paragraph when natural; avoid one short sentence per line.
+4) If dialogue markers like " - " exist, keep turns readable but avoid overly short one-line fragments unless necessary.
+5) Keep existing list markers/bullets as-is.
+6) Preserve all non-newline characters exactly; only newline placement may change.
+
+Return plain text only.
+
+Text:
+"""
+${preparedInput}
 """`;
 
         const result = await model.generateContent(prompt);

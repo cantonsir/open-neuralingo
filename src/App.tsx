@@ -83,6 +83,7 @@ function App() {
 
   // --- Keyboard Shortcuts ---
   useKeyboardShortcuts({
+    enabled: activeModule === 'listening' && view === 'loop',
     isSetupMode: videoPlayer.isSetupMode,
     player: videoPlayer.player,
     isPlaying: videoPlayer.state.isPlaying,
@@ -395,6 +396,7 @@ function App() {
             subtitles={subtitles}
             setSubtitles={setSubtitles}
             setVideoId={videoPlayer.setVideoId}
+            setIsSetupMode={videoPlayer.setIsSetupMode}
             subtitlesVisible={videoPlayer.subtitlesVisible}
             setSubtitlesVisible={videoPlayer.setSubtitlesVisible}
             isPeekingSubs={videoPlayer.isPeekingSubs}
